@@ -1,0 +1,17 @@
+{
+  // Cloudflare Workers config: serves the static game that Vite builds into dist/.
+  // Assets only, no Worker script, so every request is a plain file from dist/.
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "reclonk",
+  "compatibility_date": "2026-10-01",
+  // The live game. Deploys attach this domain and Cloudflare creates its DNS record and certificate,
+  // so there is nothing to add by hand in the DNS tab.
+  "routes": [{ "pattern": "clonk.kiwikode.dev", "custom_domain": true }],
+  // Off so the game has one public address.
+  "workers_dev": false,
+  "assets": {
+    "directory": "./dist"
+  },
+  // Lets Workers Builds make preview links for branches other than main.
+  "previews": {}
+}
