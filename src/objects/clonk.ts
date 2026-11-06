@@ -5,6 +5,7 @@
 import type { Landscape } from '../landscape/landscape';
 import { CLONK, ENERGY_UNIT, type ActionDef } from './defs';
 import { GameObject } from './gameObject';
+import { experienceForRank, rankForExperience } from '../game/ranks';
 import type { Item } from './item';
 import type { Structure } from './structure';
 import {
@@ -27,16 +28,21 @@ export interface ControlState {
   up: boolean;
   down: boolean;
   /** Pressed this tick (not just held). */
-  pressedLeft: boolean;
-  pressedRight: boolean;
   pressedUp: boolean;
   pressedDown: boolean;
+  pressedLeft: boolean;
+  pressedRight: boolean;
   pressedThrow: boolean;
+  /** Classic controls have a separate dig key. */
+  pressedDig: boolean;
+  /** Number of key presses this tick. Every 5th command earns experience, like the original. */
+  commands: number;
 }
 
 export const NO_CONTROL: ControlState = {
   left: false, right: false, up: false, down: false,
-  pressedLeft: false, pressedRight: false, pressedUp: false, pressedDown: false, pressedThrow: false,
+  pressedUp: false, pressedDown: false, pressedLeft: false, pressedRight: false,
+  pressedThrow: false, pressedDig: false, commands: 0,
 };
 
 /** What the world does for a clonk when the player asks for it. */
@@ -44,6 +50,21 @@ export interface ClonkActions {
   throwItem: (item: Item, xdir: number, ydir: number) => void;
   /** Go into a building whose door the clonk stands in. Returns false if there is none. */
   tryEnter: () => boolean;
+}
+
+export type ControlStyle = 'jumpAndRun' | 'classic';
+
+/** The persistent identity of a clonk while it's in the world (name, rank, experience). */
+export interface CrewInfo {
+  memberId: string;
+  name: string;
+  rank: number;
+  /** Total experience, including what was earned this round. */
+  experience: number;
+  /** Experience earned this round. */
+  gained: number;
+  controlCount: number;
+  portrait: number;
 }
 
 /** Command direction: where the player wants the clonk to go, as a unit-ish vector. */
@@ -56,10 +77,20 @@ const STOP: ComDir = { x: 0, y: 0 };
 const P = CLONK.physical;
 const WALK_SPEED = physical(280, P.walk);
 const JUMP_SPEED = physical(1000, P.jump);
-const SCALE_SPEED = physical(200, P.scale);
-const HANGLE_SPEED = physical(160, P.hangle);
 const DIG_SPEED = physical(125, P.dig);
-const SWIM_SPEED = physical(160, P.swim);
+
+/** Higher ranks train climbing, hangling and swimming towards the maximum at rank 20 (original rule). */
+function trained(base: number, rank: number): number {
+  const r = Math.max(0, Math.min(20, rank));
+  return base + ((100000 - base) * r) / 20;
+}
+
+/** Command directions in the original's order, used to rotate the dig direction step by step. */
+const COMDIRS: ComDir[] = [
+  { x: 0, y: -1 }, { x: 1, y: -1 }, { x: 1, y: 0 }, { x: 1, y: 1 },
+  { x: 0, y: 1 }, { x: -1, y: 1 }, { x: -1, y: 0 }, { x: -1, y: -1 },
+];
+const comIndex = (c: ComDir): number => COMDIRS.findIndex((d) => d.x === c.x && d.y === c.y);
 const THROW_SPEED = physical(400, P.throw);
 
 export class Clonk extends GameObject {
@@ -79,6 +110,9 @@ export class Clonk extends GameObject {
   contained: Structure | null = null;
   /** Selected line of the open buy menu, or null when it's closed. */
   menu: number | null = null;
+  controlStyle: ControlStyle = 'jumpAndRun';
+  /** Set for clonks from a player's crew. */
+  info: CrewInfo | null = null;
 
   constructor(
     x: number,
@@ -88,6 +122,43 @@ export class Clonk extends GameObject {
   ) {
     super(x, y);
     this.setAction('Jump');
+  }
+
+  private get rank(): number {
+    return this.info?.rank ?? 0;
+  }
+  private get scaleSpeed(): number {
+    return physical(200, trained(P.scale, this.rank));
+  }
+  private get hangleSpeed(): number {
+    return physical(160, trained(P.hangle, this.rank));
+  }
+  private get swimSpeed(): number {
+    return physical(160, trained(P.swim, this.rank));
+  }
+
+  /** Add experience. Returns true if the clonk was promoted. */
+  doExperience(n: number): boolean {
+    const info = this.info;
+    if (!info || n <= 0) return false;
+    info.experience += n;
+    info.gained += n;
+    if (info.experience >= experienceForRank(info.rank + 1)) {
+      info.rank = rankForExperience(info.experience);
+      return true;
+    }
+    return false;
+  }
+
+  /** Count a player's key presses: every 5th command earns 1 experience. */
+  countCommands(n: number): boolean {
+    if (!this.info || n <= 0) return false;
+    let promoted = false;
+    for (let i = 0; i < n; i++) {
+      this.info.controlCount++;
+      if (this.info.controlCount % 5 === 0) promoted = this.doExperience(1) || promoted;
+    }
+    return promoted;
   }
 
   get carrying(): Item | undefined {
@@ -159,6 +230,7 @@ export class Clonk extends GameObject {
   /** Apply a player's controls. Hold a direction to move; see README for the key layout. */
   control(c: ControlState, out: ClonkActions): void {
     if (this.action.disabled) return;
+    if (this.controlStyle === 'classic') return this.controlClassic(c, out);
     const held: ComDir = { x: c.left ? -1 : c.right ? 1 : 0, y: c.up ? -1 : c.down ? 1 : 0 };
     switch (this.action.procedure) {
       case 'walk':
@@ -211,6 +283,74 @@ export class Clonk extends GameObject {
     }
   }
 
+  /**
+   * Classic Clonk controls (C4Object::DirectCom): tap a direction to start walking,
+   * tap stop to stop. Separate keys for jump, dig and throw.
+   */
+  private controlClassic(c: ControlState, out: ClonkActions): void {
+    const cd = this.comDir;
+    switch (this.action.procedure) {
+      case 'walk':
+        if (c.pressedLeft) this.comDir = { x: -1, y: 0 };
+        if (c.pressedRight) this.comDir = { x: 1, y: 0 };
+        if (c.pressedDown) this.comDir = STOP;
+        if (c.pressedUp && out.tryEnter()) break;
+        if (c.pressedUp) {
+          const tx = this.comDir.x !== 0 ? this.comDir.x * WALK_SPEED : this.dir * WALK_SPEED;
+          this.jump(tx, -JUMP_SPEED);
+        } else if (c.pressedDig) {
+          this.setAction('Dig', 0, 0);
+          this.comDir = { x: this.dir, y: 1 };
+        }
+        if (c.pressedThrow) this.throwOrDrop(true, out);
+        break;
+      case 'flight':
+      case 'kneel':
+      case 'throw':
+        if (c.pressedLeft) this.comDir = { x: -1, y: 0 };
+        if (c.pressedRight) this.comDir = { x: 1, y: 0 };
+        if (c.pressedDown) this.comDir = STOP;
+        if (c.pressedThrow && this.action.procedure === 'flight') this.throwOrDrop(true, out);
+        break;
+      case 'scale':
+        if (c.pressedLeft) {
+          if (this.dir === -1) this.comDir = STOP;
+          else this.jump(-1, 0);
+        }
+        if (c.pressedRight) {
+          if (this.dir === 1) this.comDir = STOP;
+          else this.jump(1, 0);
+        }
+        if (c.pressedUp) this.comDir = { x: 0, y: -1 };
+        if (c.pressedDown) this.comDir = { x: 0, y: 1 };
+        if (c.pressedThrow) this.throwOrDrop(false, out);
+        break;
+      case 'hangle':
+        if (c.pressedLeft) this.comDir = { x: -1, y: 0 };
+        if (c.pressedRight) this.comDir = { x: 1, y: 0 };
+        if (c.pressedUp) this.comDir = STOP;
+        if (c.pressedDown) this.jump(0, 0);
+        if (c.pressedThrow) this.throwOrDrop(false, out);
+        break;
+      case 'dig': {
+        // Left/right turn the dig direction one step at a time.
+        const i = comIndex(cd);
+        if (c.pressedLeft && i >= 1 && i <= 6) this.comDir = COMDIRS[i + 1];
+        if (c.pressedRight && i >= 2 && i <= 7) this.comDir = COMDIRS[i - 1];
+        if (c.pressedDown) this.walk();
+        break;
+      }
+      case 'swim':
+        if (c.pressedUp && out.tryEnter()) break;
+        if (c.pressedLeft) this.comDir = { x: -1, y: cd.y };
+        if (c.pressedRight) this.comDir = { x: 1, y: cd.y };
+        if (c.pressedUp) this.comDir = { x: cd.x, y: -1 };
+        if (c.pressedDown) this.comDir = { x: cd.x, y: 1 };
+        if (c.pressedThrow) this.throwOrDrop(false, out);
+        break;
+    }
+  }
+
   private throwOrDrop(throwIt: boolean, out: Pick<ClonkActions, 'throwItem'>): void {
     const item = this.contents.shift();
     if (!item) return;
@@ -249,16 +389,16 @@ export class Clonk extends GameObject {
       case 'scale': {
         // Pushing towards the wall means "climb up".
         const up = cd.y < 0 || (cd.x !== 0 && cd.x === this.dir);
-        if (up) this.ydir = Math.max(this.ydir - WALK_ACCEL, -SCALE_SPEED);
-        else if (cd.y > 0) this.ydir = Math.min(this.ydir + WALK_ACCEL, SCALE_SPEED);
+        if (up) this.ydir = Math.max(this.ydir - WALK_ACCEL, -this.scaleSpeed);
+        else if (cd.y > 0) this.ydir = Math.min(this.ydir + WALK_ACCEL, this.scaleSpeed);
         else this.ydir = decel(this.ydir, WALK_ACCEL);
         advance = Math.floor(Math.abs(this.ydir) * 14);
         this.xdir = 0;
         break;
       }
       case 'hangle':
-        if (cd.x < 0) this.xdir = Math.max(this.xdir - WALK_ACCEL, -HANGLE_SPEED);
-        else if (cd.x > 0) this.xdir = Math.min(this.xdir + WALK_ACCEL, HANGLE_SPEED);
+        if (cd.x < 0) this.xdir = Math.max(this.xdir - WALK_ACCEL, -this.hangleSpeed);
+        else if (cd.x > 0) this.xdir = Math.min(this.xdir + WALK_ACCEL, this.hangleSpeed);
         else this.xdir = decel(this.xdir, WALK_ACCEL);
         advance = Math.floor(Math.abs(this.xdir) * 10);
         if (this.xdir < 0) this.setDir(-1);
@@ -307,13 +447,14 @@ export class Clonk extends GameObject {
             break;
           }
         }
-        this.xdir = Math.max(-SWIM_SPEED, Math.min(SWIM_SPEED, this.xdir));
-        this.ydir = Math.max(-SWIM_SPEED, Math.min(SWIM_SPEED, this.ydir));
+        const swim = this.swimSpeed;
+        this.xdir = Math.max(-swim, Math.min(swim, this.xdir));
+        this.ydir = Math.max(-swim, Math.min(swim, this.ydir));
         // Can't swim up out of the water.
         if (!land.isLiquid(this.x, this.y - 1) && this.ydir < 0) this.ydir = 0;
         if (this.xdir < 0) this.setDir(-1);
         if (this.xdir > 0) this.setDir(1);
-        advance = Math.floor(SWIM_SPEED * 10);
+        advance = Math.floor(swim * 10);
         break;
     }
 
@@ -347,7 +488,6 @@ export class Clonk extends GameObject {
           return;
         } else {
           this.setAction(a.next);
-          if (a.next === 'Walk') this.comDir = STOP;
           return;
         }
       }

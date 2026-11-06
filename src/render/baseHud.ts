@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text, type TextStyleOptions } from 'pixi.js';
 import { TICKS_PER_SECOND } from '../core/loop';
 import type { World } from '../game/world';
-import type { Clonk } from '../objects/clonk';
+import type { Clonk, ControlStyle } from '../objects/clonk';
 import { CLONK, ENERGY_UNIT, ITEMS } from '../objects/defs';
 import { frame, type GameAssets } from './assets';
 
@@ -14,6 +14,12 @@ const style = (size: number, fill = '#ffffff'): TextStyleOptions => ({
 
 /** Messages stay on screen this long. */
 const MESSAGE_TICKS = TICKS_PER_SECOND * 3;
+
+/** Key names for the building hints, per control style. */
+const KEYS: Record<ControlStyle, { choose: string; buy: string; sell: string; up: string; down: string }> = {
+  jumpAndRun: { choose: '←/→', buy: '↑ or Q/E', sell: 'Q/E', up: '↑', down: '↓' },
+  classic: { choose: 'Z/C or ←/→', buy: 'S/↑ or A', sell: 'A', up: 'S/↑', down: 'X/↓' },
+};
 
 /**
  * HUD for one player's crew: energy bar, gold, and while inside a building
@@ -38,6 +44,9 @@ export class BaseHud {
     private readonly world: World,
     private readonly assets: GameAssets,
     private readonly player: number,
+    private readonly style: ControlStyle = 'jumpAndRun',
+    /** Draw the energy bar and gold here. Off when another HUD shows them. */
+    private readonly showStatus = true,
   ) {
     const g = ITEMS.gold.graphic;
     this.coin.texture = frame(assets.items[g.file], g.facet.x, g.facet.y, g.facet.w, g.facet.h);
@@ -50,6 +59,7 @@ export class BaseHud {
     for (const m of w.messages.splice(0)) if (m.player === this.player) this.messages.push(m);
     this.messages = this.messages.filter((m) => w.tick - m.tick < MESSAGE_TICKS).slice(-3);
 
+    this.bars.visible = this.energyText.visible = this.coin.visible = this.wealthText.visible = this.showStatus;
     // Energy bar under the carried-item slot, and gold next to it.
     const frac = clonk.energy / CLONK.energy;
     this.bars.clear()
@@ -100,14 +110,15 @@ export class BaseHud {
     }
 
     let height = 64;
+    const k = KEYS[this.style];
     if (clonk.menu !== null) {
-      this.hint.text = '←/→ choose · ↑ or Q/E buy · ↓ close';
+      this.hint.text = `${k.choose} choose · ${k.buy} buy · ${k.down} close`;
       height = 130;
     } else if (own) {
       const healing = clonk.energy < CLONK.energy ? 'Healing… ' : '';
-      this.hint.text = `${healing}↑ buy · Q/E sell what you carry · ↓ leave`;
+      this.hint.text = `${healing}${k.up} buy · ${k.sell} sell what you carry · ${k.down} leave`;
     } else {
-      this.hint.text = 'No flag: not your base · ↓ leave';
+      this.hint.text = `No flag: not your base · ${k.down} leave`;
     }
     const width = Math.max(360, this.menuRow.width + 24);
     const x = Math.round(screenW / 2 - width / 2);

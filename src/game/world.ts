@@ -8,13 +8,19 @@ import type { GameObject } from '../objects/gameObject';
 import { Item } from '../objects/item';
 import { Structure } from '../objects/structure';
 
-export interface ExplosionEvent {
-  type: 'explosion';
-  x: number;
-  y: number;
-  radius: number;
-  tick: number;
-}
+export type WorldEvent =
+  | { type: 'explosion'; x: number; y: number; radius: number; tick: number }
+  | { type: 'promotion'; clonk: Clonk; rank: number; tick: number }
+  | { type: 'collect'; clonk: Clonk; item: Item; tick: number }
+  | { type: 'throw'; clonk: Clonk; tick: number };
+
+/** Extra experience on top of the original's "1 per 5 commands", so promotions come at a fun pace. */
+export const EXPERIENCE = {
+  /** Picking up a gold nugget for the first time. */
+  goldFound: 20,
+  /** Each rock or nugget broken loose by a flint you threw. */
+  blastedLoose: 2,
+};
 
 /** Something to tell a player (bought, sold, can't afford...). The HUD drains these. */
 export interface PlayerMessage {
@@ -45,7 +51,7 @@ export class World {
   readonly messages: PlayerMessage[] = [];
   tick = 0;
   /** Things that happened this tick, for effects and sound. The renderer drains it. */
-  readonly events: ExplosionEvent[] = [];
+  readonly events: WorldEvent[] = [];
 
   constructor(
     readonly land: Landscape,
@@ -87,6 +93,15 @@ export class World {
     return item;
   }
 
+  /** Put a new item straight into a clonk's hands, if it has room. */
+  give(c: Clonk, id: ItemId): Item | undefined {
+    if (c.contents.length >= CLONK.maxContents) return undefined;
+    const item = this.spawnItem(id, c.x, c.y);
+    item.container = c;
+    c.contents.push(item);
+    return item;
+  }
+
   /** Advance one tick. `controls` maps a clonk's owner to that player's input. */
   step(controls: ReadonlyMap<number, ControlState>): void {
     const throwItem = (item: Item, xdir: number, ydir: number, by: Clonk): void => {
@@ -95,22 +110,32 @@ export class World {
       item.ydir = ydir;
       item.rdir = xdir === 0 ? 0 : 1 + this.rng.int(3);
       item.noCollect = NO_COLLECT_TICKS;
-      item.thrownBy = by.owner;
+      item.thrownBy = by.id;
     };
 
     for (const c of this.clonks) {
-      const ctl = controls.get(c.owner) ?? NO_CONTROL;
+      const ctrl = controls.get(c.owner) ?? NO_CONTROL;
+      if (c.alive && c.countCommands(ctrl.commands)) this.promoted(c);
       if (c.contained) {
-        if (c.alive) this.containedControl(c, ctl);
+        if (c.alive) this.containedControl(c, ctrl);
         continue;
       }
-      c.control(ctl, {
+      const carried = c.carrying;
+      c.control(ctrl, {
         throwItem: (item, xdir, ydir) => throwItem(item, xdir, ydir, c),
         tryEnter: () => this.tryEnter(c),
       });
       if (c.contained) continue;
+      if (carried && !c.carrying) this.events.push({ type: 'throw', clonk: c, tick: this.tick });
       c.tick(this.land);
-      c.tryCollect(this.items, this.land);
+      const got = c.tryCollect(this.items, this.land);
+      if (got) {
+        this.events.push({ type: 'collect', clonk: c, item: got, tick: this.tick });
+        if (got.def.id === 'gold' && !got.found) {
+          got.found = true;
+          if (c.doExperience(EXPERIENCE.goldFound)) this.promoted(c);
+        }
+      }
     }
 
     if (this.tick % BASE.healInterval === 0) for (const c of this.clonks) this.healInBase(c);
@@ -121,7 +146,9 @@ export class World {
       const hit = item.tick(this.land);
       if (hit && item.def.explodeOnHit) {
         item.removed = true;
-        this.explode(item.x, item.y, item.def.explodeOnHit);
+        const freed = this.explode(item.x, item.y, item.def.explodeOnHit);
+        const by = this.clonks.find((c) => c.id === item.thrownBy);
+        if (by && freed && by.doExperience(freed * EXPERIENCE.blastedLoose)) this.promoted(by);
       }
     }
     if (this.items.some((i) => i.removed)) this.items = this.items.filter((i) => !i.removed);
@@ -130,11 +157,16 @@ export class World {
     this.tick++;
   }
 
+  private promoted(c: Clonk): void {
+    if (c.info) this.events.push({ type: 'promotion', clonk: c, rank: c.info.rank, tick: this.tick });
+  }
+
   /**
    * Blast a hole. Rock and gold veins break into rocks and gold nuggets
    * (one per 75 blasted pixels, like the original), and nearby objects get flung.
+   * Returns how many objects (rocks, nuggets) the blast broke loose.
    */
-  explode(x: number, y: number, radius: number): void {
+  explode(x: number, y: number, radius: number): number {
     this.events.push({ type: 'explosion', x, y, radius, tick: this.tick });
 
     // Fling everything nearby away from the blast.
@@ -159,10 +191,12 @@ export class World {
     for (const item of this.items) if (!item.container && !item.removed) fling(item);
 
     const counts = this.land.blast(x, y, radius, this.rng);
+    let freed = 0;
     for (const [mat, count] of counts) {
       const m = MATERIALS[mat];
       if (!m.blast2Object || !m.blast2ObjectRatio) continue;
       const n = Math.floor(count / m.blast2ObjectRatio);
+      freed += n;
       for (let i = 0; i < n; i++) {
         this.spawnItem(
           m.blast2Object,
@@ -174,6 +208,7 @@ export class World {
         );
       }
     }
+    return freed;
   }
 
   /**

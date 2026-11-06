@@ -57,13 +57,36 @@ function vein(land: Landscape, rng: Rng, m: Mat, x: number, y: number, length: n
  * earth with a sandy top, rock and gold veins, granite near the bottom, a lake,
  * and flints, rocks and gold buried in the ground.
  */
-export function generateMap(width: number, height: number, seed: number): GeneratedMap {
+export interface MapOptions {
+  /** Height of the hills; 1 is the default rolling landscape, near 0 is flat. */
+  hilliness: number;
+  /** Multipliers for how many rock and gold veins there are. */
+  rockVeins: number;
+  goldVeins: number;
+  lake: boolean;
+  /** Buried objects per 1000 pixels of map width. */
+  buried: Record<ItemId, number>;
+  /** Objects lying loose on the surface per 1000 pixels of map width. */
+  onSurface: Partial<Record<ItemId, number>>;
+}
+
+export const DEFAULT_MAP: MapOptions = {
+  hilliness: 1,
+  rockVeins: 1,
+  goldVeins: 1,
+  lake: true,
+  buried: { flint: 20, rock: 1000 / 70, gold: 1000 / 120 },
+  onSurface: {},
+};
+
+export function generateMap(width: number, height: number, seed: number, options: Partial<MapOptions> = {}): GeneratedMap {
+  const opt = { ...DEFAULT_MAP, ...options };
   const rng = new Rng(seed);
   const land = new Landscape(width, height);
   const base = Math.floor(height * 0.38);
   const hills = heightProfile(width, rng, [
-    { step: 160, amp: Math.floor(height * 0.12) },
-    { step: 40, amp: Math.floor(height * 0.03) },
+    { step: 160, amp: Math.floor(height * 0.12 * opt.hilliness) },
+    { step: 40, amp: Math.floor(height * 0.03 * Math.max(opt.hilliness, 0.3)) },
   ]);
   const surface = new Int32Array(width);
   for (let x = 0; x < width; x++) surface[x] = base + hills[x];
@@ -87,12 +110,12 @@ export function generateMap(width: number, height: number, seed: number): Genera
     vein(land, rng, Mat.Granite, rng.int(width), base + 60 + rng.int(height - base - 80), 3 + rng.int(4), 7);
   }
   // Rock veins.
-  for (let i = 0; i < area / 16000; i++) {
+  for (let i = 0; i < (area / 16000) * opt.rockVeins; i++) {
     const x = rng.int(width);
     vein(land, rng, Mat.Rock, x, surface[x] + 15 + rng.int(height - surface[x] - 30), 5 + rng.int(10), 7);
   }
   // Gold veins, deeper down.
-  for (let i = 0; i < area / 45000; i++) {
+  for (let i = 0; i < (area / 45000) * opt.goldVeins; i++) {
     const x = rng.int(width);
     const top = surface[x] + 50;
     if (top >= height - 30) continue;
@@ -103,7 +126,9 @@ export function generateMap(width: number, height: number, seed: number): Genera
   let lowest = Math.floor(width * 0.1);
   for (let x = lowest; x < width * 0.9; x++) if (surface[x] > surface[lowest]) lowest = x;
   const lakeR = 28;
-  for (let y = surface[lowest] - lakeR; y <= surface[lowest] + lakeR; y++) {
+  const lakeTop = opt.lake ? surface[lowest] - lakeR : 1;
+  const lakeBottom = opt.lake ? surface[lowest] + lakeR : 0;
+  for (let y = lakeTop; y <= lakeBottom; y++) {
     for (let x = lowest - lakeR * 2; x <= lowest + lakeR * 2; x++) {
       const dx = (x - lowest) / 2;
       const dy = y - surface[lowest];
@@ -124,12 +149,20 @@ export function generateMap(width: number, height: number, seed: number): Genera
       if (land.get(x, y) === Mat.Earth) items.push({ id, x, y });
     }
   };
-  bury('flint', Math.floor(width / 50), 12, 60);
-  bury('rock', Math.floor(width / 70), 8, 80);
-  bury('gold', Math.floor(width / 120), 40, 160);
+  const per = (n: number): number => Math.floor((n * width) / 1000);
+  bury('flint', per(opt.buried.flint), 12, 60);
+  bury('rock', per(opt.buried.rock), 8, 80);
+  bury('gold', per(opt.buried.gold), 40, 160);
+  for (const [id, n] of Object.entries(opt.onSurface) as [ItemId, number][]) {
+    for (let i = 0; i < per(n); i++) {
+      const x = 4 + rng.int(width - 8);
+      // Resting right on the ground: dropped from higher up, flints would explode on landing.
+      items.push({ id, x, y: surface[x] - 1 });
+    }
+  }
 
   // Start on the surface, a third of the way in and away from the lake.
   let sx = Math.floor(width / 3);
-  if (Math.abs(sx - lowest) < lakeR * 3) sx = Math.floor((width * 2) / 3);
+  if (opt.lake && Math.abs(sx - lowest) < lakeR * 3) sx = Math.floor((width * 2) / 3);
   return { land, items, spawn: { x: sx, y: surface[sx] - 10 }, surface };
 }
