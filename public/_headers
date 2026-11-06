@@ -1,0 +1,14 @@
+# Response headers for the game (Cloudflare Workers static assets reads this file from dist/; Vite copies public/ there).
+# Same baseline as kiwikode.dev. 'wasm-unsafe-eval' leaves room for WebAssembly, and blob: in worker-src for web
+# workers. frame-ancestors lets kiwikode.dev embed the game on its /fun/ pages.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'self' https://kiwikode.dev; object-src 'none'; base-uri 'self'; form-action 'self'
+
+# Vite puts hashed file names in /assets/, so those never change and can be cached for a year.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
