@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite, Text, type TextStyleOptions } from 'pixi.js';
 import { TICKS_PER_SECOND } from '../core/loop';
-import type { World } from '../game/world';
+import { shopEntry, type World } from '../game/world';
 import type { Clonk, ControlStyle } from '../objects/clonk';
 import { CLONK, ENERGY_UNIT, ITEMS } from '../objects/defs';
 import { frame, type GameAssets } from './assets';
@@ -17,7 +17,7 @@ const MESSAGE_TICKS = TICKS_PER_SECOND * 3;
 
 /** Key names for the building hints, per control style. */
 const KEYS: Record<ControlStyle, { choose: string; buy: string; sell: string; up: string; down: string }> = {
-  jumpAndRun: { choose: '←/→', buy: '↑ or Q/E', sell: 'Q/E', up: '↑', down: '↓' },
+  jumpAndRun: { choose: '←/→', buy: '↑ or E', sell: 'E', up: '↑', down: '↓' },
   classic: { choose: 'Z/C or ←/→', buy: 'S/↑ or A', sell: 'A', up: 'S/↑', down: 'X/↓' },
 };
 
@@ -47,6 +47,8 @@ export class BaseHud {
     private readonly style: ControlStyle = 'jumpAndRun',
     /** Draw the energy bar and gold here. Off when another HUD shows them. */
     private readonly showStatus = true,
+    /** The player's shirt colour, for clonks in the shop. */
+    private readonly color = 0x2a5bd7,
   ) {
     const g = ITEMS.gold.graphic;
     this.coin.texture = frame(assets.items[g.file], g.facet.x, g.facet.y, g.facet.w, g.facet.h);
@@ -93,14 +95,27 @@ export class BaseHud {
       this.menuKey = key;
       this.menuRow.removeChildren().forEach((c) => c.destroy({ children: true }));
       list.forEach((id, i) => {
-        const def = ITEMS[id];
+        const def = shopEntry(id);
         const cell = new Container();
         const box = new Graphics().roundRect(0, 0, 92, 62, 6);
         if (i === clonk.menu) box.fill({ color: 0xffe070, alpha: 0.3 }).stroke({ color: 0xffe070, width: 2 });
         else box.fill({ color: 0x000000, alpha: 0.3 });
-        const icon = new Sprite(frame(this.assets.items[def.graphic.file], def.graphic.facet.x, def.graphic.facet.y, def.graphic.facet.w, def.graphic.facet.h));
-        icon.scale.set(4);
-        icon.position.set(8, 8);
+        let icon: Container;
+        if (id === 'clonk') {
+          // The clonk sprite plus its shirt overlay in the player's colour.
+          const walk = CLONK.actions.Walk;
+          icon = new Container();
+          const shirt = new Sprite(frame(this.assets.clonkOverlay, walk.facetX, walk.facetY, CLONK.width, CLONK.height));
+          shirt.tint = this.color;
+          icon.addChild(new Sprite(frame(this.assets.clonk, walk.facetX, walk.facetY, CLONK.width, CLONK.height)), shirt);
+          icon.scale.set(2);
+          icon.position.set(2, 10);
+        } else {
+          const g = ITEMS[id].graphic;
+          icon = new Sprite(frame(this.assets.items[g.file], g.facet.x, g.facet.y, g.facet.w, g.facet.h));
+          icon.scale.set(4);
+          icon.position.set(8, 8);
+        }
         const label = new Text({ text: `${def.name}\n${def.value}g  x${stock[id] ?? 0}`, style: style(12) });
         label.position.set(36, 10);
         cell.addChild(box, icon, label);

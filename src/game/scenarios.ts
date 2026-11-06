@@ -51,7 +51,7 @@ export const SCENARIOS: ScenarioDef[] = [
       buried: { flint: 90, rock: 10, gold: 4 },
       onSurface: { flint: 45 },
     },
-    crewSize: 1,
+    crewSize: 3,
     startItems: ['flint'],
     homeBase: false,
   },

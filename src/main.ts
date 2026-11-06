@@ -84,7 +84,7 @@ async function start(): Promise<void> {
   let game: GameScreen | null = null;
 
   const play = (scenario: ScenarioDef, profile: Profile): void => {
-    game = new GameScreen({ app, assets, sounds, ui }, startRound(scenario, profile), finish);
+    game = new GameScreen({ app, assets, sounds, ui }, startRound(scenario, profile, names), finish);
   };
 
   const finish = (round: Round): void => {
@@ -97,7 +97,9 @@ async function start(): Promise<void> {
     const outcomes: CrewOutcome[] = results.flatMap((result) => {
       const member = profile.crew.find((m) => m.id === result.memberId);
       const was = before.get(result.memberId);
-      return member && was ? [{ member, result, before: was, died: dead.has(member.id) }] : [];
+      return member && was
+        ? [{ member, result, before: was, died: dead.has(member.id), isNew: round.recruited.has(member.id) }]
+        : [];
     });
     const close = (): void => {
       game?.dispose();
