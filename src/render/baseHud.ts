@@ -1,0 +1,119 @@
+import { Container, Graphics, Sprite, Text, type TextStyleOptions } from 'pixi.js';
+import { TICKS_PER_SECOND } from '../core/loop';
+import type { World } from '../game/world';
+import type { Clonk } from '../objects/clonk';
+import { CLONK, ENERGY_UNIT, ITEMS } from '../objects/defs';
+import { frame, type GameAssets } from './assets';
+
+const style = (size: number, fill = '#ffffff'): TextStyleOptions => ({
+  fill,
+  fontSize: size,
+  fontFamily: 'monospace',
+  stroke: { color: '#000000', width: 3 },
+});
+
+/** Messages stay on screen this long. */
+const MESSAGE_TICKS = TICKS_PER_SECOND * 3;
+
+/**
+ * HUD for one player's crew: energy bar, gold, and while inside a building
+ * what you can do there (leave, buy, sell), plus short messages.
+ */
+export class BaseHud {
+  readonly root = new Container();
+  private readonly bars = new Graphics();
+  private readonly energyText = new Text({ text: '', style: style(14) });
+  private readonly coin = new Sprite();
+  private readonly wealthText = new Text({ text: '', style: style(16, '#ffe070') });
+  private readonly panel = new Graphics();
+  private readonly title = new Text({ text: '', style: style(16) });
+  private readonly menuRow = new Container();
+  private readonly hint = new Text({ text: '', style: style(13, '#dddddd') });
+  private readonly toast = new Text({ text: '', style: style(16, '#ffe070') });
+  private messages: { text: string; tick: number }[] = [];
+  /** What the buy menu was last drawn for, so it's only rebuilt when something changes. */
+  private menuKey = '';
+
+  constructor(
+    private readonly world: World,
+    private readonly assets: GameAssets,
+    private readonly player: number,
+  ) {
+    const g = ITEMS.gold.graphic;
+    this.coin.texture = frame(assets.items[g.file], g.facet.x, g.facet.y, g.facet.w, g.facet.h);
+    this.coin.scale.set(3);
+    this.root.addChild(this.bars, this.energyText, this.coin, this.wealthText, this.panel, this.title, this.menuRow, this.hint, this.toast);
+  }
+
+  update(screenW: number, screenH: number, clonk: Clonk): void {
+    const w = this.world;
+    for (const m of w.messages.splice(0)) if (m.player === this.player) this.messages.push(m);
+    this.messages = this.messages.filter((m) => w.tick - m.tick < MESSAGE_TICKS).slice(-3);
+
+    // Energy bar under the carried-item slot, and gold next to it.
+    const frac = clonk.energy / CLONK.energy;
+    this.bars.clear()
+      .roundRect(10, 60, 160, 14, 4).fill({ color: 0x000000, alpha: 0.45 })
+      .roundRect(12, 62, 156 * frac, 10, 3).fill(frac > 0.3 ? 0x3fbf4a : 0xd8402c);
+    this.energyText.text = clonk.alive ? `${Math.ceil(clonk.energy / ENERGY_UNIT)}` : 'dead';
+    this.energyText.position.set(176, 58);
+    const wealth = w.players.get(this.player)?.wealth ?? 0;
+    this.coin.position.set(10, 82);
+    this.wealthText.text = `${wealth}`;
+    this.wealthText.position.set(32, 82);
+
+    this.updateBuilding(screenW, clonk);
+
+    this.toast.text = this.messages.map((m) => m.text).join('\n');
+    this.toast.anchor.set(0.5, 1);
+    this.toast.position.set(screenW / 2, screenH - 44);
+  }
+
+  private updateBuilding(screenW: number, clonk: Clonk): void {
+    const s = clonk.contained;
+    const show = !!s;
+    this.panel.visible = this.title.visible = this.hint.visible = this.menuRow.visible = show;
+    if (!s) return;
+    const own = this.world.inOwnBase(clonk);
+    this.title.text = own ? `${s.def.name} (your base)` : s.def.name;
+    const stock = this.world.players.get(this.player)?.stock ?? {};
+    const list = clonk.menu === null ? [] : this.world.shopList(this.player);
+    const key = `${clonk.menu}:${list.map((id) => `${id}=${stock[id]}`).join(',')}`;
+    if (key !== this.menuKey) {
+      this.menuKey = key;
+      this.menuRow.removeChildren().forEach((c) => c.destroy({ children: true }));
+      list.forEach((id, i) => {
+        const def = ITEMS[id];
+        const cell = new Container();
+        const box = new Graphics().roundRect(0, 0, 92, 62, 6);
+        if (i === clonk.menu) box.fill({ color: 0xffe070, alpha: 0.3 }).stroke({ color: 0xffe070, width: 2 });
+        else box.fill({ color: 0x000000, alpha: 0.3 });
+        const icon = new Sprite(frame(this.assets.items[def.graphic.file], def.graphic.facet.x, def.graphic.facet.y, def.graphic.facet.w, def.graphic.facet.h));
+        icon.scale.set(4);
+        icon.position.set(8, 8);
+        const label = new Text({ text: `${def.name}\n${def.value}g  x${stock[id] ?? 0}`, style: style(12) });
+        label.position.set(36, 10);
+        cell.addChild(box, icon, label);
+        cell.position.set(i * 100, 0);
+        this.menuRow.addChild(cell);
+      });
+    }
+
+    let height = 64;
+    if (clonk.menu !== null) {
+      this.hint.text = '←/→ choose · ↑ or Q/E buy · ↓ close';
+      height = 130;
+    } else if (own) {
+      const healing = clonk.energy < CLONK.energy ? 'Healing… ' : '';
+      this.hint.text = `${healing}↑ buy · Q/E sell what you carry · ↓ leave`;
+    } else {
+      this.hint.text = 'No flag: not your base · ↓ leave';
+    }
+    const width = Math.max(360, this.menuRow.width + 24);
+    const x = Math.round(screenW / 2 - width / 2);
+    this.panel.clear().roundRect(x, 10, width, height, 8).fill({ color: 0x000000, alpha: 0.55 }).stroke({ color: 0xffffff, alpha: 0.5, width: 2 });
+    this.title.position.set(x + 12, 16);
+    this.menuRow.position.set(x + 12, 42);
+    this.hint.position.set(x + 12, 10 + height - 24);
+  }
+}

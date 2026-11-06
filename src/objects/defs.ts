@@ -15,8 +15,10 @@ export interface Facet {
 export interface ItemDef {
   id: ItemId;
   name: string;
-  /** Sell value in gold coins (used once bases and selling exist). */
+  /** Price in gold coins, for buying and selling at a home base (DefCore Value). */
   value: number;
+  /** Selling it puts it back into the player's home base stock, so it can be bought again (DefCore Rebuy). */
+  rebuy?: boolean;
   mass: number;
   vertices: Vertex[];
   /** Explosion radius when it hits something hard enough (flints). */
@@ -29,15 +31,15 @@ const itemVertex: Vertex[] = [{ x: 0, y: 0, cnat: CNAT.None, friction: 50 }];
 const itemFacet: Facet = { x: 0, y: 0, w: 6, h: 6 };
 
 export const ITEMS: Record<ItemId, ItemDef> = {
-  rock: { id: 'rock', name: 'Rock', value: 1, mass: 10, vertices: itemVertex, graphic: { file: 'items/Rock.png', facet: itemFacet } },
+  rock: { id: 'rock', name: 'Rock', value: 1, rebuy: true, mass: 10, vertices: itemVertex, graphic: { file: 'items/Rock.png', facet: itemFacet } },
   gold: { id: 'gold', name: 'Gold', value: 5, mass: 15, vertices: itemVertex, graphic: { file: 'items/Gold.png', facet: itemFacet } },
   flint: {
-    id: 'flint', name: 'Flint', value: 5, mass: 10, vertices: itemVertex, explodeOnHit: 18,
+    id: 'flint', name: 'Flint', value: 5, rebuy: true, mass: 10, vertices: itemVertex, explodeOnHit: 18,
     graphic: { file: 'items/Flint.png', facet: itemFacet },
   },
 };
 
-export type Procedure = 'walk' | 'flight' | 'scale' | 'hangle' | 'dig' | 'swim' | 'throw' | 'kneel';
+export type Procedure = 'walk' | 'flight' | 'scale' | 'hangle' | 'dig' | 'swim' | 'throw' | 'kneel' | 'dead';
 
 export interface ActionDef {
   name: string;
@@ -71,6 +73,7 @@ const actions: ActionDef[] = [
   { name: 'KneelUp', procedure: 'kneel', length: 4, delay: 1, facetX: 64, facetY: 140, next: 'Walk' },
   { name: 'FlatUp', procedure: 'kneel', length: 8, delay: 1, facetX: 0, facetY: 180, next: 'KneelUp', disabled: true },
   { name: 'Throw', procedure: 'throw', length: 8, delay: 1, facetX: 0, facetY: 200, next: 'Walk', inLiquid: 'Swim' },
+  { name: 'Dead', procedure: 'dead', length: 6, delay: 3, facetX: 0, facetY: 240, next: 'Hold', disabled: true },
 ];
 
 export const CLONK = {
@@ -90,7 +93,77 @@ export const CLONK = {
   collection: { x: -8, y: -10, w: 16, h: 27 },
   /** A default clonk carries one object. */
   maxContents: 1,
+  /** Full energy (Physical Energy). The HUD shows it divided by 1000, so 50. */
+  energy: 50000,
   physical: { walk: 70000, jump: 40000, scale: 30000, hangle: 30000, dig: 40000, swim: 60000, throw: 50000 },
   actions: Object.fromEntries(actions.map((a) => [a.name, a])) as Record<string, ActionDef>,
   graphic: { file: 'clonk/Graphics.png', overlay: 'clonk/Overlay.png' },
+};
+
+/** Energy units per displayed point (C4MaxPhysical / 100 in the original). */
+export const ENERGY_UNIT = 1000;
+
+export interface StructureDef {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  /** Top-left corner relative to the centre. */
+  offset: { x: number; y: number };
+  /** Door area relative to the centre: a clonk standing here can go in. */
+  entrance: { x: number; y: number; w: number; h: number };
+  /** Becomes a player's home base when a flag is put on it. */
+  canBeBase: boolean;
+  /** Energy store a home base heals clonks from (Physical Energy). */
+  energy: number;
+  /** Where the flag pole goes (the structure's first vertex). */
+  flagVertex: { x: number; y: number };
+  graphic: {
+    file: string;
+    facet: Facet;
+    /** Door animation strip, drawn at `at` relative to the top-left corner. */
+    door: Facet & { length: number; at: { x: number; y: number } };
+  };
+}
+
+/** Values from the original Hut2.c4d (wooden hut) DefCore.txt, ActMap.txt and the DOOR script. */
+export const STRUCTURES: Record<string, StructureDef> = {
+  hut: {
+    id: 'hut',
+    name: 'Wooden Hut',
+    width: 60,
+    height: 50,
+    offset: { x: -30, y: -25 },
+    entrance: { x: -18, y: 8, w: 16, h: 17 },
+    canBeBase: true,
+    energy: 100000,
+    flagVertex: { x: 13, y: -17 },
+    graphic: {
+      file: 'structures/Hut2.png',
+      facet: { x: 0, y: 0, w: 60, h: 50 },
+      door: { x: 0, y: 50, w: 10, h: 16, length: 10, at: { x: 15, y: 34 } },
+    },
+  },
+};
+
+/** The flag on a home base (Flag.c4d, action FlyBase). */
+export const FLAG = {
+  width: 24,
+  height: 12,
+  /** The flag's own attach vertex, aligned with the structure's flag vertex. */
+  vertex: { x: -1, y: 5 },
+  /** FlyBase: 9 wind directions (0 = strong wind to the left, 4 = calm, 8 = strong right) stacked from y=12, 6 frames each, 3 ticks per frame. There's no wind yet, so use a light breeze. */
+  fly: { y: 12, length: 6, delay: 3, dir: 6 },
+  graphic: { file: 'items/Flag.png', overlay: 'items/FlagOverlay.png' },
+};
+
+/** Home base rules (Scenario.txt Realism defaults and C4Object::ExecLife). */
+export const BASE = {
+  /** Gold paid when the base's energy store runs dry, for 100 points of energy (BaseRegenerateEnergyPrice). */
+  regenerateEnergyPrice: 5,
+  /** Energy moved from the base into a clonk every `healInterval` ticks: 2 points. */
+  healTransfer: 2 * ENERGY_UNIT,
+  healInterval: 3,
+  /** A player's wealth never goes above this. */
+  maxWealth: 10000,
 };

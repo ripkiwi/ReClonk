@@ -46,6 +46,8 @@ export class Keyboard {
       right: this.any(KEYS.right, h) || this.any(KEYS.right, p),
       up: this.any(KEYS.up, h) || this.any(KEYS.up, p),
       down: this.any(KEYS.down, h) || this.any(KEYS.down, p),
+      pressedLeft: this.any(KEYS.left, p),
+      pressedRight: this.any(KEYS.right, p),
       pressedUp: this.any(KEYS.up, p),
       pressedDown: this.any(KEYS.down, p),
       pressedThrow: this.any(KEYS.throw, p),

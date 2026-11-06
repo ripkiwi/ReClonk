@@ -3,9 +3,10 @@
 // See licenses/clonk_engine_license.txt.
 
 import type { Landscape } from '../landscape/landscape';
-import { CLONK, type ActionDef } from './defs';
+import { CLONK, ENERGY_UNIT, type ActionDef } from './defs';
 import { GameObject } from './gameObject';
 import type { Item } from './item';
+import type { Structure } from './structure';
 import {
   CNAT,
   CORNER_RANGE,
@@ -26,14 +27,24 @@ export interface ControlState {
   up: boolean;
   down: boolean;
   /** Pressed this tick (not just held). */
+  pressedLeft: boolean;
+  pressedRight: boolean;
   pressedUp: boolean;
   pressedDown: boolean;
   pressedThrow: boolean;
 }
 
 export const NO_CONTROL: ControlState = {
-  left: false, right: false, up: false, down: false, pressedUp: false, pressedDown: false, pressedThrow: false,
+  left: false, right: false, up: false, down: false,
+  pressedLeft: false, pressedRight: false, pressedUp: false, pressedDown: false, pressedThrow: false,
 };
+
+/** What the world does for a clonk when the player asks for it. */
+export interface ClonkActions {
+  throwItem: (item: Item, xdir: number, ydir: number) => void;
+  /** Go into a building whose door the clonk stands in. Returns false if there is none. */
+  tryEnter: () => boolean;
+}
 
 /** Command direction: where the player wants the clonk to go, as a unit-ish vector. */
 interface ComDir {
@@ -61,6 +72,13 @@ export class Clonk extends GameObject {
   dir: -1 | 1 = 1;
   comDir: ComDir = STOP;
   readonly contents: Item[] = [];
+  /** Health, in 1/1000 points (see ENERGY_UNIT). Zero means dead. */
+  energy = CLONK.energy;
+  alive = true;
+  /** The building the clonk is inside, if any. Contained clonks are hidden and don't move. */
+  contained: Structure | null = null;
+  /** Selected line of the open buy menu, or null when it's closed. */
+  menu: number | null = null;
 
   constructor(
     x: number,
@@ -139,12 +157,13 @@ export class Clonk extends GameObject {
   // --------------------------------------------------------------- controls
 
   /** Apply a player's controls. Hold a direction to move; see README for the key layout. */
-  control(c: ControlState, out: { throwItem: (item: Item, xdir: number, ydir: number) => void }): void {
+  control(c: ControlState, out: ClonkActions): void {
     if (this.action.disabled) return;
     const held: ComDir = { x: c.left ? -1 : c.right ? 1 : 0, y: c.up ? -1 : c.down ? 1 : 0 };
     switch (this.action.procedure) {
       case 'walk':
         this.comDir = { x: held.x, y: 0 };
+        if (c.pressedUp && out.tryEnter()) break;
         if (c.pressedUp) {
           // Clonks always jump forward.
           const tx = held.x !== 0 ? held.x * WALK_SPEED : this.dir * WALK_SPEED;
@@ -185,13 +204,14 @@ export class Clonk extends GameObject {
         else this.comDir = held;
         break;
       case 'swim':
+        if (c.pressedUp && out.tryEnter()) break;
         this.comDir = held;
         if (c.pressedThrow) this.throwOrDrop(false, out);
         break;
     }
   }
 
-  private throwOrDrop(throwIt: boolean, out: { throwItem: (item: Item, xdir: number, ydir: number) => void }): void {
+  private throwOrDrop(throwIt: boolean, out: Pick<ClonkActions, 'throwItem'>): void {
     const item = this.contents.shift();
     if (!item) return;
     if (throwIt) {
@@ -247,6 +267,10 @@ export class Clonk extends GameObject {
         break;
       case 'flight':
         this.ydir += GRAVITY;
+        break;
+      case 'dead':
+        this.ydir += GRAVITY;
+        if (land.isSolid(this.x, this.y + 10)) this.xdir = decel(this.xdir, WALK_ACCEL);
         break;
       case 'dig': {
         if (!attach(land, this.vertices, this.x, this.y, CNAT.Bottom)) {
@@ -332,6 +356,7 @@ export class Clonk extends GameObject {
 
   private contactAction(land: Landscape, contact: number, speed: number, goingUp: boolean): void {
     const proc = this.action.procedure;
+    if (proc === 'dead') return;
     const disabled = !!this.action.disabled;
     const cd = this.comDir;
 
@@ -424,6 +449,26 @@ export class Clonk extends GameObject {
     }
     // Walked off a ledge, lost grip, etc.: fall.
     this.jump(this.xdir, this.ydir);
+  }
+
+  /**
+   * Change energy by `points` (whole points, like DoEnergy without fExact).
+   * Returns true if this killed the clonk.
+   */
+  doEnergy(points: number, exact = false): boolean {
+    if (!this.alive) return false;
+    const change = exact ? points : points * ENERGY_UNIT;
+    this.energy = Math.max(0, Math.min(CLONK.energy, this.energy + change));
+    if (this.energy > 0) return false;
+    this.die();
+    return true;
+  }
+
+  private die(): void {
+    this.alive = false;
+    this.menu = null;
+    this.comDir = STOP;
+    this.setAction('Dead', 0);
   }
 
   /** Pick up an item if there's room. */

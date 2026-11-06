@@ -3,12 +3,14 @@
 import 'pixi.js/unsafe-eval';
 import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
 import { FixedLoop } from './core/loop';
+import { setupDefaultBases } from './game/homeBase';
 import { World } from './game/world';
 import { Keyboard } from './input/keyboard';
 import { generateMap } from './landscape/generate';
 import { MATERIALS } from './landscape/materials';
-import { ITEMS } from './objects/defs';
+import { FLAG, ITEMS, STRUCTURES } from './objects/defs';
 import { frame, loadAssets } from './render/assets';
+import { BaseHud } from './render/baseHud';
 import { WorldView } from './render/worldView';
 
 const WORLD_W = 1400;
@@ -24,13 +26,21 @@ async function start(): Promise<void> {
 
   const assets = await loadAssets(
     MATERIALS.map((m) => m.texture).concat('SMOOTH2'),
-    Object.values(ITEMS).map((i) => i.graphic.file),
+    [
+      ...Object.values(ITEMS).map((i) => i.graphic.file),
+      ...Object.values(STRUCTURES).map((s) => s.graphic.file),
+      FLAG.graphic.file,
+      FLAG.graphic.overlay,
+    ],
   );
 
   const map = generateMap(WORLD_W, WORLD_H, seed);
   const world = World.fromMap(map, seed);
   const player = 0;
-  const clonk = world.addClonk(map.spawn.x, map.spawn.y, player);
+  // Default scenario: start next to your own wooden hut with your flag on it.
+  const { home } = setupDefaultBases(world, player, map.spawn.x);
+  const start = home.exitPoint();
+  const clonk = world.addClonk(start.x, start.y, player);
   // Start with a flint in hand, like a classic starting kit.
   const flint = world.spawnItem('flint', clonk.x, clonk.y);
   flint.container = clonk;
@@ -48,10 +58,12 @@ async function start(): Promise<void> {
   slot.scale.set(4);
   const label = new Text({ text: '', style: { fill: '#ffffff', fontSize: 16, fontFamily: 'monospace', stroke: { color: '#000000', width: 3 } } });
   const help = new Text({
-    text: 'A/D or ←/→ walk · W/↑/Space jump & climb · S/↓ dig (hold, steer with arrows) · Q/E throw',
+    text: 'A/D or ←/→ walk · W/↑/Space jump, climb, enter doors · S/↓ dig (hold, steer with arrows) · Q/E throw',
     style: { fill: '#ffffff', fontSize: 14, fontFamily: 'monospace', stroke: { color: '#000000', width: 3 } },
   });
   hud.addChild(panel, slot, label, help);
+  const baseHud = new BaseHud(world, assets, player);
+  hud.addChild(baseHud.root);
   app.stage.addChild(hud);
 
   const keyboard = new Keyboard();
@@ -72,6 +84,7 @@ async function start(): Promise<void> {
     label.text = item ? item.def.name : 'empty hands';
     label.position.set(62, 22);
     help.position.set(10, app.screen.height - 26);
+    baseHud.update(app.screen.width, app.screen.height, clonk);
   });
 }
 
