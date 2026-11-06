@@ -10,7 +10,7 @@ export const DEFAULT_START: { wealth: number; stock: Partial<Record<ItemId, numb
 };
 
 /** First solid (or liquid) row in a column. */
-function groundAt(world: World, x: number): number {
+export function groundAt(world: World, x: number): number {
   const { land } = world;
   for (let y = 0; y < land.height; y++) if (land.get(x, y) !== Mat.Sky) return y;
   return land.height;

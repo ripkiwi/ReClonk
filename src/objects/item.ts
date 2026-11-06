@@ -7,8 +7,10 @@ import { FLOAT_ACCEL, GRAVITY, HIT_SPEED_1 } from './physics';
 export class Item extends GameObject {
   /** Ticks during which a clonk that just threw or dropped this won't pick it straight back up. */
   noCollect = 0;
-  /** Player who last threw it (for explosion credit later). */
+  /** Id of the clonk that last threw it, credited with what its explosion breaks loose. */
   thrownBy = -1;
+  /** Gold only earns experience the first time someone picks it up. */
+  found = false;
 
   constructor(
     readonly def: ItemDef,

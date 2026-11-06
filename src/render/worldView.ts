@@ -1,5 +1,7 @@
-import { Container, Graphics, Sprite, TilingSprite } from 'pixi.js';
-import type { World } from '../game/world';
+import { Container, Graphics, Sprite, Text, TilingSprite } from 'pixi.js';
+import { PLAYER_COLORS } from '../game/profiles';
+import { rankName } from '../game/ranks';
+import type { World, WorldEvent } from '../game/world';
 import { CLONK, FLAG } from '../objects/defs';
 import type { Clonk } from '../objects/clonk';
 import type { Item } from '../objects/item';
@@ -7,14 +9,20 @@ import type { Structure } from '../objects/structure';
 import { frame, type GameAssets } from './assets';
 import { LandscapeView } from './landscapeView';
 
-/** Shirt colours per player, like the original's ColorByOwner overlay. */
-export const PLAYER_COLORS = [0x2a5bd7, 0xd23c2c, 0x2fa83a, 0xe0b020];
-
 interface Flash {
   g: Graphics;
   born: number;
   radius: number;
 }
+
+interface Message {
+  text: Text;
+  born: number;
+  follow: Clonk;
+}
+
+/** How long a message above a clonk stays up, in ticks. */
+const MESSAGE_TICKS = 36 * 4;
 
 /** Draws one player's view of the world: sky, landscape, objects and effects, following a clonk. */
 export class WorldView {
@@ -28,6 +36,7 @@ export class WorldView {
   /** Buildings sit behind loose items and clonks. */
   private readonly structureLayer = new Container();
   private readonly flashes: Flash[] = [];
+  private readonly messages: Message[] = [];
   zoom = 2;
   camX = 0;
   camY = 0;
@@ -35,6 +44,8 @@ export class WorldView {
   constructor(
     private readonly world: World,
     private readonly assets: GameAssets,
+    /** Shirt colour for a player number. */
+    private readonly colorOf: (owner: number) => number = (o) => PLAYER_COLORS[o % PLAYER_COLORS.length],
   ) {
     this.sky = new TilingSprite({ texture: assets.sky, width: 1, height: 1 });
     this.sky.alpha = 0.7;
@@ -44,7 +55,7 @@ export class WorldView {
   }
 
   /** Update everything for a screen of the given size, centred on `follow`. */
-  update(screenW: number, screenH: number, follow: Clonk | undefined): void {
+  update(screenW: number, screenH: number, follow: Clonk | undefined, events: readonly WorldEvent[]): void {
     const { land } = this.world;
     // Pick a zoom that shows roughly 380 world pixels vertically, like the original at 1:1 on an old screen.
     this.zoom = Math.max(1, Math.round(screenH / 380));
@@ -72,7 +83,33 @@ export class WorldView {
     this.updateStructures();
     this.updateItems();
     this.updateClonks();
-    this.updateEffects();
+    this.updateEffects(events);
+  }
+
+  /** Remove everything from the screen and free the landscape texture. */
+  destroy(): void {
+    const tex = this.landscape.sprite.texture;
+    this.root.destroy({ children: true });
+    tex.destroy(true);
+  }
+
+  /** Show a message above a clonk, like the original's GameMsgObject. */
+  say(clonk: Clonk, message: string): void {
+    for (const m of this.messages.filter((m) => m.follow === clonk)) m.born = -Infinity;
+    const text = new Text({
+      text: message,
+      style: {
+        fontFamily: 'Endeavour, serif',
+        fontSize: 26,
+        fill: '#ffffff',
+        align: 'center',
+        stroke: { color: '#000000', width: 4 },
+      },
+    });
+    text.anchor.set(0.5, 1);
+    text.scale.set(0.5);
+    this.layer.addChild(text);
+    this.messages.push({ text, born: this.world.tick, follow: clonk });
   }
 
   private updateClonks(): void {
@@ -82,7 +119,7 @@ export class WorldView {
         s = { body: new Sprite(), shirt: new Sprite() };
         s.body.anchor.set(0.5);
         s.shirt.anchor.set(0.5);
-        s.shirt.tint = PLAYER_COLORS[c.owner % PLAYER_COLORS.length];
+        s.shirt.tint = this.colorOf(c.owner);
         this.layer.addChild(s.body, s.shirt);
         this.clonkSprites.set(c, s);
       }
@@ -160,13 +197,18 @@ export class WorldView {
         const y = f.y + f.dir * FLAG.height;
         s.pole.texture = frame(tex[FLAG.graphic.file], phase * FLAG.width, y, FLAG.width, FLAG.height);
         s.cloth.texture = frame(tex[FLAG.graphic.overlay], phase * FLAG.width, y, FLAG.width, FLAG.height);
-        s.cloth.tint = PLAYER_COLORS[st.base % PLAYER_COLORS.length];
+        s.cloth.tint = this.colorOf(st.base);
       }
     }
   }
 
-  private updateEffects(): void {
-    for (const e of this.world.events.splice(0)) {
+  private updateEffects(events: readonly WorldEvent[]): void {
+    for (const e of events) {
+      if (e.type === 'promotion' && e.clonk.info) {
+        this.say(e.clonk, `${e.clonk.info.name} is promoted\nto ${rankName(e.rank)}!`);
+        continue;
+      }
+      if (e.type !== 'explosion') continue;
       const g = new Graphics();
       g.position.set(e.x, e.y);
       this.layer.addChild(g);
@@ -184,6 +226,17 @@ export class WorldView {
       f.g.clear();
       f.g.circle(0, 0, f.radius * (0.6 + t)).fill({ color: 0xffd040, alpha: 0.8 * (1 - t) });
       f.g.circle(0, 0, f.radius * (0.3 + 0.5 * t)).fill({ color: 0xffffff, alpha: 0.9 * (1 - t) * (1 - t) });
+    }
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const m = this.messages[i];
+      const age = this.world.tick - m.born;
+      if (age > MESSAGE_TICKS) {
+        m.text.destroy();
+        this.messages.splice(i, 1);
+        continue;
+      }
+      m.text.position.set(m.follow.x, m.follow.y - 14);
+      m.text.alpha = age > MESSAGE_TICKS - 18 ? (MESSAGE_TICKS - age) / 18 : 1;
     }
   }
 }

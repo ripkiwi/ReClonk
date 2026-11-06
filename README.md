@@ -11,19 +11,36 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
 
 ## Status
 
-**Phase 2: a playable clonk.** One clonk in a generated world, using the original Clonk graphics:
+**Phase 2: menus, crews and ranks.** Pick a player, pick a scenario, and play with the original Clonk graphics:
 
-- Walk, jump, climb walls, hang from ceilings, swim.
-- Dig through earth and sand. Rock, gold and granite can't be dug.
-- Pick up items by walking over them. A clonk carries one item at a time.
-- Throw what you carry. Flints explode on impact. Blasting rock and gold veins drops rocks and gold nuggets
-  (one per 75 blasted pixels, like the original); granite only cracks.
+- **Main menu, players and scenarios**, laid out on the original Clonk Rage menu backgrounds.
+- **Player profiles**, saved in the browser. Each player has a name, a shirt colour, a control style
+  and a **crew** of clonks with names from the original name list. Hire more clonks, bench some,
+  or dismiss them. The most experienced clonk that isn't benched goes into the next round.
+- **Ranks and experience**, like the original: 24 ranks from Clonk to Premier, then "First Class",
+  "Second Degree" and so on, with rank n at n^1.5 × 1000 experience. Clonks earn experience for
+  every 5th command (original rule), finding gold (+20), blasting rocks and nuggets loose (+2 each)
+  and finishing a round (+100). Promotions show up in game with a fanfare, and higher ranks climb,
+  hang and swim faster (original rule, maxing out at rank 20).
+- **Two scenarios:** *Gold Mine* (rolling hills, rock and gold veins, a lake, your home base) and
+  *Minor Melee* (a pretty flat map with flints everywhere, on the surface and just below it).
+- Walk, jump, climb walls, hang from ceilings, swim. Dig through earth and sand; rock, gold and granite can't be dug.
+- A clonk carries one item. Throw it; flints explode on impact. Blasting rock and gold veins drops rocks and
+  gold nuggets (one per 75 blasted pixels, like the original); granite only cracks.
 - Flints, rocks and gold lie buried in the ground and come loose when you dig them out.
-- You start next to your own wooden hut. The flag on its roof makes it your **home base**; a hut without
+- In Gold Mine you start next to your own wooden hut. The flag on its roof makes it your **home base**; a hut without
   a flag is just a building you can shelter in. Jump in a doorway to go in, press down to come out.
 - In your base: carried gold sells automatically (5 gold), you heal 2 energy every 3 ticks, and the base
   pays 5 gold per 100 energy, like the original. Buy flints (5) and rocks (1), or sell what you carry.
 - Flint blasts hurt clonks (a third of the blast level on a direct hit, half in the shock wave), and a clonk dies at 0 energy.
+
+Press `Esc` in game to pause or end the round. Ending a round saves what the crew learned.
+
+### Controls
+
+Each player picks a control style in the player screen.
+
+**Jump'n'Run** (hold a key to walk, let go to stop):
 
 | Keys | Action |
 |---|---|
@@ -33,7 +50,16 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
 | `Q` or `E` | Throw the carried item (drop it while climbing or swimming) |
 | In a building | `↓` leave · in your base: `↑` buy menu (`←`/`→` choose, `↑`/`Q` buy, `↓` close), `Q`/`E` sell what you carry |
 
-Add `?seed=123` to the URL for a different map.
+**Classic** (tap to start, tap to stop; the original's first keyboard layout):
+
+| Keys | Action |
+|---|---|
+| `Z` (`Y` on German keyboards) / `C` or `←` / `→` | Start walking left / right |
+| `X` or `↓` | Stop |
+| `S` or `↑` | Jump; in a doorway, go in |
+| `D` or `Enter` | Dig. While digging, `←` / `→` turn the direction one step; `X` stops |
+| `A` or `Space` | Throw |
+| In a building | `X`/`↓` leave · in your base: `S`/`↑` buy menu (`Z`/`C` or `←`/`→` choose, `S`/`↑`/`A` buy, `X`/`↓` close), `A` sell what you carry |
 
 ## Development
 
@@ -63,10 +89,13 @@ src/
   core/        fixed-step loop, seeded RNG
   landscape/   material grid, flowing water, digging and blasting, map generator
   objects/     clonk and item behaviour, ported movement physics, object definitions
-  game/        the World: steps everything, explosions
-  input/       keyboard to per-tick controls
-  render/      PixiJS views: sky, textured landscape, sprites, camera
-  main.ts      wires it together
+  game/        the World (steps everything, explosions, experience), scenarios,
+               rounds, player profiles and ranks
+  input/       keyboard to per-tick controls, per control style
+  render/      PixiJS views: sky, textured landscape, sprites, camera, messages
+  ui/          DOM menus, HUD and results screen over the canvas
+  audio/       sound effects
+  main.ts      loads everything and switches between menu and game
 public/classic/  original Clonk graphics (CC BY-NC 4.0, see its README)
 ```
 
@@ -80,7 +109,8 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
 ## Roadmap
 
 1. **Foundations** (done): project setup, landscape sandbox, CI, deploy.
-2. **A clonk** (now): walk, jump, climb, swim, dig, throw rocks and flints that blast terrain.
+2. **A clonk** (now): walk, jump, climb, swim, dig, throw rocks and flints that blast terrain;
+   menus, player profiles, crews, ranks and the first two scenarios.
 3. **Economy and bases** (started): huts and flags, healing, buying and selling are in; next: buying clonks and kits, building castles and elevators.
 4. **Modding and content:** a public modding API in TypeScript + JSON (the base game itself is a mod), boats, scenarios, a Classic content pack.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
