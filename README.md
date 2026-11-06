@@ -11,17 +11,23 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
 
 ## Status
 
-**Phase 0: foundations.** Right now it's a landscape sandbox: a generated world of
-earth, sand, rock, gold, granite and water where sand falls and water flows.
+**Phase 2: a playable clonk.** One clonk in a generated world, using the original Clonk graphics:
 
-| Key | Brush |
+- Walk, jump, climb walls, hang from ceilings, swim.
+- Dig through earth and sand. Rock, gold and granite can't be dug.
+- Pick up items by walking over them. A clonk carries one item at a time.
+- Throw what you carry. Flints explode on impact. Blasting rock and gold veins drops rocks and gold nuggets
+  (one per 75 blasted pixels, like the original); granite only cracks.
+- Flints, rocks and gold lie buried in the ground and come loose when you dig them out.
+
+| Keys | Action |
 |---|---|
-| `1` | Dig (counts the gold you dig up) |
-| `2` | Sand |
-| `3` | Water |
-| `4` | Earth |
+| `A` / `D` or `←` / `→` | Walk (hold) |
+| `W`, `↑` or `Space` | Jump; climb up while on a wall |
+| `S` / `↓` | Start digging. Hold a direction to keep digging that way (down, sideways, diagonal); let go to stop |
+| `Q` or `E` | Throw the carried item (drop it while climbing or swimming) |
 
-Hold the left mouse button to use the brush.
+Add `?seed=123` to the URL for a different map.
 
 ## Development
 
@@ -49,23 +55,32 @@ npm run preview    # serve the built dist/ locally
 ```
 src/
   core/        fixed-step loop, seeded RNG
-  landscape/   material grid, falling/flowing materials, digging, map generator
-  render/      PixiJS views
+  landscape/   material grid, flowing water, digging and blasting, map generator
+  objects/     clonk and item behaviour, ported movement physics, object definitions
+  game/        the World: steps everything, explosions
+  input/       keyboard to per-tick controls
+  render/      PixiJS views: sky, textured landscape, sprites, camera
   main.ts      wires it together
+public/classic/  original Clonk graphics (CC BY-NC 4.0, see its README)
 ```
+
+Movement, digging and contact rules are ported from the Clonk Rage engine (`C4Movement.cpp`,
+`C4Object.cpp`, `C4ObjectCom.cpp`), and speeds come from the original `DefCore.txt` physicals,
+so the clonk should feel like the original. Those files say so in a header comment.
 
 The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js/unsafe-eval`
 (despite the name, that module is what makes Pixi work *without* eval). Keep it, and don't add inline scripts to `index.html`.
 
 ## Roadmap
 
-1. **Foundations** (now): project setup, landscape sandbox, CI, deploy.
-2. **A clonk:** walk, jump, climb, swim, dig, throw rocks and flints that blast terrain.
+1. **Foundations** (done): project setup, landscape sandbox, CI, deploy.
+2. **A clonk** (now): walk, jump, climb, swim, dig, throw rocks and flints that blast terrain.
 3. **Economy and bases:** huts and flags, healing, selling gold, buying clonks and kits, building castles and elevators.
 4. **Modding and content:** a public modding API in TypeScript + JSON (the base game itself is a mod), boats, scenarios, a Classic content pack.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
 
 ## License
 
-Code is [ISC](LICENSE). ReClonk's own art and sound are CC0. Details, including
+Code is [ISC](LICENSE). ReClonk's own art and sound are CC0. The original Clonk graphics in
+`public/classic/` are CC BY-NC 4.0 and may only be used non-commercially. Details, including
 how original Clonk content is handled, are in [licenses/](licenses/README.md).

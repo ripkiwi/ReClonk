@@ -1,82 +1,77 @@
 // Pixi normally compiles shaders/uniform code with eval; the site's CSP forbids that,
 // so use Pixi's eval-free code paths instead.
 import 'pixi.js/unsafe-eval';
-import { Application, Text } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
 import { FixedLoop } from './core/loop';
-import { Rng } from './core/rng';
-import { generateLandscape } from './landscape/generate';
-import { MATERIALS, Mat } from './landscape/materials';
-import { LandscapeView } from './render/landscapeView';
+import { World } from './game/world';
+import { Keyboard } from './input/keyboard';
+import { generateMap } from './landscape/generate';
+import { MATERIALS } from './landscape/materials';
+import { ITEMS } from './objects/defs';
+import { frame, loadAssets } from './render/assets';
+import { WorldView } from './render/worldView';
 
-const WORLD_W = 480;
-const WORLD_H = 270;
-const SEED = 1337;
-
-const BRUSHES: { key: string; label: string; mat: Mat | 'dig' }[] = [
-  { key: '1', label: 'Dig', mat: 'dig' },
-  { key: '2', label: 'Sand', mat: Mat.Sand },
-  { key: '3', label: 'Water', mat: Mat.Water },
-  { key: '4', label: 'Earth', mat: Mat.Earth },
-];
+const WORLD_W = 1400;
+const WORLD_H = 640;
 
 async function start(): Promise<void> {
+  const params = new URLSearchParams(location.search);
+  const seed = Number(params.get('seed') ?? 1337) >>> 0;
+
   const app = new Application();
-  await app.init({ resizeTo: window, background: '#000000', antialias: false });
+  await app.init({ resizeTo: window, background: '#9fc8ef', antialias: false, roundPixels: true });
   document.getElementById('app')!.appendChild(app.canvas);
 
-  const land = generateLandscape(WORLD_W, WORLD_H, SEED);
-  const rng = new Rng(SEED ^ 0x5eed);
-  const view = new LandscapeView(land);
-  app.stage.addChild(view.sprite);
+  const assets = await loadAssets(
+    MATERIALS.map((m) => m.texture).concat('SMOOTH2'),
+    Object.values(ITEMS).map((i) => i.graphic.file),
+  );
 
-  const hud = new Text({ text: '', style: { fill: '#ffffff', fontSize: 16, fontFamily: 'monospace' } });
-  hud.position.set(10, 8);
+  const map = generateMap(WORLD_W, WORLD_H, seed);
+  const world = World.fromMap(map, seed);
+  const player = 0;
+  const clonk = world.addClonk(map.spawn.x, map.spawn.y, player);
+  // Start with a flint in hand, like a classic starting kit.
+  const flint = world.spawnItem('flint', clonk.x, clonk.y);
+  flint.container = clonk;
+  clonk.contents.push(flint);
+
+  const view = new WorldView(world, assets);
+  view.camX = clonk.x - app.screen.width / 4;
+  view.camY = clonk.y - app.screen.height / 4;
+  app.stage.addChild(view.root);
+
+  // HUD: what the clonk is carrying, and the controls.
+  const hud = new Container();
+  const panel = new Graphics();
+  const slot = new Sprite();
+  slot.scale.set(4);
+  const label = new Text({ text: '', style: { fill: '#ffffff', fontSize: 16, fontFamily: 'monospace', stroke: { color: '#000000', width: 3 } } });
+  const help = new Text({
+    text: 'A/D or ←/→ walk · W/↑/Space jump & climb · S/↓ dig (hold, steer with arrows) · Q/E throw',
+    style: { fill: '#ffffff', fontSize: 14, fontFamily: 'monospace', stroke: { color: '#000000', width: 3 } },
+  });
+  hud.addChild(panel, slot, label, help);
   app.stage.addChild(hud);
 
-  let brush = 0;
-  let goldDug = 0;
-  let pointer: { x: number; y: number } | null = null;
-
-  const layout = (): void => {
-    const scale = Math.max(1, Math.floor(Math.min(app.screen.width / WORLD_W, app.screen.height / WORLD_H)));
-    view.sprite.scale.set(scale);
-    view.sprite.position.set(
-      Math.floor((app.screen.width - WORLD_W * scale) / 2),
-      Math.floor((app.screen.height - WORLD_H * scale) / 2),
-    );
-  };
-  layout();
-  app.renderer.on('resize', layout);
-
-  const toWorld = (e: PointerEvent): { x: number; y: number } => ({
-    x: Math.floor((e.offsetX - view.sprite.x) / view.sprite.scale.x),
-    y: Math.floor((e.offsetY - view.sprite.y) / view.sprite.scale.y),
-  });
-  app.canvas.addEventListener('pointerdown', (e) => (pointer = toWorld(e)));
-  app.canvas.addEventListener('pointermove', (e) => {
-    if (pointer) pointer = toWorld(e);
-  });
-  window.addEventListener('pointerup', () => (pointer = null));
-  window.addEventListener('keydown', (e) => {
-    const i = BRUSHES.findIndex((b) => b.key === e.key);
-    if (i >= 0) brush = i;
-  });
-
-  // Input is applied inside the tick so the simulation stays deterministic.
-  const loop = new FixedLoop((tick) => {
-    if (pointer) {
-      const b = BRUSHES[brush].mat;
-      if (b === 'dig') goldDug += land.dig(pointer.x, pointer.y, 6).get(Mat.Gold) ?? 0;
-      else land.paint(pointer.x, pointer.y, 4, b);
-    }
-    land.step(tick, rng);
-  });
+  const keyboard = new Keyboard();
+  const loop = new FixedLoop(() => world.step(new Map([[player, keyboard.read()]])));
 
   app.ticker.add((ticker) => {
     loop.advance(ticker.deltaMS);
-    view.update();
-    const brushes = BRUSHES.map((b, i) => (i === brush ? `[${b.key} ${b.label}]` : ` ${b.key} ${b.label} `)).join(' ');
-    hud.text = `ReClonk sandbox   ${brushes}   gold dug: ${goldDug} px   (${MATERIALS.length} materials)`;
+    view.update(app.screen.width, app.screen.height, clonk);
+
+    const item = clonk.carrying;
+    panel.clear().roundRect(10, 10, 44, 44, 6).fill({ color: 0x000000, alpha: 0.45 }).stroke({ color: 0xffffff, alpha: 0.6, width: 2 });
+    slot.visible = !!item;
+    if (item) {
+      const g = item.def.graphic;
+      slot.texture = frame(assets.items[g.file], g.facet.x, g.facet.y, g.facet.w, g.facet.h);
+      slot.position.set(20, 20);
+    }
+    label.text = item ? item.def.name : 'empty hands';
+    label.position.set(62, 22);
+    help.position.set(10, app.screen.height - 26);
   });
 }
 
