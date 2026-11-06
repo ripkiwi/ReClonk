@@ -17,6 +17,8 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `items/Rock.png` | `Objects.c4d/Items.c4d/Materials.c4d/Rock.c4d/Graphics.png` |
 | `items/Gold.png` | `Objects.c4d/Items.c4d/Materials.c4d/Gold.c4d/Graphics.png` |
 | `items/Flint.png` | `Objects.c4d/Items.c4d/Weapons.c4d/Flint.c4d/Graphics.png` |
+| `items/Flag.png`, `items/FlagOverlay.png` | `Objects.c4d/Items.c4d/Equipment.c4d/Flag.c4d/Graphics.png`, `Overlay.png` |
+| `structures/Hut2.png` | `Objects.c4d/Structures.c4d/Hut2.c4d/Graphics.png` (wooden hut) |
 | `materials/*.png` | `Material.c4g/` textures |
 | `sky/Clouds1.jpg` | `planet/Graphics.c4g/Clouds1.jpg` |
 

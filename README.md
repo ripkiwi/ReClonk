@@ -19,13 +19,19 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
 - Throw what you carry. Flints explode on impact. Blasting rock and gold veins drops rocks and gold nuggets
   (one per 75 blasted pixels, like the original); granite only cracks.
 - Flints, rocks and gold lie buried in the ground and come loose when you dig them out.
+- You start next to your own wooden hut. The flag on its roof makes it your **home base**; a hut without
+  a flag is just a building you can shelter in. Jump in a doorway to go in, press down to come out.
+- In your base: carried gold sells automatically (5 gold), you heal 2 energy every 3 ticks, and the base
+  pays 5 gold per 100 energy, like the original. Buy flints (5) and rocks (1), or sell what you carry.
+- Flint blasts hurt clonks (a third of the blast level on a direct hit, half in the shock wave), and a clonk dies at 0 energy.
 
 | Keys | Action |
 |---|---|
 | `A` / `D` or `←` / `→` | Walk (hold) |
-| `W`, `↑` or `Space` | Jump; climb up while on a wall |
+| `W`, `↑` or `Space` | Jump; climb up while on a wall; in a doorway, go in |
 | `S` / `↓` | Start digging. Hold a direction to keep digging that way (down, sideways, diagonal); let go to stop |
 | `Q` or `E` | Throw the carried item (drop it while climbing or swimming) |
+| In a building | `↓` leave · in your base: `↑` buy menu (`←`/`→` choose, `↑`/`Q` buy, `↓` close), `Q`/`E` sell what you carry |
 
 Add `?seed=123` to the URL for a different map.
 
@@ -75,7 +81,7 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
 
 1. **Foundations** (done): project setup, landscape sandbox, CI, deploy.
 2. **A clonk** (now): walk, jump, climb, swim, dig, throw rocks and flints that blast terrain.
-3. **Economy and bases:** huts and flags, healing, selling gold, buying clonks and kits, building castles and elevators.
+3. **Economy and bases** (started): huts and flags, healing, buying and selling are in; next: buying clonks and kits, building castles and elevators.
 4. **Modding and content:** a public modding API in TypeScript + JSON (the base game itself is a mod), boats, scenarios, a Classic content pack.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
 

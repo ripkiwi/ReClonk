@@ -17,7 +17,7 @@ shaped many of our childhoods. None of it would exist without the people below.
 
 ## Graphics
 
-- The clonk, rock, gold and flint sprites, material textures and sky are the original
+- The clonk, rock, gold, flint, flag and wooden hut sprites, material textures and sky are the original
   Clonk Rage graphics by **RedWolf Design**, used under CC BY-NC 4.0 via LegacyClonk's
   content release. See [`public/classic/README.md`](public/classic/README.md).
 
