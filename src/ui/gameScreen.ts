@@ -58,29 +58,40 @@ export class GameScreen {
     app.stage.addChild(this.view.root);
 
     this.keyboard = new Keyboard(round.profile.controlStyle);
-    // Every clonk of the player follows the same controls for now; selecting
-    // single crew members comes with bigger crews.
+    // The selected clonks of the crew follow the keys; the world keeps track of who's selected.
     this.loop = new FixedLoop(() => round.world.step(new Map([[LOCAL_PLAYER, this.keyboard.read()]])));
-    this.hud = new Hud(env.ui, assets, round.profile.controlStyle, () => this.pause());
-    this.baseHud = new BaseHud(round.world, assets, LOCAL_PLAYER, round.profile.controlStyle, false);
+    this.hud = new Hud(env.ui, assets, round.profile.controlStyle, {
+      onMenu: () => this.pause(),
+      // Click picks a clonk, Shift-click adds it to the group or takes it out.
+      onCrew: (index, add) => this.keyboard.command(add ? { type: 'toggle', index } : { type: 'pick', index }),
+    });
+    this.baseHud = new BaseHud(round.world, assets, LOCAL_PLAYER, round.profile.controlStyle, false, color);
     app.stage.addChild(this.baseHud.root);
     addEventListener('keydown', this.onKey);
     app.ticker.add(this.onTick);
   }
 
-  /** The clonk the camera and HUD follow. */
+  /** The clonk the camera and HUD follow: the crew's leader. */
   private get follow() {
-    return this.round.crew[0];
+    return this.round.world.cursor(LOCAL_PLAYER).leader ?? this.round.crew[0];
   }
 
   private frame(deltaMs: number): void {
     const { world } = this.round;
     if (!this.paused) this.loop.advance(deltaMs);
-    this.view.update(this.env.app.screen.width, this.env.app.screen.height, this.follow, world.events);
+    const crew = this.round.crew;
+    const cursor = world.cursor(LOCAL_PLAYER);
+    this.view.update(this.env.app.screen.width, this.env.app.screen.height, this.follow, world.events, crew.length > 1 ? cursor : undefined);
+    for (const e of world.events) {
+      if (e.type === 'recruit' && e.clonk.info) {
+        const fresh = this.round.recruited.has(e.clonk.info.memberId);
+        this.view.say(e.clonk, fresh ? `${e.clonk.info.name}\njoins the crew!` : `${e.clonk.info.name}\nreporting!`);
+      }
+    }
     this.playSounds(world.events);
     world.events.length = 0;
     const lead = this.follow;
-    this.hud.update(lead, world.players.get(LOCAL_PLAYER));
+    this.hud.update(lead, world.players.get(LOCAL_PLAYER), crew, cursor);
     if (lead) this.baseHud.update(this.env.app.screen.width, this.env.app.screen.height, lead);
   }
 
@@ -93,6 +104,7 @@ export class GameScreen {
       if (e.type === 'explosion') this.env.sounds.play(BLASTS[Math.floor(Math.random() * BLASTS.length)], volumeAt(e.x, e.y));
       else if (e.type === 'collect' && e.clonk === near) this.env.sounds.play('Grab', 0.8);
       else if (e.type === 'promotion') this.env.sounds.play('Trumpet');
+      else if (e.type === 'recruit') this.env.sounds.play('Click', 0.9);
     }
   }
 

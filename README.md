@@ -31,7 +31,14 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
 - In Gold Mine you start next to your own wooden hut. The flag on its roof makes it your **home base**; a hut without
   a flag is just a building you can shelter in. Jump in a doorway to go in, press down to come out.
 - In your base: carried gold sells automatically (5 gold), you heal 2 energy every 3 ticks, and the base
-  pays 5 gold per 100 energy, like the original. Buy flints (5) and rocks (1), or sell what you carry.
+  pays 5 gold per 100 energy, like the original. Buy flints (5), rocks (1) and clonks (25), or sell what you carry.
+- **Crews like the original:** a new player starts with an empty crew. Each round brings in your most
+  experienced clonk who takes part, or recruits a new one with a random name who joins your crew for good.
+  Buying a clonk in your base works the same way. A clonk that dies stays in the crew with all it learned;
+  it only sits out the rest of that round, and its death count goes up.
+- **Several clonks at once:** switch between them or select the whole crew. Clonks you switch away from keep
+  digging; with the whole crew selected, down gathers everyone at the leader. The crew bar on the left shows
+  everyone in the round; click a portrait to switch, Shift-click to add it to the group.
 - Flint blasts hurt clonks (a third of the blast level on a direct hit, half in the shock wave), and a clonk dies at 0 energy.
 
 Press `Esc` in game to pause or end the round. Ending a round saves what the crew learned.
@@ -46,9 +53,14 @@ Each player picks a control style in the player screen.
 |---|---|
 | `A` / `D` or `←` / `→` | Walk (hold) |
 | `W`, `↑` or `Space` | Jump; climb up while on a wall; in a doorway, go in |
-| `S` / `↓` | Start digging. Hold a direction to keep digging that way (down, sideways, diagonal); let go to stop |
-| `Q` or `E` | Throw the carried item (drop it while climbing or swimming) |
-| In a building | `↓` leave · in your base: `↑` buy menu (`←`/`→` choose, `↑`/`Q` buy, `↓` close), `Q`/`E` sell what you carry |
+| `S` / `↓` | Climb down, let go of a ceiling, leave a building. With the whole crew selected: gather everyone at the leader |
+| `Q` | Dig the way you hold (straight down if you hold nothing). The clonk keeps digging on its own, so you can switch to another clonk; hold `A`/`D`/`W`/`S` to steer, `Q` again stops |
+| `Q` `Q` (quickly) | Use what you carry |
+| `E` | Throw the carried item (drop it while climbing or swimming) |
+| `Tab` / `Shift`+`Tab` | Next / previous clonk |
+| `1` to `9` | Pick a clonk by its place in the crew bar |
+| `R` | Select the whole crew |
+| In a building | `↓` leave · in your base: `↑` buy menu (`←`/`→` choose, `↑`/`E` buy, `↓` close), `E` sell what you carry |
 
 **Classic** (tap to start, tap to stop; the original's first keyboard layout):
 
@@ -58,7 +70,10 @@ Each player picks a control style in the player screen.
 | `X` or `↓` | Stop |
 | `S` or `↑` | Jump; in a doorway, go in |
 | `D` or `Enter` | Dig. While digging, `←` / `→` turn the direction one step; `X` stops |
+| `D` `D` (quickly) | Use what you carry |
 | `A` or `Space` | Throw |
+| `Q` / `E` (or `Tab`), `1` to `9` | Previous / next clonk, pick a clonk (the original's crew cursor) |
+| `W` | Select the whole crew; `X` `X` gathers everyone at the leader |
 | In a building | `X`/`↓` leave · in your base: `S`/`↑` buy menu (`Z`/`C` or `←`/`→` choose, `S`/`↑`/`A` buy, `X`/`↓` close), `A` sell what you carry |
 
 ## Development
@@ -111,7 +126,8 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
 1. **Foundations** (done): project setup, landscape sandbox, CI, deploy.
 2. **A clonk** (now): walk, jump, climb, swim, dig, throw rocks and flints that blast terrain;
    menus, player profiles, crews, ranks and the first two scenarios.
-3. **Economy and bases** (started): huts and flags, healing, buying and selling are in; next: buying clonks and kits, building castles and elevators.
+3. **Economy and bases** (started): huts and flags, healing, buying and selling, buying clonks are in; next: scenario settings,
+   fights and thrown-object hits, construction kits, then castles and elevators.
 4. **Modding and content:** a public modding API in TypeScript + JSON (the base game itself is a mod), boats, scenarios, a Classic content pack.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
 

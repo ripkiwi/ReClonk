@@ -2,7 +2,7 @@ import { Rng } from '../core/rng';
 import type { GeneratedMap } from '../landscape/generate';
 import type { Landscape } from '../landscape/landscape';
 import { MATERIALS, type ItemId } from '../landscape/materials';
-import { Clonk, NO_CONTROL, type ControlState } from '../objects/clonk';
+import { Clonk, NO_CONTROL, type ControlState, type CrewCommand, type CrewInfo } from '../objects/clonk';
 import { BASE, CLONK, ITEMS, STRUCTURES } from '../objects/defs';
 import type { GameObject } from '../objects/gameObject';
 import { Item } from '../objects/item';
@@ -12,7 +12,9 @@ export type WorldEvent =
   | { type: 'explosion'; x: number; y: number; radius: number; tick: number }
   | { type: 'promotion'; clonk: Clonk; rank: number; tick: number }
   | { type: 'collect'; clonk: Clonk; item: Item; tick: number }
-  | { type: 'throw'; clonk: Clonk; tick: number };
+  | { type: 'throw'; clonk: Clonk; tick: number }
+  /** A bought clonk joined the crew in the field. */
+  | { type: 'recruit'; clonk: Clonk; tick: number };
 
 /** Extra experience on top of the original's "1 per 5 commands", so promotions come at a fun pace. */
 export const EXPERIENCE = {
@@ -29,11 +31,28 @@ export interface PlayerMessage {
   tick: number;
 }
 
+/** What a home base can sell: items, and clonks for the crew. */
+export type ShopId = ItemId | 'clonk';
+
+/** Name and price of something in the shop. */
+export function shopEntry(id: ShopId): { name: string; value: number } {
+  return id === 'clonk' ? CLONK : ITEMS[id];
+}
+
 /** A player's money and what their home base has in stock to buy. */
 export interface PlayerState {
   wealth: number;
-  /** How many of each item the home base can sell. Only listed items appear in the buy menu. */
-  stock: Partial<Record<ItemId, number>>;
+  /** How many of each thing the home base can sell. Only listed ones appear in the buy menu. */
+  stock: Partial<Record<ShopId, number>>;
+}
+
+/**
+ * Which of a player's clonks follow the controls, like the original's crew
+ * cursor: the leader (camera and HUD follow it) and everyone selected with it.
+ */
+export interface CrewCursor {
+  leader: Clonk | null;
+  selected: Set<Clonk>;
 }
 
 /** Ticks a thrown or dropped item can't be picked straight back up. */
@@ -48,7 +67,14 @@ export class World {
   items: Item[] = [];
   readonly structures: Structure[] = [];
   readonly players = new Map<number, PlayerState>();
+  private readonly cursors = new Map<number, CrewCursor>();
   readonly messages: PlayerMessage[] = [];
+  /**
+   * Who joins when a player buys a clonk: their best idle crew member or a new
+   * recruit. Set by the round, which knows the player's crew. Without it,
+   * bought clonks have no name or rank.
+   */
+  recruit: ((player: number) => CrewInfo | null) | null = null;
   tick = 0;
   /** Things that happened this tick, for effects and sound. The renderer drains it. */
   readonly events: WorldEvent[] = [];
@@ -68,6 +94,70 @@ export class World {
     const c = new Clonk(x, y, owner);
     this.clonks.push(c);
     return c;
+  }
+
+  /** A player's clonks, in the order they joined the round (the crew bar order). */
+  crewOf(player: number): Clonk[] {
+    return this.clonks.filter((c) => c.owner === player);
+  }
+
+  /** The player's crew cursor, kept valid: a living leader that's always selected. */
+  cursor(player: number): CrewCursor {
+    let cur = this.cursors.get(player);
+    if (!cur) {
+      cur = { leader: null, selected: new Set() };
+      this.cursors.set(player, cur);
+    }
+    for (const c of cur.selected) if (!c.alive) cur.selected.delete(c);
+    if (!cur.leader?.alive) {
+      // The leader died: pass on to the next living clonk, like the original's cursor.
+      const crew = this.crewOf(player);
+      const from = cur.leader ? crew.indexOf(cur.leader) : -1;
+      const next = [...crew.slice(from + 1), ...crew.slice(0, from + 1)].find((c) => c.alive) ?? null;
+      cur.leader = next;
+      if (next && cur.selected.size === 0) cur.selected.add(next);
+    }
+    if (cur.leader) cur.selected.add(cur.leader);
+    return cur;
+  }
+
+  /** Change which clonks follow a player's controls. */
+  crewCommand(player: number, cmd: CrewCommand): void {
+    const cur = this.cursor(player);
+    const crew = this.crewOf(player);
+    const alive = crew.filter((c) => c.alive);
+    if (!alive.length) return;
+    const only = (c: Clonk): void => {
+      for (const s of cur.selected) if (s !== c) s.release();
+      cur.leader = c;
+      cur.selected = new Set([c]);
+    };
+    switch (cmd.type) {
+      case 'next':
+      case 'prev': {
+        const i = cur.leader ? alive.indexOf(cur.leader) : -1;
+        const step = cmd.type === 'next' ? 1 : -1;
+        only(alive[(i + step + alive.length) % alive.length]);
+        break;
+      }
+      case 'pick': {
+        const c = crew[cmd.index];
+        if (c?.alive) only(c);
+        break;
+      }
+      case 'toggle': {
+        const c = crew[cmd.index];
+        if (!c?.alive || c === cur.leader) break;
+        if (cur.selected.has(c)) {
+          cur.selected.delete(c);
+          c.release();
+        } else cur.selected.add(c);
+        break;
+      }
+      case 'all':
+        cur.selected = new Set(alive);
+        break;
+    }
   }
 
   addPlayer(id: number, start: Partial<PlayerState> = {}): PlayerState {
@@ -113,18 +203,37 @@ export class World {
       item.thrownBy = by.id;
     };
 
+    // Crew commands first, so a newly picked clonk gets this tick's controls.
+    for (const [player, ctrl] of controls) {
+      if (ctrl.crew) this.crewCommand(player, ctrl.crew);
+      const cur = this.cursor(player);
+      const leader = cur.leader;
+      // Commands count for the leader (the original's cursor clonk).
+      if (leader && leader.countCommands(ctrl.commands)) this.promoted(leader);
+      // With a group selected, down (or stop twice in classic) gathers it at the leader.
+      const gather = leader?.controlStyle === 'classic' ? ctrl.doubleDown : ctrl.pressedDown;
+      if (leader && gather && cur.selected.size > 1) {
+        for (const c of cur.selected) if (c !== leader && !c.contained) c.walkTo(leader.x);
+      }
+    }
+
     for (const c of this.clonks) {
-      const ctrl = controls.get(c.owner) ?? NO_CONTROL;
-      if (c.alive && c.countCommands(ctrl.commands)) this.promoted(c);
+      const ctrl = controls.get(c.owner);
+      // Only selected clonks follow the controls. The others carry on with
+      // what they were doing, or walk over to the leader.
+      const mine = ctrl && this.cursor(c.owner).selected.has(c) ? ctrl : null;
       if (c.contained) {
-        if (c.alive) this.containedControl(c, ctrl);
+        if (c.alive && mine) this.containedControl(c, mine);
         continue;
       }
       const carried = c.carrying;
-      c.control(ctrl, {
-        throwItem: (item, xdir, ydir) => throwItem(item, xdir, ydir, c),
-        tryEnter: () => this.tryEnter(c),
-      });
+      if (mine || c.goTo !== null) {
+        c.control(mine ?? NO_CONTROL, {
+          throwItem: (item, xdir, ydir) => throwItem(item, xdir, ydir, c),
+          tryEnter: () => this.tryEnter(c),
+          useItem: () => false,
+        });
+      }
       if (c.contained) continue;
       if (carried && !c.carrying) this.events.push({ type: 'throw', clonk: c, tick: this.tick });
       c.tick(this.land);
@@ -311,10 +420,10 @@ export class World {
     }
   }
 
-  /** Items the player's home base can sell, in a fixed order. */
-  shopList(player: number): ItemId[] {
+  /** What the player's home base can sell, in a fixed order. */
+  shopList(player: number): ShopId[] {
     const p = this.players.get(player);
-    return p ? (Object.keys(p.stock) as ItemId[]) : [];
+    return p ? (Object.keys(p.stock) as ShopId[]) : [];
   }
 
   private sell(c: Clonk, item: Item): void {
@@ -328,12 +437,13 @@ export class World {
     this.say(c.owner, `Sold ${item.def.name} for ${item.def.value} gold`);
   }
 
-  private buy(c: Clonk, id: ItemId): void {
+  private buy(c: Clonk, id: ShopId): void {
     const p = this.players.get(c.owner);
     if (!p) return;
-    const def = ITEMS[id];
+    const def = shopEntry(id);
     if ((p.stock[id] ?? 0) <= 0) return this.say(c.owner, `No ${def.name} left`);
     if (p.wealth < def.value) return this.say(c.owner, `Not enough gold for ${def.name}`);
+    if (id === 'clonk') return this.buyClonk(c, p);
     if (c.contents.length >= CLONK.maxContents) return this.say(c.owner, 'Hands full: sell or drop it first');
     p.wealth -= def.value;
     p.stock[id]! -= 1;
@@ -341,6 +451,26 @@ export class World {
     item.container = c;
     c.contents.push(item);
     this.say(c.owner, `Bought ${def.name} for ${def.value} gold`);
+  }
+
+  /**
+   * Buy a clonk (C4Player::MakeCrewMember): the player's best idle crew member
+   * comes out of the base, or a new recruit who joins the crew for good.
+   */
+  private buyClonk(c: Clonk, p: PlayerState): void {
+    const base = c.contained;
+    if (!base) return;
+    p.wealth -= CLONK.value;
+    p.stock.clonk! -= 1;
+    const at = base.exitPoint();
+    const n = this.addClonk(at.x, at.y, c.owner);
+    n.controlStyle = c.controlStyle;
+    n.info = this.recruit?.(c.owner) ?? null;
+    n.setAction('Walk', 0, 0);
+    n.dir = c.dir;
+    base.openDoor();
+    this.events.push({ type: 'recruit', clonk: n, tick: this.tick });
+    this.say(c.owner, n.info ? `${n.info.name} joins you for ${CLONK.value} gold` : `Bought a clonk for ${CLONK.value} gold`);
   }
 
   /**

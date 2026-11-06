@@ -493,10 +493,14 @@ button {
   padding: 3px 10px;
   border-radius: 5px;
   background: rgba(0, 0, 0, 0.45);
+  max-width: calc(100% - 40px);
   font-size: 13px;
-  white-space: pre;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 16px;
   transition: opacity 2s;
 }
+.hud-help > span { white-space: nowrap; }
 .hud-help.faded { opacity: 0.25; }
 .hud-help b { color: var(--gold); font-weight: normal; }
 
@@ -509,3 +513,52 @@ button {
   font-family: var(--title-font);
   font-size: 28px;
 }
+
+/* Crew bar: one portrait per clonk in the round, below the leader's panel. */
+.hud-crewbar {
+  position: absolute;
+  left: 10px;
+  top: 94px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.crew-cell {
+  position: relative;
+  width: 42px;
+  padding: 3px 3px 4px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.crew-cell .portrait { width: 32px; height: 32px; display: block; }
+.crew-cell.selected { border-color: rgba(246, 211, 106, 0.6); }
+.crew-cell.leader { border-color: var(--gold); background: rgba(60, 40, 0, 0.6); }
+.crew-cell.dead { opacity: 0.45; filter: grayscale(1); }
+.crew-cell:hover { background: rgba(0, 0, 0, 0.65); }
+.crew-key {
+  position: absolute;
+  left: 2px;
+  top: 1px;
+  font-size: 10px;
+  color: #fff;
+  text-shadow: 0 0 2px #000, 0 0 2px #000;
+}
+.mini-energy {
+  position: relative;
+  height: 4px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+.mini-energy > div { position: absolute; inset: 0 auto 0 0; background: #3fbf4a; }
+.mini-energy > div.low { background: #d8402c; }
+
+/* Results with a bigger crew: smaller rows so more fit. */
+.paper.many .result { padding: 4px 6px; gap: 10px; }
+.paper.many .result .portrait { width: 48px; height: 48px; }
+.paper.many .result .crew-name { font-size: 19px; }
+.new-tag { font-family: var(--text-font); font-size: 12px; font-style: italic; color: #8a5a00; }

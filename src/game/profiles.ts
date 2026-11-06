@@ -22,6 +22,8 @@ export interface CrewMember {
   hired: number;
   /** Takes part in the next round. Missing in old saves, which means yes. */
   participates?: boolean;
+  /** Rounds in which this clonk lost all its energy. Missing in old saves, which means none. */
+  deaths?: number;
 }
 
 /** A player profile, like the original's .c4p player file. */
@@ -102,8 +104,11 @@ export function hireClonk(profile: Profile, names: readonly string[], rng: Rng =
   return member;
 }
 
-/** A new player starts with a crew of two clonks. */
-export function createProfile(store: ProfileStore, name: string, names: readonly string[], rng: Rng = menuRng()): Profile {
+/**
+ * A new player starts with an empty crew, like the original: the first round
+ * recruits the first clonk, and more can be hired in the crew screen.
+ */
+export function createProfile(store: ProfileStore, name: string): Profile {
   const profile: Profile = {
     id: newId('player'),
     name: name.trim() || 'Player',
@@ -113,8 +118,6 @@ export function createProfile(store: ProfileStore, name: string, names: readonly
     rounds: 0,
     created: Date.now(),
   };
-  hireClonk(profile, names, rng);
-  hireClonk(profile, names, rng);
   store.profiles.push(profile);
   store.activeId = profile.id;
   return profile;
@@ -130,14 +133,33 @@ export function deleteProfile(store: ProfileStore, id: string): void {
 }
 
 /**
- * Who goes into a round: the most experienced crew members that take part,
- * like the original picks its most experienced idle clonks first.
- * If nobody is marked to take part, everybody is eligible.
+ * The crew member who goes next (C4ObjectInfoList::GetIdle): the most
+ * experienced one who takes part and isn't busy (already in the round, or
+ * died in it). Undefined if there's nobody left, and a new clonk has to be recruited.
+ */
+export function idleMember(profile: Profile, busy: ReadonlySet<string> = new Set()): CrewMember | undefined {
+  let best: CrewMember | undefined;
+  for (const m of profile.crew) {
+    if (m.participates === false || busy.has(m.id)) continue;
+    if (!best || m.experience > best.experience) best = m;
+  }
+  return best;
+}
+
+/**
+ * Who of the crew goes into a round of `crewSize` clonks, best first. If
+ * there are fewer, the round recruits new clonks for the rest.
  */
 export function crewForRound(profile: Profile, crewSize: number): CrewMember[] {
-  const willing = profile.crew.filter((m) => m.participates !== false);
-  const pool = willing.length ? willing : profile.crew;
-  return [...pool].sort((a, b) => b.experience - a.experience).slice(0, Math.max(0, crewSize));
+  const picked: CrewMember[] = [];
+  const busy = new Set<string>();
+  for (let i = 0; i < crewSize; i++) {
+    const m = idleMember(profile, busy);
+    if (!m) break;
+    picked.push(m);
+    busy.add(m.id);
+  }
+  return picked;
 }
 
 /** What happened to one clonk during a round. */
@@ -145,6 +167,8 @@ export interface CrewResult {
   memberId: string;
   experienceGained: number;
   controlCount: number;
+  /** Lost all its energy. It stays in the crew; only its death count goes up. */
+  died?: boolean;
 }
 
 /** Bonus experience for finishing a round, so a crew visibly grows over a few games. */
@@ -167,6 +191,7 @@ export function applyRoundResults(
     m.experience += r.experienceGained + ROUND_BONUS;
     m.controlCount = r.controlCount;
     m.rounds++;
+    if (r.died) m.deaths = (m.deaths ?? 0) + 1;
     m.rank = Math.max(m.rank, rankForExperience(m.experience));
     if (m.rank > from) promotions.push({ member: m, from, to: m.rank });
   }

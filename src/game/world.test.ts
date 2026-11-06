@@ -78,7 +78,7 @@ describe('Digging', () => {
     const world = flatWorld();
     const c = world.addClonk(100, 70, 0);
     run(world, 30);
-    press(world, { down: true, pressedDown: true }, { down: true }, 120);
+    press(world, { down: true, pressedDig: true }, { down: true }, 120);
     expect(c.y).toBeGreaterThan(90);
     expect(world.land.get(100, 85)).toBe(Mat.Sky);
   });
@@ -89,7 +89,7 @@ describe('Digging', () => {
       for (let y = 80; y < 120; y++) for (let x = 0; x < 200; x++) world.land.set(x, y, hard);
       const c = world.addClonk(100, 70, 0);
       run(world, 30);
-      press(world, { down: true, pressedDown: true }, { down: true }, 120);
+      press(world, { down: true, pressedDig: true }, { down: true }, 120);
       expect(c.y).toBe(70);
       expect(world.land.get(100, 80)).toBe(hard);
     }

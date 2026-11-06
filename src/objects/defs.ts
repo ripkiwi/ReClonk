@@ -78,6 +78,8 @@ const actions: ActionDef[] = [
 
 export const CLONK = {
   name: 'Clonk',
+  /** Price of a new crew member in the shop (DefCore Value). */
+  value: 25,
   width: 16,
   height: 20,
   vertices: [

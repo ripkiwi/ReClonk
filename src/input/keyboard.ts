@@ -1,4 +1,4 @@
-import { NO_CONTROL, type ControlState, type ControlStyle } from '../objects/clonk';
+import { NO_CONTROL, type ControlState, type ControlStyle, type CrewCommand } from '../objects/clonk';
 
 export interface KeyLayout {
   left: string[];
@@ -7,26 +7,43 @@ export interface KeyLayout {
   down: string[];
   throw: string[];
   dig: string[];
+  /** Crew cursor: previous and next clonk, and the whole crew. */
+  crewPrev: string[];
+  crewNext: string[];
+  crewAll: string[];
 }
+
+/** A second press within this many ticks (a third of a second) counts as a double press. */
+export const DOUBLE_PRESS_TICKS = 12;
+
+/** Keys 1 to 9 pick a crew member by its place in the crew bar. */
+const DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'];
 
 /**
  * Key layouts per control style. Codes are physical key positions (KeyboardEvent.code),
  * so the classic layout sits on the same keys on QWERTY, QWERTZ and AZERTY keyboards.
  */
 export const LAYOUTS: Record<ControlStyle, KeyLayout> = {
-  /** Hold a direction to walk, let go to stop. Arrow keys and WASD both work; down digs. */
+  /**
+   * Hold a direction to walk, let go to stop. Arrow keys and WASD both work.
+   * Q digs, E throws, Tab and R pick crew members.
+   */
   jumpAndRun: {
     left: ['ArrowLeft', 'KeyA'],
     right: ['ArrowRight', 'KeyD'],
     up: ['ArrowUp', 'KeyW', 'Space'],
     down: ['ArrowDown', 'KeyS'],
-    throw: ['KeyQ', 'KeyE'],
-    dig: [],
+    throw: ['KeyE'],
+    dig: ['KeyQ'],
+    crewPrev: [],
+    crewNext: ['Tab'],
+    crewAll: ['KeyR'],
   },
   /**
    * The original's first keyboard layout (C4Config Kbd1): Z/Y left, C right, S jump,
-   * X stop, A throw, D dig. Tap a direction to start walking, tap stop to stop.
-   * Arrow keys work too, with Space to throw and Enter to dig.
+   * X stop, A throw, D dig, and Q/E/W for the crew cursor. Tap a direction to
+   * start walking, tap stop to stop. Arrow keys work too, with Space to throw
+   * and Enter to dig.
    */
   classic: {
     left: ['KeyZ', 'ArrowLeft'],
@@ -35,6 +52,9 @@ export const LAYOUTS: Record<ControlStyle, KeyLayout> = {
     down: ['KeyX', 'ArrowDown'],
     throw: ['KeyA', 'Space'],
     dig: ['KeyD', 'Enter'],
+    crewPrev: ['KeyQ'],
+    crewNext: ['KeyE', 'Tab'],
+    crewAll: ['KeyW'],
   },
 };
 
@@ -43,15 +63,22 @@ export const KEY_HELP: Record<ControlStyle, [keys: string, action: string][]> = 
   jumpAndRun: [
     ['A / D or ← / →', 'walk (hold)'],
     ['W, ↑ or Space', 'jump, climb up, go in a door'],
-    ['S / ↓', 'dig (hold a direction to steer)'],
-    ['Q or E', 'throw'],
+    ['S / ↓', 'climb down, leave a building'],
+    ['Q', 'dig, again to stop (steer with A / D / W / S)'],
+    ['Q Q', 'use what you carry'],
+    ['E', 'throw'],
+    ['Tab / 1–9', 'next clonk / pick a clonk'],
+    ['R', 'whole crew (S gathers them)'],
   ],
   classic: [
     ['Z (Y) / C or ← / →', 'start walking'],
     ['X or ↓', 'stop'],
     ['S or ↑', 'jump, go in a door'],
     ['D or Enter', 'dig (← / → turn)'],
+    ['D D', 'use what you carry'],
     ['A or Space', 'throw'],
+    ['Q / E or 1–9', 'previous / next clonk, pick a clonk'],
+    ['W', 'whole crew (X X gathers them)'],
   ],
 };
 
@@ -66,6 +93,12 @@ export class Keyboard {
   private commands = 0;
   private layout: KeyLayout;
   private gameKeys: Set<string>;
+  /** Crew command from the keys or the crew bar, for the next tick. */
+  private crew: CrewCommand | null = null;
+  /** Ticks read so far, and when dig and down were last pressed, to spot double presses. */
+  private ticks = 0;
+  private lastDig = -Infinity;
+  private lastDown = -Infinity;
   /** While false, keys are ignored (menus, pause). */
   enabled = true;
 
@@ -76,6 +109,12 @@ export class Keyboard {
     if (!e.repeat) {
       this.pressed.add(e.code);
       this.commands++;
+      const k = this.layout;
+      const digit = DIGITS.indexOf(e.code);
+      if (digit >= 0) this.crew = { type: 'pick', index: digit };
+      else if (k.crewAll.includes(e.code)) this.crew = { type: 'all' };
+      else if (k.crewPrev.includes(e.code) || (e.code === 'Tab' && e.shiftKey)) this.crew = { type: 'prev' };
+      else if (k.crewNext.includes(e.code)) this.crew = { type: 'next' };
     }
     this.held.add(e.code);
   };
@@ -90,7 +129,7 @@ export class Keyboard {
     private readonly target: Window = window,
   ) {
     this.layout = LAYOUTS[style];
-    this.gameKeys = new Set(Object.values(this.layout).flat());
+    this.gameKeys = new Set([...Object.values(this.layout).flat(), ...DIGITS]);
     target.addEventListener('keydown', this.onDown);
     target.addEventListener('keyup', this.onUp);
     target.addEventListener('blur', this.onBlur);
@@ -107,6 +146,12 @@ export class Keyboard {
     this.held.clear();
     this.pressed.clear();
     this.commands = 0;
+    this.crew = null;
+  }
+
+  /** Send a crew command with the next tick, e.g. from clicking the crew bar. */
+  command(cmd: CrewCommand): void {
+    if (this.enabled) this.crew = cmd;
   }
 
   private any(codes: string[], set: Set<string>): boolean {
@@ -118,6 +163,9 @@ export class Keyboard {
     const h = this.held;
     const p = this.pressed;
     const k = this.layout;
+    const tick = this.ticks++;
+    const dig = this.any(k.dig, p);
+    const down = this.any(k.down, p);
     const state: ControlState = {
       ...NO_CONTROL,
       left: this.any(k.left, h) || this.any(k.left, p),
@@ -129,11 +177,18 @@ export class Keyboard {
       pressedLeft: this.any(k.left, p),
       pressedRight: this.any(k.right, p),
       pressedThrow: this.any(k.throw, p),
-      pressedDig: this.any(k.dig, p),
+      pressedDig: dig,
+      pressedUse: dig && tick - this.lastDig <= DOUBLE_PRESS_TICKS,
+      doubleDown: down && tick - this.lastDown <= DOUBLE_PRESS_TICKS,
+      crew: this.crew,
       commands: this.commands,
     };
+    // A double press uses up both presses, so a third quick press starts over.
+    if (dig) this.lastDig = state.pressedUse ? -Infinity : tick;
+    if (down) this.lastDown = state.doubleDown ? -Infinity : tick;
     this.pressed = new Set();
     this.commands = 0;
+    this.crew = null;
     return state;
   }
 }

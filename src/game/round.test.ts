@@ -4,9 +4,9 @@ import { generateMap } from '../landscape/generate';
 import { Landscape } from '../landscape/landscape';
 import { Mat } from '../landscape/materials';
 import { NO_CONTROL, type Clonk, type ControlState } from '../objects/clonk';
-import { createProfile, type Profile } from './profiles';
+import { applyRoundResults, createProfile, hireClonk, type Profile } from './profiles';
 import { rankName } from './ranks';
-import { roundResults, startRound } from './round';
+import { LOCAL_PLAYER, roundResults, startRound } from './round';
 import { scenarioById, SCENARIOS } from './scenarios';
 import { EXPERIENCE, World } from './world';
 
@@ -31,9 +31,14 @@ function crewClonk(world: World, experience = 0, controlCount = 0): Clonk {
   return c;
 }
 
-function profile(): Profile {
-  return createProfile({ profiles: [], activeId: null }, 'Kevin', NAMES, new Rng(9));
+/** A profile with `crew` hired clonks. */
+function profile(crew = 2): Profile {
+  const p = createProfile({ profiles: [], activeId: null }, 'Kevin');
+  for (let i = 0; i < crew; i++) hireClonk(p, NAMES, new Rng(20 + i));
+  return p;
 }
+
+const TAP_DIG = { pressedDig: true };
 
 describe('Scenarios', () => {
   it('has the two default scenarios', () => {
@@ -87,7 +92,7 @@ describe('Rounds', () => {
     p.controlStyle = 'classic';
     p.crew[1].experience = 3000;
     p.crew[1].rank = 2;
-    const round = startRound(scenarioById('goldmine')!, p);
+    const round = startRound(scenarioById('goldmine')!, p, NAMES);
     expect(round.crew).toHaveLength(1);
     const c = round.crew[0];
     expect(c.info?.name).toBe(p.crew[1].name);
@@ -113,7 +118,237 @@ describe('Rounds', () => {
     const round = startRound(scenarioById('minor-melee')!, profile());
     const c = round.crew[0];
     c.doExperience(37);
-    expect(roundResults(round)).toEqual([{ memberId: c.info!.memberId, experienceGained: 37, controlCount: 0 }]);
+    expect(roundResults(round)[0]).toEqual({ memberId: c.info!.memberId, experienceGained: 37, controlCount: 0, died: false });
+  });
+});
+
+describe('Crew', () => {
+  it('an empty crew recruits its first clonk at the start of the round, for good', () => {
+    const p = profile(0);
+    const round = startRound(scenarioById('goldmine')!, p, NAMES);
+    expect(p.crew).toHaveLength(1);
+    const c = round.crew[0];
+    expect(NAMES).toContain(c.info?.name);
+    expect(c.info?.memberId).toBe(p.crew[0].id);
+    expect(round.recruited.has(p.crew[0].id)).toBe(true);
+  });
+
+  it('Minor Melee brings three clonks: the crew first, then new recruits', () => {
+    const p = profile(1);
+    p.crew[0].experience = 50;
+    const round = startRound(scenarioById('minor-melee')!, p, NAMES);
+    expect(round.crew).toHaveLength(3);
+    expect(round.crew[0].info?.memberId).toBe(p.crew[0].id);
+    expect(p.crew).toHaveLength(3);
+    expect(new Set(round.crew.map((c) => c.info?.name)).size).toBe(3);
+    expect(round.world.cursor(LOCAL_PLAYER).leader).toBe(round.crew[0]);
+  });
+
+  it('a dead clonk stays in the crew and counts a death', () => {
+    const p = profile(1);
+    const round = startRound(scenarioById('goldmine')!, p, NAMES);
+    round.crew[0].doEnergy(-100);
+    const results = roundResults(round);
+    expect(results[0].died).toBe(true);
+    applyRoundResults(p, results);
+    expect(p.crew).toHaveLength(1);
+    expect(p.crew[0].deaths).toBe(1);
+  });
+});
+
+describe('Buying clonks', () => {
+  /** Gold Mine with the lead clonk standing inside its home base. */
+  function inBase(crew: number) {
+    const p = profile(crew);
+    const round = startRound(scenarioById('goldmine')!, p, NAMES);
+    const { world } = round;
+    const lead = round.crew[0];
+    run(world, 10);
+    run(world, 1, { up: true, pressedUp: true });
+    expect(lead.contained?.base).toBe(LOCAL_PLAYER);
+    world.players.get(LOCAL_PLAYER)!.wealth = 100;
+    return { p, round, world, lead };
+  }
+
+  /** Open the buy menu and buy what's at `index`. */
+  function buy(world: World, index: number): void {
+    run(world, 1, { up: true, pressedUp: true });
+    for (let i = 0; i < index; i++) run(world, 1, { pressedRight: true });
+    run(world, 1, { pressedThrow: true });
+    run(world, 1, { pressedDown: true });
+  }
+
+  it('the shop sells clonks for 25 gold', () => {
+    const { world } = inBase(1);
+    expect(world.shopList(LOCAL_PLAYER)).toContain('clonk');
+  });
+
+  it('brings in the best idle crew member first, then recruits new ones for good', () => {
+    const { p, round, world } = inBase(2);
+    const player = world.players.get(LOCAL_PLAYER)!;
+    const clonkAt = world.shopList(LOCAL_PLAYER).indexOf('clonk');
+    const idle = p.crew.find((m) => m.id !== round.crew[0].info?.memberId)!;
+    buy(world, clonkAt);
+    expect(round.crew).toHaveLength(2);
+    expect(round.crew[1].info?.memberId).toBe(idle.id);
+    expect(round.crew[1].contained).toBeNull();
+    expect(player.wealth).toBe(75);
+    expect(round.recruited.size).toBe(0);
+
+    buy(world, clonkAt);
+    expect(round.crew).toHaveLength(3);
+    expect(p.crew).toHaveLength(3);
+    expect(round.recruited.has(round.crew[2].info!.memberId)).toBe(true);
+    expect(player.wealth).toBe(50);
+    expect(world.events.some((e) => e.type === 'recruit')).toBe(true);
+    // Everyone who played is in the results, the new recruit too.
+    expect(roundResults(round).map((r) => r.memberId)).toEqual(round.crew.map((c) => c.info!.memberId));
+  });
+
+  it("won't sell a clonk without the gold", () => {
+    const { round, world } = inBase(1);
+    world.players.get(LOCAL_PLAYER)!.wealth = 10;
+    buy(world, world.shopList(LOCAL_PLAYER).indexOf('clonk'));
+    expect(round.crew).toHaveLength(1);
+    expect(world.messages.some((m) => m.text.includes('Not enough gold'))).toBe(true);
+  });
+});
+
+describe('Several clonks', () => {
+  /** Three clonks on flat ground, spread out, controlled by player 0. */
+  function crew(style: 'jumpAndRun' | 'classic' = 'jumpAndRun') {
+    const world = flatWorld(400);
+    const clonks = [60, 200, 340].map((x, i) => {
+      const c = world.addClonk(x, 70, 0);
+      c.controlStyle = style;
+      c.info = { memberId: `m${i}`, name: NAMES[i], rank: 0, experience: 0, gained: 0, controlCount: 0, portrait: 1 };
+      return c;
+    });
+    run(world, 20);
+    return { world, clonks };
+  }
+
+  it('only the leader follows the keys at first', () => {
+    const { world, clonks } = crew();
+    run(world, 20, { right: true });
+    expect(clonks[0].x).toBeGreaterThan(80);
+    expect(clonks[1].x).toBe(200);
+    expect(clonks[2].x).toBe(340);
+  });
+
+  it('Tab, Shift+Tab and the number keys switch the leader', () => {
+    const { world, clonks } = crew();
+    const cursor = () => world.cursor(0);
+    run(world, 1, { crew: { type: 'next' } });
+    expect(cursor().leader).toBe(clonks[1]);
+    expect([...cursor().selected]).toEqual([clonks[1]]);
+    run(world, 1, { crew: { type: 'prev' } });
+    run(world, 1, { crew: { type: 'prev' } });
+    expect(cursor().leader).toBe(clonks[2]);
+    run(world, 1, { crew: { type: 'pick', index: 0 } });
+    expect(cursor().leader).toBe(clonks[0]);
+    run(world, 1, { crew: { type: 'toggle', index: 2 } });
+    expect(cursor().selected.has(clonks[2])).toBe(true);
+    expect(cursor().leader).toBe(clonks[0]);
+  });
+
+  it('a clonk left digging keeps digging while you control another', () => {
+    const { world, clonks } = crew();
+    run(world, 1, TAP_DIG);
+    expect(clonks[0].action.name).toBe('Dig');
+    run(world, 1, { crew: { type: 'next' } });
+    run(world, 40, { right: true });
+    expect(clonks[0].action.name).toBe('Dig');
+    expect(clonks[0].y).toBeGreaterThan(75);
+    expect(clonks[1].x).toBeGreaterThan(240);
+  });
+
+  it('a walking clonk stops when you switch away from it', () => {
+    const { world, clonks } = crew();
+    run(world, 10, { right: true });
+    run(world, 1, { right: true, crew: { type: 'next' } });
+    const x = clonks[0].x;
+    run(world, 30);
+    expect(Math.abs(clonks[0].x - x)).toBeLessThan(4);
+  });
+
+  it('the whole crew follows the keys together, and down gathers it at the leader', () => {
+    const { world, clonks } = crew();
+    run(world, 1, { crew: { type: 'all' } });
+    expect(world.cursor(0).selected.size).toBe(3);
+    run(world, 10, { left: true });
+    expect(clonks.every((c, i) => c.x < [60, 200, 340][i])).toBe(true);
+    run(world, 1, { down: true, pressedDown: true });
+    run(world, 200);
+    for (const c of clonks) expect(Math.abs(c.x - clonks[0].x)).toBeLessThan(10);
+  });
+
+  it('classic: stop twice gathers the crew', () => {
+    const { world, clonks } = crew('classic');
+    run(world, 1, { crew: { type: 'all' } });
+    run(world, 1, { pressedDown: true, doubleDown: true });
+    run(world, 200);
+    for (const c of clonks) expect(Math.abs(c.x - clonks[0].x)).toBeLessThan(10);
+  });
+
+  it('when the leader dies, the next living clonk takes over', () => {
+    const { world, clonks } = crew();
+    clonks[0].doEnergy(-100);
+    run(world, 1);
+    expect(world.cursor(0).leader).toBe(clonks[1]);
+    run(world, 1, { crew: { type: 'pick', index: 0 } });
+    expect(world.cursor(0).leader).toBe(clonks[1]);
+  });
+
+  it('commands only earn the leader experience', () => {
+    const { world, clonks } = crew();
+    run(world, 1, { commands: 5 });
+    expect(clonks[0].info!.experience).toBe(1);
+    expect(clonks[1].info!.experience).toBe(0);
+  });
+});
+
+describe('Digging with jump\'n\'run controls', () => {
+  it('Q starts digging, the clonk keeps going on its own, and Q again stops', () => {
+    const world = flatWorld();
+    const c = crewClonk(world);
+    run(world, 1, TAP_DIG);
+    expect(c.action.name).toBe('Dig');
+    run(world, 40);
+    expect(c.action.name).toBe('Dig');
+    expect(c.y).toBeGreaterThan(80);
+    run(world, 1, TAP_DIG);
+    expect(c.action.name).toBe('Walk');
+  });
+
+  it('digs the way you hold, and keeps that way when you let go', () => {
+    const world = flatWorld();
+    const c = crewClonk(world);
+    run(world, 1, { pressedDig: true, right: true });
+    expect(c.comDir).toEqual({ x: 1, y: 0 });
+    run(world, 5, { down: true });
+    expect(c.comDir).toEqual({ x: 0, y: 1 });
+    run(world, 5);
+    expect(c.comDir).toEqual({ x: 0, y: 1 });
+  });
+
+  it('a quick second tap (use) with nothing usable keeps digging', () => {
+    const world = flatWorld();
+    const c = crewClonk(world);
+    run(world, 1, TAP_DIG);
+    run(world, 3);
+    run(world, 1, { pressedDig: true, pressedUse: true });
+    expect(c.action.name).toBe('Dig');
+  });
+
+  it('E throws, and S no longer digs', () => {
+    const world = flatWorld();
+    const c = crewClonk(world);
+    run(world, 1, { down: true, pressedDown: true });
+    expect(c.action.name).toBe('Walk');
+    world.give(c, 'rock');
+    run(world, 1, { pressedThrow: true });
+    expect(c.carrying).toBeUndefined();
   });
 });
 

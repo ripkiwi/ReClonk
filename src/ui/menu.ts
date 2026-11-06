@@ -42,6 +42,8 @@ export interface CrewOutcome {
   before: { experience: number; rank: number };
   /** Lost all energy during the round. */
   died: boolean;
+  /** Joined the crew during this round. */
+  isNew: boolean;
 }
 
 /** The largest crew a player can hire from the menu. */
@@ -133,7 +135,7 @@ export class Menu {
         'div',
         { class: 'main-player' },
         profile
-          ? h('span', {}, 'Playing as ', h('b', {}, profile.name), lead ? ` with ${rankName(lead.rank)} ${lead.name}` : '')
+          ? h('span', {}, 'Playing as ', h('b', {}, profile.name), lead ? ` with ${rankName(lead.rank)} ${lead.name}` : ' with a new recruit')
           : 'Create a player to start',
       ),
       h('div', { class: 'footnote' }, "A free fan remake. 'Clonk' is a registered trademark of Matthes Bender."),
@@ -170,7 +172,7 @@ export class Menu {
     if (!store.profiles.length) list.append(h('li', { class: 'hint' }, 'No players yet.'));
 
     const newPlayer = (): void => {
-      createProfile(store, `Player ${store.profiles.length + 1}`, this.o.names);
+      createProfile(store, `Player ${store.profiles.length + 1}`);
       this.save();
       this.o.sounds.play('Click', 0.6);
       rerender();
@@ -274,6 +276,9 @@ export class Menu {
       const crewList = h('ul', { class: 'list', style: { maxHeight: '164px' } });
       const playing = new Set(crewForRound(profile, 1).map((m) => m.id));
       for (const m of profile.crew) crewList.append(this.crewRow(profile, m, playing.has(m.id), rerender));
+      if (!profile.crew.length) {
+        crewList.append(h('li', { class: 'hint', style: { cursor: 'default' } }, 'No clonks yet. Your first round recruits one, or hire one here.'));
+      }
       right.append(
         h('h2', { class: 'crew-title', style: { fontSize: '22px' } }, `Crew of ${profile.name}`),
         crewList,
@@ -327,7 +332,7 @@ export class Menu {
           m.name,
           leads ? h('span', { title: 'Plays the next round' }, ' ★') : '',
           ' ',
-          h('small', {}, plural(m.rounds, 'round')),
+          h('small', {}, plural(m.rounds, 'round'), m.deaths ? `, ${plural(m.deaths, 'death')}` : ''),
         ),
         h('div', { class: 'crew-rank' }, rankBadge(m.rank), rankName(m.rank)),
         exp.bar,
@@ -348,22 +353,20 @@ export class Menu {
           },
           plays ? '✓' : '',
         ),
-        profile.crew.length > 1
-          ? h(
-              'button',
-              {
-                class: 'link',
-                title: 'Dismiss from the crew',
-                onclick: () => {
-                  if (!confirm(`Dismiss ${rankName(m.rank)} ${m.name} from the crew for good?`)) return;
-                  profile.crew = profile.crew.filter((c) => c !== m);
-                  this.save();
-                  rerender();
-                },
-              },
-              '✕',
-            )
-          : null,
+        h(
+          'button',
+          {
+            class: 'link',
+            title: 'Dismiss from the crew',
+            onclick: () => {
+              if (!confirm(`Dismiss ${rankName(m.rank)} ${m.name} from the crew for good?`)) return;
+              profile.crew = profile.crew.filter((c) => c !== m);
+              this.save();
+              rerender();
+            },
+          },
+          '✕',
+        ),
       ),
     );
   }
@@ -427,13 +430,23 @@ export class Menu {
         ),
       );
     }
+    const recruits = profile ? scenario.crewSize - crew.length : 0;
+    if (recruits > 0) {
+      crewLine.append(
+        h(
+          'div',
+          { style: { margin: '2px 0', fontStyle: 'italic' } },
+          `${crew.length ? 'and ' : ''}${recruits === 1 ? 'a new recruit' : `${recruits} new recruits`}`,
+        ),
+      );
+    }
     const right = h(
       'div',
       { class: 'parchment', style: { left: '430px', top: '112px', width: '300px', height: '380px' } },
       h('h2', { style: { fontSize: '30px', textAlign: 'center' } }, scenario.title),
       h('div', { class: 'preview' }, scenarioPreview(scenario)),
       h('p', { class: 'scen-desc' }, scenario.description),
-      crew.length ? h('h3', {}, 'Your crew') : null,
+      profile ? h('h3', {}, 'Your crew') : null,
       crewLine,
     );
 
@@ -510,7 +523,7 @@ export class Menu {
           h(
             'div',
             { style: { flex: '1' } },
-            h('div', { class: 'crew-name' }, m.name),
+            h('div', { class: 'crew-name' }, m.name, outcome.isNew ? h('small', { class: 'new-tag' }, ' joined the crew') : ''),
             rank,
             bar.bar,
             h('div', { class: 'exp-text' }, expProgress(m.experience).label),
@@ -528,7 +541,7 @@ export class Menu {
     }
     const paper = h(
       'div',
-      { class: 'paper', style: { left: '86px', top: '50px' } },
+      { class: `paper${outcomes.length > 2 ? ' many' : ''}`, style: { left: '86px', top: '50px' } },
       h(
         'div',
         { class: 'paper-body' },
