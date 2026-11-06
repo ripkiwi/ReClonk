@@ -1,59 +1,135 @@
 import { Rng } from '../core/rng';
 import { Landscape } from './landscape';
-import { Mat } from './materials';
+import { Mat, type ItemId } from './materials';
 
-/** Smooth 1D value noise built from the seeded RNG: integer-only, deterministic. */
-function heightProfile(width: number, rng: Rng, base: number, amplitude: number, step: number): Int32Array {
-  const points = Math.ceil(width / step) + 2;
-  const knots = Array.from({ length: points }, () => rng.int(amplitude * 2 + 1) - amplitude);
+export interface GeneratedMap {
+  land: Landscape;
+  /** Loose objects buried in the earth, revealed by digging (like the original's "InEarth" objects). */
+  items: { id: ItemId; x: number; y: number }[];
+  /** Where the first clonk starts, standing on the surface. */
+  spawn: { x: number; y: number };
+  /** Surface height per column. */
+  surface: Int32Array;
+}
+
+/** Smooth 1D value noise from the seeded RNG, summed over a few octaves. Integer-only, deterministic. */
+function heightProfile(width: number, rng: Rng, octaves: { step: number; amp: number }[]): Int32Array {
   const out = new Int32Array(width);
-  for (let x = 0; x < width; x++) {
-    const k = Math.floor(x / step);
-    const t = x - k * step;
-    // Linear interpolation in integers.
-    out[x] = base + Math.trunc((knots[k] * (step - t) + knots[k + 1] * t) / step);
+  for (const { step, amp } of octaves) {
+    const knots = Array.from({ length: Math.ceil(width / step) + 2 }, () => rng.int(amp * 2 + 1) - amp);
+    for (let x = 0; x < width; x++) {
+      const k = Math.floor(x / step);
+      const t = x - k * step;
+      // Smoothstep interpolation in integers (scaled by step^3).
+      const s = 3 * t * t * step - 2 * t * t * t;
+      const s3 = step * step * step;
+      out[x] += Math.trunc((knots[k] * (s3 - s) + knots[k + 1] * s) / s3);
+    }
   }
   return out;
 }
 
-function blob(land: Landscape, rng: Rng, m: Mat, minY: number, rx: number, ry: number): void {
-  const cx = rng.int(land.width);
-  const cy = minY + rng.int(Math.max(1, land.height - minY - ry));
-  for (let y = cy - ry; y <= cy + ry; y++) {
-    for (let x = cx - rx; x <= cx + rx; x++) {
-      const dx = x - cx;
-      const dy = y - cy;
-      if (dx * dx * ry * ry + dy * dy * rx * rx <= rx * rx * ry * ry && land.get(x, y) === Mat.Earth) {
-        land.set(x, y, m);
+/** A blobby, slanted vein of a material: a chain of overlapping ellipses following a random walk. */
+function vein(land: Landscape, rng: Rng, m: Mat, x: number, y: number, length: number, thickness: number): void {
+  let dirX = rng.bool() ? 1 : -1;
+  let dirY = rng.int(3) - 1;
+  for (let i = 0; i < length; i++) {
+    const rx = thickness + rng.int(thickness);
+    const ry = Math.max(2, Math.floor(thickness * 0.7) + rng.int(thickness));
+    for (let yy = y - ry; yy <= y + ry; yy++) {
+      for (let xx = x - rx; xx <= x + rx; xx++) {
+        const dx = xx - x;
+        const dy = yy - y;
+        if (dx * dx * ry * ry + dy * dy * rx * rx > rx * rx * ry * ry) continue;
+        const here = land.get(xx, yy);
+        if (here === Mat.Earth || here === Mat.Sand || (m === Mat.Granite && here !== Mat.Sky)) land.set(xx, yy, m);
       }
     }
+    x += dirX * (rx - 1);
+    y += dirY * Math.max(1, ry - 2);
+    if (rng.int(4) === 0) dirY = rng.int(3) - 1;
+    if (rng.int(8) === 0) dirX = -dirX;
   }
 }
 
-/** Generate a simple test map: rolling hills, ore pockets, a lake and a granite floor. */
-export function generateLandscape(width: number, height: number, seed: number): Landscape {
+/**
+ * Generate a map in the spirit of a classic Clonk scenario: rolling hills of
+ * earth with a sandy top, rock and gold veins, granite near the bottom, a lake,
+ * and flints, rocks and gold buried in the ground.
+ */
+export function generateMap(width: number, height: number, seed: number): GeneratedMap {
   const rng = new Rng(seed);
   const land = new Landscape(width, height);
-  const surface = heightProfile(width, rng, Math.floor(height * 0.4), Math.floor(height * 0.08), 40);
-  const sandDepth = heightProfile(width, rng, 6, 4, 25);
+  const base = Math.floor(height * 0.38);
+  const hills = heightProfile(width, rng, [
+    { step: 160, amp: Math.floor(height * 0.12) },
+    { step: 40, amp: Math.floor(height * 0.03) },
+  ]);
+  const surface = new Int32Array(width);
+  for (let x = 0; x < width; x++) surface[x] = base + hills[x];
+  const sandDepth = heightProfile(width, rng, [{ step: 30, amp: 3 }]);
 
   for (let x = 0; x < width; x++) {
-    for (let y = surface[x]; y < height; y++) {
-      const depth = y - surface[x];
-      land.set(x, y, depth < sandDepth[x] ? Mat.Sand : Mat.Earth);
+    for (let y = 0; y < height; y++) {
+      if (y < surface[x]) continue;
+      land.set(x, y, y - surface[x] < 4 + sandDepth[x] ? Mat.Sand : Mat.Earth);
+      land.setTunnel(x, y, true);
     }
-    for (let y = height - 4 - rng.int(3); y < height; y++) land.set(x, y, Mat.Granite);
   }
 
-  const pockets = Math.floor((width * height) / 9000);
-  for (let i = 0; i < pockets; i++) blob(land, rng, Mat.Rock, surface[0] + 20, 6 + rng.int(10), 3 + rng.int(6));
-  for (let i = 0; i < pockets / 2; i++) blob(land, rng, Mat.Gold, surface[0] + 30, 3 + rng.int(5), 2 + rng.int(3));
+  // Granite: a ragged bottom layer plus a few boulders.
+  const graniteTop = heightProfile(width, rng, [{ step: 30, amp: 6 }]);
+  for (let x = 0; x < width; x++) {
+    for (let y = height - 12 + graniteTop[x]; y < height; y++) land.set(x, y, Mat.Granite);
+  }
+  const area = width * height;
+  for (let i = 0; i < area / 120000; i++) {
+    vein(land, rng, Mat.Granite, rng.int(width), base + 60 + rng.int(height - base - 80), 3 + rng.int(4), 7);
+  }
+  // Rock veins.
+  for (let i = 0; i < area / 16000; i++) {
+    const x = rng.int(width);
+    vein(land, rng, Mat.Rock, x, surface[x] + 15 + rng.int(height - surface[x] - 30), 5 + rng.int(10), 7);
+  }
+  // Gold veins, deeper down.
+  for (let i = 0; i < area / 45000; i++) {
+    const x = rng.int(width);
+    const top = surface[x] + 50;
+    if (top >= height - 30) continue;
+    vein(land, rng, Mat.Gold, x, top + rng.int(height - top - 30), 5 + rng.int(8), 8);
+  }
 
-  // A small lake in the lowest valley.
-  let lowest = 0;
-  for (let x = 1; x < width; x++) if (surface[x] > surface[lowest]) lowest = x;
-  land.paint(lowest, surface[lowest] - 4, 14, Mat.Water);
+  // A lake in the deepest valley.
+  let lowest = Math.floor(width * 0.1);
+  for (let x = lowest; x < width * 0.9; x++) if (surface[x] > surface[lowest]) lowest = x;
+  const lakeR = 28;
+  for (let y = surface[lowest] - lakeR; y <= surface[lowest] + lakeR; y++) {
+    for (let x = lowest - lakeR * 2; x <= lowest + lakeR * 2; x++) {
+      const dx = (x - lowest) / 2;
+      const dy = y - surface[lowest];
+      if (dx * dx + dy * dy > lakeR * lakeR || !land.inBounds(x, y)) continue;
+      const waterLine = surface[lowest] - 4;
+      if (land.get(x, y) === Mat.Granite) continue;
+      land.set(x, y, y >= waterLine ? Mat.Water : Mat.Sky);
+      land.setTunnel(x, y, false);
+    }
+  }
 
-  land.dirty = true;
-  return land;
+  // Buried objects: flints and rocks close to the surface, gold a bit deeper.
+  const items: GeneratedMap['items'] = [];
+  const bury = (id: ItemId, count: number, minDepth: number, maxDepth: number): void => {
+    for (let i = 0; i < count; i++) {
+      const x = 4 + rng.int(width - 8);
+      const y = surface[x] + minDepth + rng.int(maxDepth - minDepth);
+      if (land.get(x, y) === Mat.Earth) items.push({ id, x, y });
+    }
+  };
+  bury('flint', Math.floor(width / 50), 12, 60);
+  bury('rock', Math.floor(width / 70), 8, 80);
+  bury('gold', Math.floor(width / 120), 40, 160);
+
+  // Start on the surface, a third of the way in and away from the lake.
+  let sx = Math.floor(width / 3);
+  if (Math.abs(sx - lowest) < lakeR * 3) sx = Math.floor((width * 2) / 3);
+  return { land, items, spawn: { x: sx, y: surface[sx] - 10 }, surface };
 }
