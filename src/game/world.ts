@@ -3,11 +3,12 @@ import type { GeneratedMap } from '../landscape/generate';
 import type { Landscape } from '../landscape/landscape';
 import { MATERIALS, type ItemId } from '../landscape/materials';
 import { Clonk, NO_CONTROL, type ControlState, type CrewCommand, type CrewInfo } from '../objects/clonk';
-import { BASE, BASEMENT, CLONK, ITEMS, STRUCTURES } from '../objects/defs';
+import { BASE, BASEMENT, BUILD_PLANS, CLONK, ITEMS, STRUCTURES } from '../objects/defs';
 import type { GameObject } from '../objects/gameObject';
 import { Item } from '../objects/item';
 import { HIT_SPEED_2 } from '../objects/physics';
 import { Structure } from '../objects/structure';
+import { buildStep, construct, grabOrBuild, grabTarget, pushControl, siteProblem, stepElevator, stepGate } from './buildings';
 
 export type WorldEvent =
   | { type: 'explosion'; x: number; y: number; radius: number; tick: number }
@@ -27,7 +28,11 @@ export type WorldEvent =
   /** A player has no clonk left standing (last crew standing). */
   | { type: 'eliminated'; player: number; tick: number }
   /** The round's goal is decided: `winner` is the last player standing, or -1 if nobody is. */
-  | { type: 'gameOver'; winner: number; tick: number };
+  | { type: 'gameOver'; winner: number; tick: number }
+  /** A construction site went up, is being worked on (every second), or is finished. */
+  | { type: 'construct' | 'building' | 'built'; structure: Structure; tick: number }
+  /** A guard tower gate starts moving, an elevator case rides on, something was switched. */
+  | { type: 'gate' | 'elevator' | 'click'; x: number; y: number; tick: number };
 
 /** Extra experience on top of the original's "1 per 5 commands", so promotions come at a fun pace. */
 export const EXPERIENCE = {
@@ -209,6 +214,7 @@ export class World {
   addStructure(id: string, x: number, y: number, base = -1): Structure {
     const s = new Structure(STRUCTURES[id], x, y);
     if (base >= 0 && s.def.canBeBase) s.base = base;
+    s.owner = base;
     this.structures.push(s);
     return s;
   }
@@ -251,8 +257,13 @@ export class World {
       if (leader && leader.countCommands(ctrl.commands)) this.promoted(leader);
       // With a group selected, down (or stop twice in classic) gathers it at the leader.
       const gather = leader?.controlStyle === 'classic' ? ctrl.doubleDown : ctrl.pressedDown;
-      if (leader && gather && cur.selected.size > 1) {
-        for (const c of cur.selected) if (c !== leader && !c.contained) c.walkTo(leader.x);
+      // Down at a building means working it, not gathering.
+      if (leader && gather && cur.selected.size > 1 && leader.action.procedure === 'walk' && !grabTarget(this, leader)) {
+        for (const c of cur.selected) {
+          if (c === leader || c.contained) continue;
+          if (c.action.procedure === 'push' || c.action.procedure === 'build') c.letGo();
+          c.walkTo(leader.x);
+        }
       }
     }
 
@@ -268,17 +279,24 @@ export class World {
         continue;
       }
       const carried = c.carrying;
-      if (mine || c.goTo !== null) {
+      if (mine && c.buildMenu !== null) this.buildMenuControl(c, mine);
+      else if (mine && c.alive && c.action.procedure === 'push') pushControl(this, c, mine);
+      else if (mine || c.goTo !== null) {
+        // Moving on stops building.
+        if (mine && c.action.procedure === 'build' && stopsWork(mine)) c.letGo();
         c.control(mine ?? NO_CONTROL, {
           throwItem: (item, xdir, ydir) => throwItem(item, xdir, ydir, c),
           tryEnter: () => this.tryEnter(c),
-          useItem: () => false,
+          useItem: () => this.useItem(c),
+          grabOrBuild: () => grabOrBuild(this, c),
         });
       }
       if (c.contained || this.fellOut(c)) continue;
       if (carried && !c.carrying) this.events.push({ type: 'throw', clonk: c, tick: this.tick });
       c.tick(this.land);
       if (c.action.procedure === 'fight') this.fighting(c);
+      if (c.action.procedure === 'build') buildStep(this, c);
+      if (c.buildMenu !== null && (c.action.procedure !== 'walk' || c.carrying?.def.id !== 'conkit')) c.buildMenu = null;
       const got = c.tryCollect(this.items, this.land);
       if (got) {
         this.events.push({ type: 'collect', clonk: c, item: got, tick: this.tick });
@@ -293,7 +311,16 @@ export class World {
     if (this.tick % 5 === 0) this.startFights();
 
     if (this.tick % BASE.healInterval === 0) for (const c of this.clonks) this.healInBase(c);
-    for (const s of this.structures) s.tick();
+    for (const s of this.structures) {
+      s.tick();
+      if (s.liftCase) stepElevator(this, s);
+      for (const g of s.gates) stepGate(this, g);
+    }
+    // The guard tower's door has shut behind them: out onto the roof (DoorClosed).
+    for (const c of this.clonks) {
+      const s = c.contained;
+      if (s?.def.exitTo && s.door === 0) this.exitTo(c, s.x + s.def.exitTo.x, s.y + s.def.exitTo.y);
+    }
 
     for (const item of this.items) {
       if (item.container || item.removed) continue;
@@ -565,7 +592,7 @@ export class World {
     }
   }
 
-  private say(player: number, text: string): void {
+  say(player: number, text: string): void {
     this.messages.push({ player, text, tick: this.tick });
   }
 
@@ -590,6 +617,7 @@ export class World {
     }
     c.contained = s;
     c.menu = null;
+    c.buildMenu = null;
     c.comDir = { x: 0, y: 0 };
     c.xdir = c.ydir = 0;
     c.setPosition(s.x, s.y);
@@ -605,11 +633,62 @@ export class World {
     const s = c.contained;
     if (!s) return;
     const p = s.exitPoint();
+    this.exitTo(c, p.x, p.y);
+    s.openDoor();
+  }
+
+  private exitTo(c: Clonk, x: number, y: number): void {
     c.contained = null;
     c.menu = null;
-    c.setPosition(p.x, p.y);
+    c.setPosition(x, y);
     c.setAction('Walk', 0, 0);
-    s.openDoor();
+  }
+
+  /**
+   * Use what the clonk carries (double dig): a construction kit opens the
+   * menu of buildings it can put up (Conkit.c4d Activate).
+   */
+  private useItem(c: Clonk): boolean {
+    // The first press of a double dig has already started digging.
+    if (c.carrying?.def.id !== 'conkit' || (c.action.procedure !== 'walk' && c.action.procedure !== 'dig')) return false;
+    if (c.action.procedure === 'dig') c.setAction('Walk', 0, 0);
+    c.buildMenu = 0;
+    c.comDir = { x: 0, y: 0 };
+    return true;
+  }
+
+  /** The build menu: left/right choose, up or throw builds here, down or dig closes it. */
+  private buildMenuControl(c: Clonk, ctl: ControlState): void {
+    const n = BUILD_PLANS.length;
+    let i = c.buildMenu ?? 0;
+    if (ctl.pressedLeft) i = (i + n - 1) % n;
+    if (ctl.pressedRight) i = (i + 1) % n;
+    c.buildMenu = i;
+    if (ctl.pressedUp || ctl.pressedThrow) {
+      c.buildMenu = null;
+      this.placeSite(c, BUILD_PLANS[i]);
+    } else if (ctl.pressedDown || ctl.pressedDig) c.buildMenu = null;
+  }
+
+  /**
+   * Put up a construction site where the clonk stands, using up its kit, and
+   * start building (Conkit.c4d CreateConstructionSite).
+   */
+  placeSite(c: Clonk, id: string): Structure | null {
+    const kit = c.carrying;
+    if (kit?.def.id !== 'conkit' || c.action.procedure !== 'walk' || c.contained) return null;
+    const bottom = c.y + 10;
+    const problem = siteProblem(this, id, c.x, bottom);
+    if (problem) {
+      this.say(c.owner, problem);
+      return null;
+    }
+    c.contents.splice(c.contents.indexOf(kit), 1);
+    kit.removed = true;
+    const s = construct(this, id, c.x, bottom, c.owner);
+    this.say(c.owner, `Construction: ${s.def.name}`);
+    c.startBuild(s);
+    return s;
   }
 
   /**
@@ -718,4 +797,9 @@ export class World {
     s.energy -= transfer;
     c.doEnergy(transfer, true);
   }
+}
+
+/** Keys that make a building clonk stop and do something else. */
+function stopsWork(c: ControlState): boolean {
+  return c.left || c.right || c.pressedUp || c.pressedDown || c.pressedDig || c.pressedThrow || c.pressedUse;
 }

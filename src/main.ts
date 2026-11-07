@@ -8,7 +8,7 @@ import { applyRoundResults, loadProfiles, saveProfiles, type KeyValueStore, type
 import { newSeed, roundResults, startRound, type Round } from './game/round';
 import type { ScenarioDef } from './game/scenarios';
 import { TEXMAP, TUNNEL } from './landscape/materials';
-import { FLAG, ITEMS, STRUCTURES } from './objects/defs';
+import { ELEVATOR_CASE, FLAG, ITEMS, STRUCTURES } from './objects/defs';
 import { CONTENT_BASE, loadAssets } from './render/assets';
 import { fitStage, h, setCssImages } from './ui/dom';
 import { GameScreen } from './ui/gameScreen';
@@ -67,7 +67,12 @@ async function start(): Promise<void> {
       TEXMAP.map((t) => t.texture).concat(TUNNEL.texture),
       [
         ...Object.values(ITEMS).map((i) => i.graphic.file),
-        ...Object.values(STRUCTURES).flatMap((s) => (s.basement ? [s.graphic.file, s.basement.file] : [s.graphic.file])),
+        ...Object.values(STRUCTURES).flatMap((s) => [
+          s.graphic.file,
+          ...(s.basement ? [s.basement.file] : []),
+          ...(s.gates ?? []).map((g) => g.file),
+          ...(s.elevator ? [ELEVATOR_CASE.file] : []),
+        ]),
         FLAG.graphic.file,
         FLAG.graphic.overlay,
       ],

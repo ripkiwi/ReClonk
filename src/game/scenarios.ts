@@ -39,10 +39,10 @@ export interface ScenarioDef {
   basedOn?: string;
 }
 
-/** The home base start of the original Gold Mine: 50 gold, flints and clonks to buy. */
+/** The home base start of the original Gold Mine: 50 gold, flints, construction kits and clonks to buy. */
 export const DEFAULT_BASE: BaseSettings = {
   wealth: 50,
-  stock: { flint: 5, clonk: 3 },
+  stock: { flint: 5, conkit: 5, clonk: 3 },
 };
 
 /** The material layers of the original Gold Mine and Minor Melee (without the ore, coal and sulphur we don't have yet). */
@@ -161,7 +161,7 @@ export const LIMITS = {
 };
 
 const ITEM_IDS: ItemId[] = ['flint', 'rock', 'gold'];
-const SHOP_IDS: ShopId[] = ['flint', 'rock', 'clonk'];
+const SHOP_IDS: ShopId[] = ['flint', 'rock', 'conkit', 'clonk'];
 
 function clamp(v: unknown, lim: { min: number; max: number }, fallback: number): number {
   const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback;

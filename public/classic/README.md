@@ -21,6 +21,11 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `items/Flag.png`, `items/FlagOverlay.png` | `Objects.c4d/Items.c4d/Equipment.c4d/Flag.c4d/Graphics.png`, `Overlay.png` |
 | `structures/Hut2.png` | `Objects.c4d/Structures.c4d/Hut2.c4d/Graphics.png` (wooden hut) |
 | `structures/Basement60.png` | `Objects.c4d/Structures.c4d/Basements.c4d/Basement60.c4d/Graphics.png` (the hut's stone basement) |
+| `structures/Elevator.png`, `structures/ElevatorCase.png` | `Objects.c4d/Structures.c4d/Elevator.c4d/Graphics.png`, `Elevator.c4d/Case.c4d/Graphics.png` |
+| `structures/Tower2.png` | `Objects.c4d/Structures.c4d/Tower2.c4d/Graphics.png` (guard tower) |
+| `structures/GateLeft.png`, `structures/GateRight.png` | `Objects.c4d/Structures.c4d/Tower2.c4d/GateLeft.c4d/Graphics.png`, `GateRight.c4d/Graphics.png` |
+| `structures/Basement48.png` | `Objects.c4d/Structures.c4d/Basements.c4d/Basement48.c4d/Graphics.png` (the guard tower's stone basement) |
+| `items/Conkit.png` | `Objects.c4d/Items.c4d/Equipment.c4d/Conkit.c4d/Graphics.png` (construction kit) |
 | `goals/Melee.png` | `Objects.c4d/Goals.c4d/Melee.c4d/Graphics.png` (goal picture in the scenario properties) |
 | `materials/*.png` | `Material.c4g/` textures |
 | `sky/Clouds1.jpg` | `planet/Graphics.c4g/Clouds1.jpg` |
@@ -30,6 +35,6 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `gui/Startup*.png` | `planet/Graphics.c4g/Startup*.png` (menu backgrounds, buttons, dialog paper, control type icons) |
 | `fonts/Endeavour.ttf` | `planet/System.c4g/Endeavour.ttf` |
 | `Names.txt` | `planet/System.c4g/Names.txt`, **line endings and blank lines removed** |
-| `sound/*.wav` | `Sound.c4g/` (`Blast1-3`, `Click`, `Die`, `Eliminated`, `Grab`, `Hurt1-3`, `Kime1-3`, `Punch1-3`, `Trumpet`) |
+| `sound/*.wav` | `Sound.c4g/` (`Blast1-3`, `Build1-2`, `Click`, `Die`, `Elevator`, `Eliminated`, `Grab`, `Hurt1-3`, `Kime1-3`, `Punch1-3`, `SteelGate1`, `Trumpet`) |
 
 'Clonk' is a registered trademark of Matthes Bender.

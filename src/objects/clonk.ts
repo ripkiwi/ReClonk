@@ -70,6 +70,8 @@ export interface ClonkActions {
   tryEnter: () => boolean;
   /** Use the carried item (double dig). Returns false if there's nothing to use. */
   useItem: () => boolean;
+  /** Down at a construction site, an elevator case or a guard tower: build or hold on to it. Returns false if there's nothing. */
+  grabOrBuild: () => boolean;
 }
 
 /** Walking speed while squaring up in a fist fight (DFA_FIGHT). */
@@ -124,6 +126,8 @@ export const THROW_SPEED = physical(400, P.throw);
 const GO_TO_TICKS = 36 * 20;
 /** Close enough to the leader. */
 const GO_TO_NEAR = 6;
+/** How long a dig waits for a second press while holding a usable item: the keyboard's double-press time. */
+const USE_WAIT_TICKS = 12;
 
 export class Clonk extends GameObject {
   readonly vertices = CLONK.vertices;
@@ -142,6 +146,10 @@ export class Clonk extends GameObject {
   contained: Structure | null = null;
   /** Selected line of the open buy menu, or null when it's closed. */
   menu: number | null = null;
+  /** Selected line of the construction kit's build menu, or null when it's closed. */
+  buildMenu: number | null = null;
+  /** The building it's working on (Build) or holding on to (Push). */
+  workOn: Structure | null = null;
   controlStyle: ControlStyle = 'jumpAndRun';
   /** Set for clonks from a player's crew. */
   info: CrewInfo | null = null;
@@ -152,6 +160,8 @@ export class Clonk extends GameObject {
   fightTarget: Clonk | null = null;
   /** Who hurt this clonk last, credited if it dies (the original's LastEnergyLossCausePlayer). */
   lastHurtBy: Clonk | null = null;
+  /** Ticks before a new dig breaks ground (see startDig). */
+  private digWait = 0;
   /** Ticks spent stuck in the ground in mid-air. */
   private stuckTicks = 0;
   /** Set when the current action started or started over this tick (the original's StartCall). */
@@ -235,6 +245,7 @@ export class Clonk extends GameObject {
       this.phaseDelay = 0;
       this.actionStarted = true;
       if (a.procedure !== 'fight') this.fightTarget = null;
+      if (a.procedure !== 'push' && a.procedure !== 'build') this.workOn = null;
     }
     if (xdir !== undefined) this.xdir = xdir;
     if (ydir !== undefined) this.ydir = ydir;
@@ -277,6 +288,41 @@ export class Clonk extends GameObject {
     this.dir = xdir < 0 ? 1 : -1;
     this.comDir = STOP;
     this.tumble(xdir, ydir);
+  }
+
+  /**
+   * Start digging. Holding something that can be used (a construction kit),
+   * the clonk waits a moment before it breaks ground: the press may be the
+   * first of a double dig, and a fresh hole would spoil the building site.
+   */
+  private startDig(): void {
+    this.setAction('Dig', 0, 0);
+    this.digWait = this.carrying?.def.usable ? USE_WAIT_TICKS : 0;
+  }
+
+  /** Work on a construction site until it's done (ObjectActionBuild). */
+  startBuild(s: Structure): void {
+    this.setAction('Build', 0, 0);
+    this.workOn = s;
+    this.comDir = STOP;
+    this.goTo = null;
+  }
+
+  /** Hold on to an elevator case or a guard tower (ObjectActionPush). */
+  startPush(s: Structure): void {
+    this.setAction('Push', 0, 0);
+    this.workOn = s;
+    this.comDir = STOP;
+    this.goTo = null;
+  }
+
+  /** Stop building or let go of what it holds, and walk on (to the left or right if given). */
+  letGo(dir: -1 | 0 | 1 = 0): void {
+    this.walk();
+    if (dir) {
+      this.setDir(dir);
+      this.comDir = { x: dir, y: 0 };
+    }
   }
 
   /** Square up to a hostile clonk (ObjectActionFight). */
@@ -323,13 +369,14 @@ export class Clonk extends GameObject {
         this.comDir = { x: held.x, y: 0 };
         if (c.pressedUp && out.tryEnter()) break;
         if (c.pressedUse && out.useItem()) break;
+        if (c.pressedDown && out.grabOrBuild()) break;
         if (c.pressedUp) {
           // Clonks always jump forward.
           const tx = held.x !== 0 ? held.x * WALK_SPEED : this.dir * WALK_SPEED;
           this.jump(tx, -JUMP_SPEED);
         } else if (c.pressedDig) {
           // Dig the way the player is pointing, straight down if nowhere.
-          this.setAction('Dig', 0, 0);
+          this.startDig();
           this.comDir = held.x !== 0 || held.y !== 0 ? held : { x: 0, y: 1 };
         }
         if (c.pressedThrow) this.throwOrDrop(true, out);
@@ -388,11 +435,12 @@ export class Clonk extends GameObject {
         if (c.pressedDown) this.comDir = STOP;
         if (c.pressedUp && out.tryEnter()) break;
         if (c.pressedUse && out.useItem()) break;
+        if (c.doubleDown && out.grabOrBuild()) break;
         if (c.pressedUp) {
           const tx = this.comDir.x !== 0 ? this.comDir.x * WALK_SPEED : this.dir * WALK_SPEED;
           this.jump(tx, -JUMP_SPEED);
         } else if (c.pressedDig) {
-          this.setAction('Dig', 0, 0);
+          this.startDig();
           this.comDir = { x: this.dir, y: 1 };
         }
         if (c.pressedThrow) this.throwOrDrop(true, out);
@@ -544,6 +592,14 @@ export class Clonk extends GameObject {
         this.ydir = 0;
         if (this.action.procedure === 'throw') this.xdir = 0;
         break;
+      case 'push':
+        // Holding still; the case it holds on to carries it along.
+        this.xdir = this.ydir = 0;
+        advance = 0;
+        break;
+      case 'build':
+        this.xdir = this.ydir = 0;
+        break;
       case 'scale': {
         // Pushing towards the wall means "climb up".
         const up = cd.y < 0 || (cd.x !== 0 && cd.x === this.dir);
@@ -593,6 +649,12 @@ export class Clonk extends GameObject {
           this.walk();
           break;
         }
+        if (this.digWait > 0) {
+          this.digWait--;
+          this.xdir = this.ydir = 0;
+          advance = 0;
+          break;
+        }
         const s = DIG_SPEED;
         advance = Math.floor(s * 40);
         if (cd.x === 0 && cd.y === 0) {
@@ -635,7 +697,7 @@ export class Clonk extends GameObject {
     }
 
     // Dig out the space ahead.
-    if (this.action.digFree) {
+    if (this.action.digFree && this.digWait === 0) {
       land.dig(Math.floor(this.fx + this.xdir + 0.5), Math.floor(this.fy + this.ydir + 0.5) - 1, this.action.digFree);
     }
 
@@ -817,6 +879,7 @@ export class Clonk extends GameObject {
   private die(): void {
     this.alive = false;
     this.menu = null;
+    this.buildMenu = null;
     this.goTo = null;
     this.fightTarget = null;
     this.comDir = STOP;
@@ -858,6 +921,8 @@ function attachFor(a: ActionDef, dir: -1 | 1): number {
     case 'kneel':
     case 'throw':
     case 'fight':
+    case 'push':
+    case 'build':
       return CNAT.Bottom;
     case 'scale':
       return dir === -1 ? CNAT.Left : CNAT.Right;

@@ -63,7 +63,7 @@ export const KEY_HELP: Record<ControlStyle, [keys: string, action: string][]> = 
   jumpAndRun: [
     ['A / D or ← / →', 'walk (hold)'],
     ['W, ↑ or Space', 'jump, climb up, go in a door'],
-    ['S / ↓', 'climb down, leave a building'],
+    ['S / ↓', 'climb down, leave a building, build, hold on to an elevator or tower'],
     ['Q', 'dig, again to stop (steer with A / D / W / S)'],
     ['Q Q', 'use what you carry'],
     ['E', 'throw'],
@@ -76,6 +76,7 @@ export const KEY_HELP: Record<ControlStyle, [keys: string, action: string][]> = 
     ['S or ↑', 'jump, go in a door'],
     ['D or Enter', 'dig (← / → turn)'],
     ['D D', 'use what you carry'],
+    ['X X', 'build, hold on to an elevator or tower'],
     ['A or Space', 'throw'],
     ['Q / E or 1–9', 'previous / next clonk, pick a clonk'],
     ['W', 'whole crew (X X gathers them)'],
