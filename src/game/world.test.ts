@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../core/rng';
 import { generateMap } from '../landscape/generate';
+import { DEFAULT_LANDSCAPE, sval } from '../landscape/mapCreator';
 import { Landscape } from '../landscape/landscape';
 import { Mat } from '../landscape/materials';
 import { NO_CONTROL, type ControlState } from '../objects/clonk';
@@ -157,7 +158,7 @@ describe('Items', () => {
 describe('Determinism', () => {
   it('the same seed and inputs give identical worlds', () => {
     const make = (): World => {
-      const map = generateMap(400, 250, 7);
+      const map = generateMap({ ...DEFAULT_LANDSCAPE, mapWidth: sval(40, 0, 20, 250), mapHeight: sval(25, 0, 20, 250) }, 7);
       const w = World.fromMap(map, 7);
       w.addClonk(map.spawn.x, map.spawn.y, 0);
       return w;
@@ -189,5 +190,40 @@ describe('Water', () => {
     let water = 0;
     for (const c of land.cells) if (c === Mat.Water) water++;
     expect(water).toBe(20);
+  });
+});
+
+describe('Open map edges', () => {
+  it('with an open bottom, a clonk that falls out of the map dies and objects are gone', () => {
+    const land = new Landscape(100, 60);
+    land.bottomOpen = true;
+    const world = new World(land, new Rng(1));
+    const c = world.addClonk(50, 10, 0);
+    world.spawnItem('rock', 30, 10);
+    run(world, 200);
+    expect(c.alive).toBe(false);
+    expect(world.items).toHaveLength(0);
+    expect(world.events.some((e) => e.type === 'death')).toBe(true);
+  });
+
+  it('with a closed top, a jump hits the ceiling', () => {
+    const highest = (topOpen: boolean): number => {
+      const land = new Landscape(100, 60);
+      for (let x = 0; x < 100; x++) land.set(x, 20, Mat.Earth);
+      land.topOpen = topOpen;
+      const world = new World(land, new Rng(1));
+      const c = world.addClonk(50, 9, 0);
+      run(world, 20);
+      press(world, { up: true, pressedUp: true });
+      let top = c.y;
+      for (let t = 0; t < 40; t++) {
+        run(world, 1);
+        top = Math.min(top, c.y);
+      }
+      return top;
+    };
+    // The head (7 px above the clonk's middle) stops at the top row.
+    expect(highest(false)).toBe(7);
+    expect(highest(true)).toBeLessThan(0);
   });
 });

@@ -5,9 +5,9 @@ import './ui/menu.css';
 import { Application } from 'pixi.js';
 import { Sounds } from './audio/sounds';
 import { applyRoundResults, loadProfiles, saveProfiles, type KeyValueStore, type Profile } from './game/profiles';
-import { roundResults, startRound, type Round } from './game/round';
+import { newSeed, roundResults, startRound, type Round } from './game/round';
 import type { ScenarioDef } from './game/scenarios';
-import { MATERIALS } from './landscape/materials';
+import { TEXMAP, TUNNEL } from './landscape/materials';
 import { FLAG, ITEMS, STRUCTURES } from './objects/defs';
 import { CONTENT_BASE, loadAssets } from './render/assets';
 import { fitStage, h, setCssImages } from './ui/dom';
@@ -64,10 +64,10 @@ async function start(): Promise<void> {
   const sounds = new Sounds();
   const [assets, names] = await Promise.all([
     loadAssets(
-      MATERIALS.map((m) => m.texture).concat('SMOOTH2'),
+      TEXMAP.map((t) => t.texture).concat(TUNNEL.texture),
       [
         ...Object.values(ITEMS).map((i) => i.graphic.file),
-        ...Object.values(STRUCTURES).map((s) => s.graphic.file),
+        ...Object.values(STRUCTURES).flatMap((s) => (s.basement ? [s.graphic.file, s.basement.file] : [s.graphic.file])),
         FLAG.graphic.file,
         FLAG.graphic.overlay,
       ],
@@ -84,7 +84,7 @@ async function start(): Promise<void> {
   let game: GameScreen | null = null;
 
   const play = (scenario: ScenarioDef, profile: Profile): void => {
-    game = new GameScreen({ app, assets, sounds, ui }, startRound(scenario, profile, names), finish);
+    game = new GameScreen({ app, assets, sounds, ui }, startRound(scenario, profile, names, scenario.newMapEachRound ? newSeed() : scenario.seed), finish);
   };
 
   const finish = (round: Round): void => {

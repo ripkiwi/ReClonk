@@ -32,7 +32,7 @@ export class WorldView {
   private readonly landscape: LandscapeView;
   private readonly clonkSprites = new Map<Clonk, { body: Sprite; shirt: Sprite }>();
   private readonly itemSprites = new Map<Item, Sprite>();
-  private readonly structureSprites = new Map<Structure, { body: Sprite; door: Sprite; pole: Sprite; cloth: Sprite }>();
+  private readonly structureSprites = new Map<Structure, { body: Sprite; door: Sprite; pole: Sprite; cloth: Sprite; basement: Sprite | null }>();
   /** Buildings sit behind loose items and clonks. */
   private readonly structureLayer = new Container();
   /** Marks over the selected clonks. */
@@ -208,7 +208,14 @@ export class WorldView {
           door: new Sprite(),
           pole: new Sprite(),
           cloth: new Sprite(),
+          basement: null,
         };
+        const b = st.basement;
+        if (b && st.def.basement) {
+          s.basement = new Sprite(frame(tex[st.def.basement.file], 0, 0, b.w, b.h));
+          s.basement.position.set(b.x, b.y);
+          this.structureLayer.addChild(s.basement);
+        }
         const left = st.x + st.def.offset.x;
         const top = st.y + st.def.offset.y;
         s.body.position.set(left, top);
@@ -220,6 +227,10 @@ export class WorldView {
         s.cloth.position.set(fx, fy);
         this.structureLayer.addChild(s.body, s.door, s.pole, s.cloth);
         this.structureSprites.set(st, s);
+      }
+      if (s.basement && !st.basement) {
+        s.basement.destroy();
+        s.basement = null;
       }
       const d = st.doorFrame;
       s.door.visible = st.door > 0;

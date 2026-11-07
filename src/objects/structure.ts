@@ -1,5 +1,18 @@
 import type { StructureDef } from './defs';
 
+/** A building's stone basement: solid landscape under it, and what was there before. */
+export interface Basement {
+  /** Top-left corner and size, in landscape pixels. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Blast damage taken so far. */
+  damage: number;
+  /** Material, texture and tunnel flag of the pixels the basement replaced, row by row. */
+  saved: { cells: Uint8Array; tex: Uint8Array; tunnel: Uint8Array };
+}
+
 /** Ticks of the door animation: opening (10), open (20), closing (10), as in the original DOOR script. */
 export const DOOR_TICKS = 40;
 
@@ -14,6 +27,8 @@ export class Structure {
   energy = 0;
   /** Ticks left in the door animation (0 = closed). */
   door = 0;
+  /** The stone basement it stands on, until blasts break it. */
+  basement: Basement | null = null;
 
   constructor(
     readonly def: StructureDef,

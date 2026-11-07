@@ -18,7 +18,7 @@ import {
 import { rankName } from '../game/ranks';
 import { LOCAL_PLAYER, type Round } from '../game/round';
 import { deleteScenario, loadScenarios, saveEdit, saveScenarios } from '../game/scenarioStore';
-import { isOriginal, SCENARIOS, scenarioById, type ScenarioDef } from '../game/scenarios';
+import { isOriginal, landscapeSize, SCENARIOS, scenarioById, type ScenarioDef } from '../game/scenarios';
 import { KEY_HELP } from '../input/keyboard';
 import { bigButton, expBar, expProgress, h, portrait, rankBadge } from './dom';
 import { scenarioPreview } from './preview';
@@ -415,7 +415,7 @@ export class Menu {
             ondblclick: () => profile && this.play(s, profile),
           },
           s.title,
-          h('small', {}, `${plural(s.crewSize, 'clonk')} · ${s.width} × ${s.height}`),
+          h('small', {}, `${plural(s.crewSize, 'clonk')} · ${landscapeSize(s).width} × ${landscapeSize(s).height}`),
         ),
       );
     }

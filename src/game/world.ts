@@ -3,7 +3,7 @@ import type { GeneratedMap } from '../landscape/generate';
 import type { Landscape } from '../landscape/landscape';
 import { MATERIALS, type ItemId } from '../landscape/materials';
 import { Clonk, NO_CONTROL, type ControlState, type CrewCommand, type CrewInfo } from '../objects/clonk';
-import { BASE, CLONK, ITEMS, STRUCTURES } from '../objects/defs';
+import { BASE, BASEMENT, CLONK, ITEMS, STRUCTURES } from '../objects/defs';
 import type { GameObject } from '../objects/gameObject';
 import { Item } from '../objects/item';
 import { HIT_SPEED_2 } from '../objects/physics';
@@ -275,7 +275,7 @@ export class World {
           useItem: () => false,
         });
       }
-      if (c.contained) continue;
+      if (c.contained || this.fellOut(c)) continue;
       if (carried && !c.carrying) this.events.push({ type: 'throw', clonk: c, tick: this.tick });
       c.tick(this.land);
       if (c.action.procedure === 'fight') this.fighting(c);
@@ -297,6 +297,10 @@ export class World {
 
     for (const item of this.items) {
       if (item.container || item.removed) continue;
+      if (this.fellOut(item)) {
+        item.removed = true;
+        continue;
+      }
       const hit = item.tick(this.land);
       if (hit && item.def.explodeOnHit) {
         item.removed = true;
@@ -311,6 +315,16 @@ export class World {
     this.land.step(this.tick, this.rng);
     this.afterDeaths();
     this.tick++;
+  }
+
+  /**
+   * With an open bottom, whatever falls out of the map is gone, like in the
+   * original: a clonk dies (the last enemy who hurt it gets the kill).
+   */
+  private fellOut(o: Clonk | Item): boolean {
+    if (!this.land.bottomOpen || o.y < this.land.height + 20) return false;
+    if (o instanceof Clonk && o.alive) this.hurt(o, 1e6, null);
+    return true;
   }
 
   /** The clonk that threw an item last, if it's still around. */
@@ -479,6 +493,7 @@ export class World {
       // Whatever the blast flings counts as thrown by whoever set it off.
       if (fling(item) > 0 && by) item.thrownBy = by.id;
     }
+    for (const s of this.structures) this.blastBasement(s, x, y, radius);
 
     const counts = this.land.blast(x, y, radius, this.rng);
     let freed = 0;
@@ -499,6 +514,30 @@ export class World {
       }
     }
     return freed;
+  }
+
+  /**
+   * A direct hit (within 5 px of it, as in C4Game::BlastObjects) damages a
+   * basement by the blast's level. At 150 it falls apart into 4 rocks
+   * (Basements.c4d) and the ground it replaced comes back.
+   */
+  private blastBasement(s: Structure, x: number, y: number, level: number): void {
+    const b = s.basement;
+    if (!b || y - b.y < -5 || y - b.y > b.h - 1 + 10 || x - b.x < -5 || x - b.x > b.w - 1 + 10) return;
+    b.damage += level;
+    if (b.damage < BASEMENT.breakDamage) return;
+    s.basement = null;
+    for (let dy = 0; dy < b.h; dy++) {
+      for (let dx = 0; dx < b.w; dx++) {
+        const k = dy * b.w + dx;
+        if (!this.land.inBounds(b.x + dx, b.y + dy)) continue;
+        this.land.paint(b.x + dx, b.y + dy, b.saved.cells[k], b.saved.tex[k]);
+        this.land.setTunnel(b.x + dx, b.y + dy, b.saved.tunnel[k] === 1);
+      }
+    }
+    for (let i = 0; i < BASEMENT.rocks; i++) {
+      this.spawnItem('rock', s.x, b.y - 5, (this.rng.int(31) - 15) / 10, -(this.rng.int(16) + 5) / 10, this.rng.int(3) + 1);
+    }
   }
 
   /**

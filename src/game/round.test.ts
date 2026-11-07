@@ -47,28 +47,40 @@ describe('Scenarios', () => {
     expect(scenarioById('nope')).toBeUndefined();
   });
 
-  it('Gold Mine is the original rolling map with a lake', () => {
-    const s = scenarioById('goldmine')!;
-    expect(s.map).toEqual({});
-    const map = generateMap(s.width, s.height, s.seed, s.map);
-    let water = 0;
-    for (let i = 0; i < map.land.cells.length; i++) if (map.land.cells[i] === Mat.Water) water++;
-    expect(water).toBeGreaterThan(1000);
+  it('Gold Mine and Minor Melee have the landscape values of the originals', () => {
+    const mine = scenarioById('goldmine')!.landscape;
+    expect([mine.mapWidth.std, mine.mapHeight.std, mine.mapZoom.std]).toEqual([80, 60, 10]);
+    expect([mine.amplitude, mine.phase, mine.period, mine.random, mine.liquidLevel].map((v) => [v.std, v.rnd])).toEqual([
+      [10, 10],
+      [50, 50],
+      [10, 10],
+      [20, 20],
+      [20, 30],
+    ]);
+    expect(mine.mapPlayerExtend).toBe(true);
+    expect(mine.inEarthLevel.std).toBe(65);
+    const melee = scenarioById('minor-melee')!.landscape;
+    expect([melee.mapWidth.std, melee.mapHeight.std, melee.amplitude.std, melee.random.std, melee.liquidLevel.std]).toEqual([100, 60, 11, 46, 43]);
+    expect(melee.layers.map((l) => `${l.name}=${l.count}`).join(';')).toBe(
+      'Rock=7;Rock-Ridge=7;Gold=7;Granite=4;Water-Smooth=7;Earth-Rough=50;Earth-Smooth2=50',
+    );
   });
 
-  it('Minor Melee is pretty flat, with lots of flints and no lake', () => {
+  it('Minor Melee: hills and lakes, flints in the earth and lying around', () => {
     const s = scenarioById('minor-melee')!;
-    const melee = generateMap(s.width, s.height, s.seed, s.map);
-    const mine = generateMap(s.width, s.height, s.seed, {});
-    const spread = (surface: Int32Array): number => Math.max(...surface) - Math.min(...surface);
-    expect(spread(melee.surface)).toBeLessThan(spread(mine.surface) / 3);
-    expect(spread(melee.surface)).toBeLessThan(40);
-
-    const flints = melee.items.filter((i) => i.id === 'flint');
-    const loose = flints.filter((i) => melee.land.get(i.x, i.y) === Mat.Sky);
-    expect(flints.length).toBeGreaterThan(80);
-    expect(loose.length).toBeGreaterThan(30);
-    expect(melee.land.cells.includes(Mat.Water)).toBe(false);
+    for (const seed of [1, 2, 3]) {
+      const m = generateMap(s.landscape, seed, { players: 2 });
+      expect([m.land.width, m.land.height]).toEqual([1000, 600]);
+      // Water level 43: lakes fill the open air below 57% of the map height (map row 34 of 60).
+      const lake = [...m.surface].filter((y, x) => m.land.get(x, y) === Mat.Water);
+      expect(lake.length).toBeGreaterThan(50);
+      expect(new Set(lake)).toEqual(new Set([340]));
+      const flints = m.items.filter((i) => i.id === 'flint');
+      const loose = flints.filter((i) => m.land.get(i.x, i.y) === Mat.Sky);
+      expect(flints.length - loose.length).toBeGreaterThan(15);
+      expect(loose.length).toBeGreaterThan(15);
+      expect(m.land.isSolid(m.spawn.x, m.spawn.y + 11)).toBe(true);
+    }
   });
 
   it('flints lying on the surface stay put until someone picks them up', () => {

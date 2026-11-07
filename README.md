@@ -22,12 +22,23 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
   every 5th command (original rule), finding gold (+20), blasting rocks and nuggets loose (+2 each)
   and finishing a round (+100). Promotions show up in game with a fanfare, and higher ranks climb,
   hang and swim faster (original rule, maxing out at rank 20).
-- **Two scenarios:** *Gold Mine* (rolling hills, rock and gold veins, a lake, your home base) and
-  *Minor Melee* (a pretty flat map with flints everywhere, three clonks against a computer crew).
-- **Scenario settings**, like the original's scenario properties: map size and seed, hills, rock and gold veins,
-  the lake, objects in the earth and on the surface, crew size and what each clonk carries, the home base
-  (gold and shop stock), computer crews to play against and "last crew standing", with a map preview that follows every change. Editing a scenario that comes with the
-  game saves a copy under *Your scenarios*; editing one of yours changes it. Your scenarios are kept in the browser.
+- **The original's map creator.** Maps are made like in Clonk Rage (`C4MapCreator`, ported): a scenario
+  describes its landscape with the original values (map width and height, zoom, amplitude, phase, period, random,
+  water level, material layers, objects in the earth), the map creator draws a small map from them, and the
+  landscape zoom turns every map pixel into a ragged chunk of material, drawn with the original textures
+  (smooth, rough and ridged earth, rock and granite). Values can have a random range, and by default every round
+  gets a new map, like the original.
+- **Two scenarios with the original's values:** *Gold Mine* (gold veins, maybe a lake, your home base; the map gets
+  wider for every crew) and *Minor Melee* (hills and lakes, flints in the earth and lying around, three
+  clonks against a computer crew).
+- **Scenario Properties**, laid out like the original's dialog: *Game* (goal, computer crews, description),
+  *Equipment* (wealth, crew, buildings, what each clonk carries, home base material), *Landscape* (the original's
+  coloured sliders with random ranges, top and bottom open, width according to player number, and the map
+  preview with the screen size frame, layers and "preview for 1 to 4 players") and *Environment* (material layers,
+  ground, objects in the earth and on the surface). Editing a scenario that comes with the game saves a copy under
+  *Your scenarios*; editing one of yours changes it. Your scenarios are kept in the browser.
+- **Basements:** buildings stand on the original's 60×8 stone basement. It can't be dug; nine flint blasts next to
+  it break it into four rocks.
 - Walk, jump, climb walls, hang from ceilings, swim. Dig through earth and sand; rock, gold and granite can't be dug.
 - A clonk carries one item. Throw it; flints explode on impact. Blasting rock and gold veins drops rocks and
   gold nuggets (one per 75 blasted pixels, like the original); granite only cracks.
@@ -51,7 +62,7 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
 - **Fist fights:** clonks of different crews who run into each other start fighting, like the original: each round
   of the fight a clonk swings half the time, and half the swings land. A punch takes 5 energy between equals and more
   from a weaker fighter, up to 10, which knocks them over. `E` (`A` in classic) swings, down walks away.
-- **Computer crews** (scenario setting, 0 to 3): they pick up flints and rocks, dig them out of the ground, aim their
+- **Computer crews** (scenario property, 0 to 3): they pick up flints and rocks, dig them out of the ground, aim their
   throws (leading a moving target, and never at their own crew), dodge incoming throws, and fight with their fists.
   Each one is as big and as experienced as your crew. Enemy bases keep their doors shut to you.
 - **Last crew standing** (the original's Melee goal): a crew with no clonks left is out, and the round ends when only
@@ -121,7 +132,7 @@ npm run preview    # serve the built dist/ locally
 ```
 src/
   core/        fixed-step loop, seeded RNG
-  landscape/   material grid, flowing water, digging and blasting, map generator
+  landscape/   material grid, flowing water, digging and blasting, the original's map creator
   objects/     clonk and item behaviour, ported movement physics, object definitions
   game/        the World (steps everything, explosions, experience), scenarios,
                rounds, player profiles and ranks
@@ -134,7 +145,8 @@ public/classic/  original Clonk graphics (CC BY-NC 4.0, see its README)
 ```
 
 Movement, digging and contact rules are ported from the Clonk Rage engine (`C4Movement.cpp`,
-`C4Object.cpp`, `C4ObjectCom.cpp`), and speeds come from the original `DefCore.txt` physicals,
+`C4Object.cpp`, `C4ObjectCom.cpp`), the map creator and landscape zoom from `C4Map.cpp` and `C4Landscape.cpp`,
+and speeds come from the original `DefCore.txt` physicals,
 so the clonk should feel like the original. Those files say so in a header comment.
 
 The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js/unsafe-eval`
@@ -145,9 +157,9 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
 1. **Foundations** (done): project setup, landscape sandbox, CI, deploy.
 2. **A clonk** (now): walk, jump, climb, swim, dig, throw rocks and flints that blast terrain;
    menus, player profiles, crews, ranks and the first two scenarios.
-3. **Economy and bases** (started): huts and flags, healing, buying and selling, buying clonks, scenario settings,
-   fights, thrown-object hits and computer crews are in; next: the original's Scenario Properties and map creator,
-   foundations under buildings, construction kits, then castles and elevators.
+3. **Economy and bases** (started): huts and flags, healing, buying and selling, buying clonks, fights,
+   thrown-object hits, computer crews, the original's Scenario Properties and map creator, and basements under
+   buildings are in; next: construction kits, then castles and elevators.
 4. **Modding and content:** a public modding API in TypeScript + JSON (the base game itself is a mod), boats, scenarios, a Classic content pack.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
 

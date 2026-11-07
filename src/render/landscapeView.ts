@@ -1,6 +1,6 @@
 import { BufferImageSource, Sprite, Texture } from 'pixi.js';
 import type { Landscape } from '../landscape/landscape';
-import { MATERIALS, Mat, TUNNEL } from '../landscape/materials';
+import { MATERIALS, Mat, TEXMAP, TUNNEL } from '../landscape/materials';
 import type { GrayTexture } from './assets';
 
 /** Precomputed 256-step colour ramp from a material's dark/base/light colours. */
@@ -20,13 +20,16 @@ function ramp(colors: [number, number, number], brightness: number): Uint8Array 
 
 /**
  * Draws the landscape as one texture, one texel per material pixel, coloured
- * by the original material textures. Only re-colours the pixels that changed.
+ * like the original: each pixel's material colours, patterned by the texture
+ * of its texture map entry (smooth, rough, ridged earth...). Only re-colours
+ * the pixels that changed. Basements aren't drawn here: their buildings draw them.
  */
 export class LandscapeView {
   readonly sprite: Sprite;
   private readonly pixels: Uint8Array;
   private readonly source: BufferImageSource;
   private readonly ramps: Uint8Array[];
+  /** Pattern of every texture map entry. */
   private readonly textures: GrayTexture[];
   private readonly tunnelRamp: Uint8Array;
   private readonly tunnelTex: GrayTexture;
@@ -45,7 +48,7 @@ export class LandscapeView {
     });
     this.sprite = new Sprite(new Texture({ source: this.source }));
     this.ramps = MATERIALS.map((m) => ramp(m.colors, 1.15));
-    this.textures = MATERIALS.map((m) => textures[m.texture]);
+    this.textures = TEXMAP.map((t) => textures[t.texture]);
     this.tunnelRamp = ramp(TUNNEL.colors, 1.0);
     this.tunnelTex = textures[TUNNEL.texture];
   }
@@ -54,7 +57,7 @@ export class LandscapeView {
     const d = this.land.dirty;
     d.clamp(this.land.width, this.land.height);
     if (d.empty) return;
-    const { cells, width } = this.land;
+    const { cells, tex, width } = this.land;
     const px = this.pixels;
     for (let y = d.y0; y <= d.y1; y++) {
       for (let x = d.x0; x <= d.x1; x++) {
@@ -62,11 +65,12 @@ export class LandscapeView {
         const m = cells[i];
         const o = i * 4;
         if (m === Mat.Sky) {
-          if (this.land.tunnel[i]) this.shade(o, x, y, this.tunnelTex, this.tunnelRamp, 255);
+          // Tunnels from the map keep their texture; dug-out ones get the tunnel's own.
+          if (this.land.tunnel[i]) this.shade(o, x, y, tex[i] ? this.textures[tex[i]] : this.tunnelTex, this.tunnelRamp, 255);
           else px[o] = px[o + 1] = px[o + 2] = px[o + 3] = 0;
-        } else if (m === Mat.Water) {
-          this.shade(o, x, y, this.textures[m], this.ramps[m], 190);
-        } else this.shade(o, x, y, this.textures[m], this.ramps[m], 255);
+        } else if (m === Mat.Basement) {
+          px[o] = px[o + 1] = px[o + 2] = px[o + 3] = 0;
+        } else this.shade(o, x, y, this.textures[tex[i]], this.ramps[m], m === Mat.Water ? 190 : 255);
       }
     }
     d.clear();

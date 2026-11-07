@@ -7,6 +7,7 @@ import { NO_CONTROL, type ControlState } from '../objects/clonk';
 import { CLONK } from '../objects/defs';
 import { buildOnSurface, setupDefaultBases } from './homeBase';
 import { World } from './world';
+import { scenarioById } from './scenarios';
 
 function flatWorld(w = 300, h = 120, ground = 80): World {
   const land = new Landscape(w, h);
@@ -152,8 +153,34 @@ describe('Buildings and home bases', () => {
     expect(c.action.name).toBe('Dead');
   });
 
+  it('stands on a stone basement that can be walked on but not dug', () => {
+    const { world, hut } = atHut();
+    const b = hut.basement!;
+    expect([b.x, b.y, b.w, b.h]).toEqual([70, 80, 60, 8]);
+    for (const [x, y] of [[70, 80], [129, 87], [100, 84]]) expect(world.land.get(x, y)).toBe(Mat.Basement);
+    expect(world.land.get(69, 80)).toBe(Mat.Earth);
+    expect(world.land.get(100, 88)).toBe(Mat.Earth);
+    expect(world.land.isSolid(100, 80)).toBe(true);
+    world.land.dig(100, 84, 6);
+    expect(world.land.get(100, 84)).toBe(Mat.Basement);
+  });
+
+  it('a basement takes blasts until it breaks into 4 rocks, and the ground comes back', () => {
+    const { world, hut } = atHut();
+    const rocks = (): number => world.items.filter((i) => i.def.id === 'rock').length;
+    const before = rocks();
+    // Flints go off right next to it: 8 of them are 144 damage, the 9th breaks it (150, like the original).
+    for (let i = 0; i < 8; i++) world.explode(100, 92, 18);
+    expect(hut.basement).not.toBeNull();
+    expect(world.land.get(100, 82)).toBe(Mat.Basement);
+    world.explode(100, 92, 18);
+    expect(hut.basement).toBeNull();
+    expect(rocks()).toBe(before + 4);
+    expect(world.land.get(75, 81)).toBe(Mat.Earth);
+  });
+
   it('default scenario: your hut with a flag and an ordinary hut, on dry ground', () => {
-    const map = generateMap(1400, 640, 1337);
+    const map = generateMap(scenarioById('goldmine')!.landscape, 1337);
     const world = World.fromMap(map, 1337);
     const { home } = setupDefaultBases(world, 0, map.spawn.x);
     expect(world.structures).toHaveLength(2);
