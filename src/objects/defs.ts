@@ -39,7 +39,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   },
 };
 
-export type Procedure = 'walk' | 'flight' | 'scale' | 'hangle' | 'dig' | 'swim' | 'throw' | 'kneel' | 'dead';
+export type Procedure = 'walk' | 'flight' | 'scale' | 'hangle' | 'dig' | 'swim' | 'throw' | 'kneel' | 'fight' | 'dead';
 
 export interface ActionDef {
   name: string;
@@ -73,6 +73,10 @@ const actions: ActionDef[] = [
   { name: 'KneelUp', procedure: 'kneel', length: 4, delay: 1, facetX: 64, facetY: 140, next: 'Walk' },
   { name: 'FlatUp', procedure: 'kneel', length: 8, delay: 1, facetX: 0, facetY: 180, next: 'KneelUp', disabled: true },
   { name: 'Throw', procedure: 'throw', length: 8, delay: 1, facetX: 0, facetY: 200, next: 'Walk', inLiquid: 'Swim' },
+  // Fist fights: standing off, punching, and reeling from a punch.
+  { name: 'Fight', procedure: 'fight', length: 7, delay: 4, facetX: 128, facetY: 180, next: 'Fight', disabled: true },
+  { name: 'Punch', procedure: 'fight', length: 8, delay: 2, facetX: 0, facetY: 220, next: 'Fight', disabled: true },
+  { name: 'GetPunched', procedure: 'fight', length: 8, delay: 3, facetX: 128, facetY: 200, next: 'Fight', disabled: true },
   { name: 'Dead', procedure: 'dead', length: 6, delay: 3, facetX: 0, facetY: 240, next: 'Hold', disabled: true },
 ];
 
@@ -95,9 +99,11 @@ export const CLONK = {
   collection: { x: -8, y: -10, w: 16, h: 27 },
   /** A default clonk carries one object. */
   maxContents: 1,
-  /** Full energy (Physical Energy). The HUD shows it divided by 1000, so 50. */
+  /** Full energy (Physical Energy) at the lowest rank. The HUD shows it divided by 1000, so 50. */
   energy: 50000,
-  physical: { walk: 70000, jump: 40000, scale: 30000, hangle: 30000, dig: 40000, swim: 60000, throw: 50000 },
+  /** Weight, for how far hits fling it (DefCore Mass). */
+  mass: 50,
+  physical: { walk: 70000, jump: 40000, scale: 30000, hangle: 30000, dig: 40000, swim: 60000, throw: 50000, fight: 50000 },
   actions: Object.fromEntries(actions.map((a) => [a.name, a])) as Record<string, ActionDef>,
   graphic: { file: 'clonk/Graphics.png', overlay: 'clonk/Overlay.png' },
 };

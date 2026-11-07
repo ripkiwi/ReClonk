@@ -6,6 +6,7 @@ import { Clonk, NO_CONTROL, type ControlState, type CrewCommand, type CrewInfo }
 import { BASE, CLONK, ITEMS, STRUCTURES } from '../objects/defs';
 import type { GameObject } from '../objects/gameObject';
 import { Item } from '../objects/item';
+import { HIT_SPEED_2 } from '../objects/physics';
 import { Structure } from '../objects/structure';
 
 export type WorldEvent =
@@ -14,7 +15,19 @@ export type WorldEvent =
   | { type: 'collect'; clonk: Clonk; item: Item; tick: number }
   | { type: 'throw'; clonk: Clonk; tick: number }
   /** A bought clonk joined the crew in the field. */
-  | { type: 'recruit'; clonk: Clonk; tick: number };
+  | { type: 'recruit'; clonk: Clonk; tick: number }
+  /** A flying object hit a clonk. */
+  | { type: 'hit'; clonk: Clonk; points: number; tick: number }
+  /** A clonk swung a punch in a fist fight (it lands half the time). */
+  | { type: 'swing'; clonk: Clonk; tick: number }
+  /** A punch landed in a fist fight. */
+  | { type: 'punch'; clonk: Clonk; target: Clonk; tick: number }
+  /** A clonk died; `killer` is the enemy clonk credited with it. */
+  | { type: 'death'; clonk: Clonk; killer: Clonk | null; tick: number }
+  /** A player has no clonk left standing (last crew standing). */
+  | { type: 'eliminated'; player: number; tick: number }
+  /** The round's goal is decided: `winner` is the last player standing, or -1 if nobody is. */
+  | { type: 'gameOver'; winner: number; tick: number };
 
 /** Extra experience on top of the original's "1 per 5 commands", so promotions come at a fun pace. */
 export const EXPERIENCE = {
@@ -57,6 +70,19 @@ export interface CrewCursor {
 
 /** Ticks a thrown or dropped item can't be picked straight back up. */
 const NO_COLLECT_TICKS = 20;
+/**
+ * Damage from flying objects, times the original's. The original's rocks
+ * barely scratch; three times as much makes a good throw count.
+ */
+export const HIT_DAMAGE = 3;
+
+/** How a round is won. 'melee': the last crew standing wins (the original's Melee goal). */
+export type Goal = 'none' | 'melee';
+
+/** Controls for a computer player's clonks, one clonk at a time. */
+export interface Brain {
+  control(c: Clonk): ControlState;
+}
 
 /**
  * The whole game state. Advances in fixed ticks from player inputs only, so
@@ -75,6 +101,14 @@ export class World {
    * bought clonks have no name or rank.
    */
   recruit: ((player: number) => CrewInfo | null) | null = null;
+  /** Computer players, by player number. Their clonks follow these instead of the controls. */
+  readonly brains = new Map<number, Brain>();
+  goal: Goal = 'none';
+  /** Players whose crews were wiped out. */
+  readonly eliminated = new Set<number>();
+  /** Set when the goal is decided: the winning player, or -1 if nobody is left. */
+  winner: number | null = null;
+  private readonly deaths = new Set<Clonk>();
   tick = 0;
   /** Things that happened this tick, for effects and sound. The renderer drains it. */
   readonly events: WorldEvent[] = [];
@@ -99,6 +133,11 @@ export class World {
   /** A player's clonks, in the order they joined the round (the crew bar order). */
   crewOf(player: number): Clonk[] {
     return this.clonks.filter((c) => c.owner === player);
+  }
+
+  /** Players fight each other: every player is an enemy of every other one, like in a melee. */
+  hostile(a: number, b: number): boolean {
+    return a !== b && a >= 0 && b >= 0;
   }
 
   /** The player's crew cursor, kept valid: a living leader that's always selected. */
@@ -218,10 +257,12 @@ export class World {
     }
 
     for (const c of this.clonks) {
+      const brain = this.brains.get(c.owner);
       const ctrl = controls.get(c.owner);
       // Only selected clonks follow the controls. The others carry on with
-      // what they were doing, or walk over to the leader.
-      const mine = ctrl && this.cursor(c.owner).selected.has(c) ? ctrl : null;
+      // what they were doing, or walk over to the leader. A computer player
+      // steers each of its clonks.
+      const mine = brain ? (c.alive ? brain.control(c) : null) : ctrl && this.cursor(c.owner).selected.has(c) ? ctrl : null;
       if (c.contained) {
         if (c.alive && mine) this.containedControl(c, mine);
         continue;
@@ -237,6 +278,7 @@ export class World {
       if (c.contained) continue;
       if (carried && !c.carrying) this.events.push({ type: 'throw', clonk: c, tick: this.tick });
       c.tick(this.land);
+      if (c.action.procedure === 'fight') this.fighting(c);
       const got = c.tryCollect(this.items, this.land);
       if (got) {
         this.events.push({ type: 'collect', clonk: c, item: got, tick: this.tick });
@@ -247,6 +289,9 @@ export class World {
       }
     }
 
+    // Hostile clonks that run into each other start a fist fight (checked every 5 ticks, like the original).
+    if (this.tick % 5 === 0) this.startFights();
+
     if (this.tick % BASE.healInterval === 0) for (const c of this.clonks) this.healInBase(c);
     for (const s of this.structures) s.tick();
 
@@ -255,15 +300,147 @@ export class World {
       const hit = item.tick(this.land);
       if (hit && item.def.explodeOnHit) {
         item.removed = true;
-        const freed = this.explode(item.x, item.y, item.def.explodeOnHit);
-        const by = this.clonks.find((c) => c.id === item.thrownBy);
+        const by = this.thrower(item);
+        const freed = this.explode(item.x, item.y, item.def.explodeOnHit, by);
         if (by && freed && by.doExperience(freed * EXPERIENCE.blastedLoose)) this.promoted(by);
       }
     }
     if (this.items.some((i) => i.removed)) this.items = this.items.filter((i) => !i.removed);
+    this.objectHits();
 
     this.land.step(this.tick, this.rng);
+    this.afterDeaths();
     this.tick++;
+  }
+
+  /** The clonk that threw an item last, if it's still around. */
+  private thrower(item: Item): Clonk | null {
+    return item.thrownBy < 0 ? null : (this.clonks.find((c) => c.id === item.thrownBy) ?? null);
+  }
+
+  /**
+   * Hurt a clonk by `points` and remember who did it, for the kill. Like the
+   * original, hurting yourself doesn't take the credit away from an enemy.
+   */
+  hurt(c: Clonk, points: number, by: Clonk | null): void {
+    if (!c.alive) return;
+    if (by && (by.owner !== c.owner || !c.lastHurtBy)) c.lastHurtBy = by;
+    if (points > 0) c.doEnergy(-points);
+  }
+
+  /**
+   * Flying objects hit the clonks they pass through (C4GameObjects::CrossCheck):
+   * damage grows with the speed between the two and the object's weight, and
+   * the clonk gets flung the way the object flies. An object that's still
+   * inside a clonk next tick hits again, so a lucky arc can hit many times.
+   */
+  private objectHits(): void {
+    for (const item of this.items) {
+      if (item.container || item.removed) continue;
+      if (Math.abs(item.xdir) + Math.abs(item.ydir) < HIT_SPEED_2) continue;
+      for (const c of this.clonks) {
+        if (!c.alive || c.contained) continue;
+        // Just thrown: it can't hit the thrower, who may be jumping up after it.
+        if (item.noCollect > 0 && item.thrownBy === c.id) continue;
+        const dx = item.x - (c.x - CLONK.width / 2);
+        const dy = item.y - (c.y - CLONK.height / 2);
+        if (dx < 0 || dx >= CLONK.width || dy < 0 || dy >= CLONK.height) continue;
+        const rx = item.xdir - c.xdir;
+        const ry = item.ydir - c.ydir;
+        let energy = Math.round(((rx * rx + ry * ry) * item.def.mass) / 5);
+        energy = Math.max(Math.trunc(energy / 3), energy ? 1 : 0);
+        const points = Math.trunc(energy / 5) * HIT_DAMAGE;
+        this.hurt(c, points, this.thrower(item));
+        this.events.push({ type: 'hit', clonk: c, points, tick: this.tick });
+        // Flying clonks only get flung again every third tick.
+        if (c.alive && (this.tick % 3 === 0 || c.action.procedure !== 'flight')) {
+          const k = 50 / Math.max(CLONK.mass, 50);
+          c.fling(item.xdir * k, -Math.abs(item.ydir / 2) * k);
+        }
+      }
+    }
+  }
+
+  /** Every 5 ticks: a clonk standing in a hostile clonk starts a fist fight with it (OCF_FightReady). */
+  private startFights(): void {
+    // Nobody fights while swimming.
+    const ready = (c: Clonk): boolean => c.alive && !c.contained && !c.action.disabled && c.action.procedure !== 'swim';
+    for (const a of this.clonks) {
+      if (!ready(a)) continue;
+      for (const b of this.clonks) {
+        if (b === a || !ready(b) || !this.hostile(a.owner, b.owner)) continue;
+        const dx = a.x - (b.x - CLONK.width / 2);
+        const dy = a.y - (b.y - CLONK.height / 2);
+        if (dx < 0 || dx >= CLONK.width || dy < 0 || dy >= CLONK.height) continue;
+        a.startFight(b);
+        b.startFight(a);
+        this.fightStart(a);
+        this.fightStart(b);
+        break;
+      }
+    }
+  }
+
+  /** The fight's dice (the Clonk script's Fighting and Punching) and its training. */
+  private fighting(c: Clonk): void {
+    const target = c.fightTarget;
+    if (!target) return;
+    if (c.actionEnded === 'Punch') {
+      this.events.push({ type: 'swing', clonk: c, tick: this.tick });
+      if (this.rng.int(2) === 0) this.punch(c, target);
+    }
+    if (c.action.name === 'Fight' && c.actionStarted) this.fightStart(c);
+    // Fighting trains: 2 experience every 35 ticks.
+    if (this.tick % 35 === 0 && c.doExperience(2)) this.promoted(c);
+  }
+
+  /** Each round of a fight: half the time the clonk swings a punch. */
+  private fightStart(c: Clonk): void {
+    if (c.action.name === 'Fight' && this.rng.int(2) === 0) c.setAction('Punch');
+  }
+
+  /**
+   * A punch lands (ObjectComPunch): 5 points between equals, more for the
+   * stronger fighter, up to 10, which knocks the other one over.
+   */
+  private punch(c: Clonk, target: Clonk): void {
+    if (!target.alive || target.action.procedure !== 'fight') return;
+    const punch = Math.max(0, Math.min(10, Math.trunc((5 * c.fight) / target.fight)));
+    if (!punch) return;
+    this.hurt(target, punch, c);
+    this.events.push({ type: 'punch', clonk: c, target, tick: this.tick });
+    if (!target.alive) return;
+    target.comDir = { x: 0, y: 0 };
+    if (punch >= 10) target.fling(1.5 * c.dir, -2);
+    else target.setAction('GetPunched', 2.5 * c.dir, 0);
+  }
+
+  /**
+   * Clonks that died this tick: they drop what they carry, and an enemy who
+   * hurt them last gets the kill. Then check the goal.
+   */
+  private afterDeaths(): void {
+    for (const c of this.clonks) {
+      if (c.alive || this.deaths.has(c)) continue;
+      this.deaths.add(c);
+      this.dropAll(c);
+      const killer = c.lastHurtBy && this.hostile(c.lastHurtBy.owner, c.owner) ? c.lastHurtBy : null;
+      if (killer?.info) killer.info.kills = (killer.info.kills ?? 0) + 1;
+      this.events.push({ type: 'death', clonk: c, killer, tick: this.tick });
+    }
+    if (this.goal !== 'melee' || this.winner !== null) return;
+    const players = new Set(this.clonks.map((c) => c.owner));
+    if (players.size < 2) return;
+    const standing = new Set(this.clonks.filter((c) => c.alive).map((c) => c.owner));
+    for (const p of players) {
+      if (standing.has(p) || this.eliminated.has(p)) continue;
+      this.eliminated.add(p);
+      this.events.push({ type: 'eliminated', player: p, tick: this.tick });
+    }
+    if (standing.size <= 1) {
+      this.winner = standing.size ? [...standing][0] : -1;
+      this.events.push({ type: 'gameOver', winner: this.winner, tick: this.tick });
+    }
   }
 
   private promoted(c: Clonk): void {
@@ -275,7 +452,7 @@ export class World {
    * (one per 75 blasted pixels, like the original), and nearby objects get flung.
    * Returns how many objects (rocks, nuggets) the blast broke loose.
    */
-  explode(x: number, y: number, radius: number): number {
+  explode(x: number, y: number, radius: number, by: Clonk | null = null): number {
     this.events.push({ type: 'explosion', x, y, radius, tick: this.tick });
 
     // Fling everything nearby away from the blast.
@@ -293,11 +470,15 @@ export class World {
     };
     for (const c of this.clonks) {
       if (c.contained) continue;
-      this.blastDamage(c, x, y, radius);
+      this.blastDamage(c, x, y, radius, by);
       const k = fling(c);
       if (k > 0.2 && c.alive) c.setAction('Tumble');
     }
-    for (const item of this.items) if (!item.container && !item.removed) fling(item);
+    for (const item of this.items) {
+      if (item.container || item.removed) continue;
+      // Whatever the blast flings counts as thrown by whoever set it off.
+      if (fling(item) > 0 && by) item.thrownBy = by.id;
+    }
 
     const counts = this.land.blast(x, y, radius, this.rng);
     let freed = 0;
@@ -325,7 +506,7 @@ export class World {
    * 5 px of its shape) costs level/3 energy, the shock wave (within `level` px)
    * another level/2.
    */
-  private blastDamage(c: Clonk, x: number, y: number, level: number): void {
+  private blastDamage(c: Clonk, x: number, y: number, level: number, by: Clonk | null): void {
     if (!c.alive) return;
     const left = c.x - CLONK.width / 2;
     const top = c.y - CLONK.height / 2;
@@ -334,7 +515,7 @@ export class World {
       points += Math.trunc(level / 3);
     }
     if (Math.abs(y - c.y) <= level && Math.abs(x - c.x) <= level) points += Math.trunc(level / 2);
-    if (points && c.doEnergy(-points)) this.dropAll(c);
+    if (points) this.hurt(c, points, by);
   }
 
   private dropAll(c: Clonk): void {
@@ -363,6 +544,11 @@ export class World {
   private tryEnter(c: Clonk): boolean {
     const s = this.structureAt(c);
     if (!s) return false;
+    // Enemies can't get into your base (BASEFUNC_RejectEntrance).
+    if (s.base >= 0 && this.hostile(s.base, c.owner)) {
+      this.say(c.owner, 'Enemy base: the door stays shut');
+      return true;
+    }
     c.contained = s;
     c.menu = null;
     c.comDir = { x: 0, y: 0 };
@@ -465,7 +651,7 @@ export class World {
     const at = base.exitPoint();
     const n = this.addClonk(at.x, at.y, c.owner);
     n.controlStyle = c.controlStyle;
-    n.info = this.recruit?.(c.owner) ?? null;
+    n.join(this.recruit?.(c.owner) ?? null);
     n.setAction('Walk', 0, 0);
     n.dir = c.dir;
     base.openDoor();
@@ -480,7 +666,7 @@ export class World {
    */
   private healInBase(c: Clonk): void {
     const s = c.contained;
-    if (!s || !c.alive || s.base !== c.owner || c.energy >= CLONK.energy) return;
+    if (!s || !c.alive || s.base !== c.owner || c.energy >= c.maxEnergy) return;
     if (s.energy <= 0) {
       const p = this.players.get(s.base);
       if (p && p.wealth >= BASE.regenerateEnergyPrice) {
@@ -488,7 +674,7 @@ export class World {
         s.energy = Math.min(s.def.energy, s.energy + 100 * 1000);
       }
     }
-    const transfer = Math.min(BASE.healTransfer, s.energy, CLONK.energy - c.energy);
+    const transfer = Math.min(BASE.healTransfer, s.energy, c.maxEnergy - c.energy);
     if (transfer <= 0) return;
     s.energy -= transfer;
     c.doEnergy(transfer, true);

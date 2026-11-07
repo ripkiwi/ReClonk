@@ -16,7 +16,7 @@ import {
   type ProfileStore,
 } from '../game/profiles';
 import { rankName } from '../game/ranks';
-import type { Round } from '../game/round';
+import { LOCAL_PLAYER, type Round } from '../game/round';
 import { deleteScenario, loadScenarios, saveEdit, saveScenarios } from '../game/scenarioStore';
 import { isOriginal, SCENARIOS, scenarioById, type ScenarioDef } from '../game/scenarios';
 import { KEY_HELP } from '../input/keyboard';
@@ -55,6 +55,17 @@ const CTRL_STYLES: { style: ControlStyle; title: string; text: string; row: numb
   { style: 'jumpAndRun', title: "Jump'n'Run", text: 'hold a key to walk', row: 1 },
   { style: 'classic', title: 'Classic', text: 'tap to start, tap to stop', row: 0 },
 ];
+
+/** The results title: won or lost when crews fought it out, otherwise just "Round over". */
+function roundVerdict(round: Round): { title: string; text: string } {
+  const { world, players } = round;
+  const name = (id: number): string => players.find((p) => p.id === id)?.name ?? 'Someone';
+  if (world.winner === LOCAL_PLAYER) return { title: 'Victory!', text: 'Last crew standing · ' };
+  if (world.winner !== null && world.winner >= 0) return { title: 'Defeat', text: `${name(world.winner)} won · ` };
+  if (world.winner === -1) return { title: 'Round over', text: 'Nobody is left standing · ' };
+  if (world.eliminated.has(LOCAL_PLAYER)) return { title: 'Defeat', text: 'Your crew is out · ' };
+  return { title: 'Round over', text: '' };
+}
 
 const hex = (c: number): string => `#${c.toString(16).padStart(6, '0')}`;
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -344,7 +355,7 @@ export class Menu {
           m.name,
           leads ? h('span', { title: 'Plays the next round' }, ' ★') : '',
           ' ',
-          h('small', {}, plural(m.rounds, 'round'), m.deaths ? `, ${plural(m.deaths, 'death')}` : ''),
+          h('small', {}, plural(m.rounds, 'round'), m.kills ? `, ${plural(m.kills, 'knockout')}` : '', m.deaths ? `, ${plural(m.deaths, 'death')}` : ''),
         ),
         h('div', { class: 'crew-rank' }, rankBadge(m.rank), rankName(m.rank)),
         exp.bar,
@@ -560,6 +571,7 @@ export class Menu {
 
   /** The end-of-round screen: experience earned, ranks, promotions. Shown over the frozen game. */
   showResults(round: Round, outcomes: CrewOutcome[], actions: { again(): void; menu(): void }): void {
+    const verdict = roundVerdict(round);
     const seconds = Math.floor(round.world.tick / 36);
     const time = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
     const rows: HTMLElement[] = [];
@@ -587,6 +599,7 @@ export class Menu {
               { class: 'gain' },
               h('b', {}, `+${result.experienceGained + ROUND_BONUS} experience`),
               ` (${result.experienceGained} earned, ${ROUND_BONUS} for playing)`,
+              result.kills ? h('b', {}, ` · ${plural(result.kills, 'knockout')}`) : '',
             ),
             outcome.died ? h('div', { class: 'hint' }, 'Was knocked out this round, but keeps what they learned.') : null,
             promo,
@@ -600,8 +613,8 @@ export class Menu {
       h(
         'div',
         { class: 'paper-body' },
-        h('h1', {}, 'Round over'),
-        h('div', { class: 'sub' }, `${round.scenario.title} · ${time} played · ${round.profile.name}`),
+        h('h1', {}, verdict.title),
+        h('div', { class: 'sub' }, `${verdict.text}${round.scenario.title} · ${time} played · ${round.profile.name}`),
         ...rows,
       ),
     );

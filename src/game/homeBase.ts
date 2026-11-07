@@ -20,6 +20,17 @@ function wet(world: World, x0: number, x1: number): boolean {
   return false;
 }
 
+/** The nearest column to `nearX` with dry ground, for a crew to start on. */
+export function dryGround(world: World, nearX: number): number {
+  const { width } = world.land;
+  for (let d = 0; d < width; d += 4) {
+    for (const x of [nearX + d, nearX - d]) {
+      if (x >= 10 && x < width - 10 && !wet(world, x - 6, x + 6)) return x;
+    }
+  }
+  return nearX;
+}
+
 /**
  * Find a dry spot for a building near `nearX`, searching outwards, preferring
  * flat ground. Returns the centre column.
@@ -76,10 +87,13 @@ export function setupDefaultBases(
   player: number,
   spawnX: number,
   start: BaseSettings = DEFAULT_BASE,
+  spareHut = true,
 ): { home: Structure; player: PlayerState } {
   const state = world.addPlayer(player, start);
   const home = buildOnSurface(world, 'hut', findBuildSite(world, 'hut', spawnX), player);
-  const awayX = spawnX + (spawnX < world.land.width / 2 ? 260 : -260);
-  buildOnSurface(world, 'hut', findBuildSite(world, 'hut', awayX));
+  if (spareHut) {
+    const awayX = spawnX + (spawnX < world.land.width / 2 ? 260 : -260);
+    buildOnSurface(world, 'hut', findBuildSite(world, 'hut', awayX));
+  }
   return { home, player: state };
 }

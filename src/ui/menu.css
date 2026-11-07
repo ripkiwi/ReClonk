@@ -639,3 +639,29 @@ button {
 }
 .scen-list > li.scen-group:hover { background: none; }
 .scen-actions { position: absolute; bottom: 0; right: 0; display: flex; gap: 10px; align-items: center; }
+
+/* Big messages in the middle of the top of the screen: eliminations, victory. */
+.announce {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 22%;
+  text-align: center;
+  font-family: var(--title-font);
+  font-size: 34px;
+  color: var(--gold);
+  text-shadow: 0 2px 3px #000, 0 0 6px #000;
+  pointer-events: none;
+  opacity: 0;
+}
+.announce.show { animation: announce 3.4s ease-out forwards; }
+@keyframes announce {
+  0% { opacity: 0; transform: scale(0.85); }
+  8% { opacity: 1; transform: scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+/* A heading with a checkbox that turns its section on and off. */
+.set-check { display: flex; align-items: center; gap: 8px; }
+.set-check .set-row { margin: 0; }
+.set-check .set-label { display: none; }

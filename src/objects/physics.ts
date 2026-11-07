@@ -15,6 +15,8 @@ export const FLOAT_ACCEL = 0.1;
 export const MAX_SPEED = 12;
 /** Speed (|xdir| + |ydir|) at which an object "hits" something: flints explode. */
 export const HIT_SPEED_1 = 1.5;
+/** Speed at which a flying object hurts a living thing it passes through (C4Movement HitSpeed2). */
+export const HIT_SPEED_2 = 2;
 /** Landing this fast makes a clonk kneel. */
 export const HIT_SPEED_3 = 6;
 /** Landing this fast knocks a clonk flat. */

@@ -11,7 +11,7 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
 
 ## Status
 
-**Phase 2: menus, crews and ranks.** Pick a player, pick a scenario, and play with the original Clonk graphics:
+**Phase 3: crews, bases and fights.** Pick a player, pick a scenario, and play with the original Clonk graphics:
 
 - **Main menu, players and scenarios**, laid out on the original Clonk Rage menu backgrounds.
 - **Player profiles**, saved in the browser. Each player has a name, a shirt colour, a control style
@@ -23,10 +23,10 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
   and finishing a round (+100). Promotions show up in game with a fanfare, and higher ranks climb,
   hang and swim faster (original rule, maxing out at rank 20).
 - **Two scenarios:** *Gold Mine* (rolling hills, rock and gold veins, a lake, your home base) and
-  *Minor Melee* (a pretty flat map with flints everywhere, on the surface and just below it).
+  *Minor Melee* (a pretty flat map with flints everywhere, three clonks against a computer crew).
 - **Scenario settings**, like the original's scenario properties: map size and seed, hills, rock and gold veins,
-  the lake, objects in the earth and on the surface, crew size and what each clonk carries, and the home base
-  (gold and shop stock), with a map preview that follows every change. Editing a scenario that comes with the
+  the lake, objects in the earth and on the surface, crew size and what each clonk carries, the home base
+  (gold and shop stock), computer crews to play against and "last crew standing", with a map preview that follows every change. Editing a scenario that comes with the
   game saves a copy under *Your scenarios*; editing one of yours changes it. Your scenarios are kept in the browser.
 - Walk, jump, climb walls, hang from ceilings, swim. Dig through earth and sand; rock, gold and granite can't be dug.
 - A clonk carries one item. Throw it; flints explode on impact. Blasting rock and gold veins drops rocks and
@@ -44,6 +44,21 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
   digging; with the whole crew selected, down gathers everyone at the leader. The crew bar on the left shows
   everyone in the round; click a portrait to switch, Shift-click to add it to the group.
 - Flint blasts hurt clonks (a third of the blast level on a direct hit, half in the shock wave), and a clonk dies at 0 energy.
+- **Thrown objects hurt** (the original's hit rule, 3× as strong): damage grows with the speed and weight of what
+  hits you, and you get knocked back the way it flies. Something that keeps flying through a clonk keeps hitting it,
+  so a lucky rock can hit a jumping clonk again and again. A clonk can't catch something flying at it, and can't be
+  hit by what it has just thrown.
+- **Fist fights:** clonks of different crews who run into each other start fighting, like the original: each round
+  of the fight a clonk swings half the time, and half the swings land. A punch takes 5 energy between equals and more
+  from a weaker fighter, up to 10, which knocks them over. `E` (`A` in classic) swings, down walks away.
+- **Computer crews** (scenario setting, 0 to 3): they pick up flints and rocks, dig them out of the ground, aim their
+  throws (leading a moving target, and never at their own crew), dodge incoming throws, and fight with their fists.
+  Each one is as big and as experienced as your crew. Enemy bases keep their doors shut to you.
+- **Last crew standing** (the original's Melee goal): a crew with no clonks left is out, and the round ends when only
+  one is left. Victory and defeat show on the results screen, with the knockouts each clonk scored; a clonk is
+  credited with a knockout when it was the last enemy to hurt the one that died.
+- Higher ranks have more energy (50, plus 5 per rank up to rank 10).
+- Lakes have sloping banks, so a clonk can always swim out.
 
 Press `Esc` in game to pause or end the round. Ending a round saves what the crew learned.
 
@@ -130,8 +145,9 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
 1. **Foundations** (done): project setup, landscape sandbox, CI, deploy.
 2. **A clonk** (now): walk, jump, climb, swim, dig, throw rocks and flints that blast terrain;
    menus, player profiles, crews, ranks and the first two scenarios.
-3. **Economy and bases** (started): huts and flags, healing, buying and selling, buying clonks and scenario settings
-   are in; next: fights and thrown-object hits, construction kits, then castles and elevators.
+3. **Economy and bases** (started): huts and flags, healing, buying and selling, buying clonks, scenario settings,
+   fights, thrown-object hits and computer crews are in; next: the original's Scenario Properties and map creator,
+   foundations under buildings, construction kits, then castles and elevators.
 4. **Modding and content:** a public modding API in TypeScript + JSON (the base game itself is a mod), boats, scenarios, a Classic content pack.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
 

@@ -1,7 +1,25 @@
 import { CONTENT_BASE } from '../render/assets';
 
 /** Sound effects from the classic content pack (Sound.c4g). */
-export const SOUND_FILES = ['Blast1', 'Blast2', 'Blast3', 'Click', 'Grab', 'Trumpet'] as const;
+export const SOUND_FILES = [
+  'Blast1',
+  'Blast2',
+  'Blast3',
+  'Click',
+  'Die',
+  'Eliminated',
+  'Grab',
+  'Hurt1',
+  'Hurt2',
+  'Hurt3',
+  'Kime1',
+  'Kime2',
+  'Kime3',
+  'Punch1',
+  'Punch2',
+  'Punch3',
+  'Trumpet',
+] as const;
 export type SoundId = (typeof SOUND_FILES)[number];
 
 /**
