@@ -132,7 +132,12 @@ export interface StructureDef {
     /** Door animation strip, drawn at `at` relative to the top-left corner. */
     door: Facet & { length: number; at: { x: number; y: number } };
   };
+  /** The stone basement the building stands on (the original's BASx objects), centred under it. */
+  basement?: { width: number; height: number; file: string };
 }
+
+/** Basements (Basements.c4d): blast damage that breaks one, and the rocks it falls apart into. */
+export const BASEMENT = { breakDamage: 150, rocks: 4 };
 
 /** Values from the original Hut2.c4d (wooden hut) DefCore.txt, ActMap.txt and the DOOR script. */
 export const STRUCTURES: Record<string, StructureDef> = {
@@ -151,6 +156,7 @@ export const STRUCTURES: Record<string, StructureDef> = {
       facet: { x: 0, y: 0, w: 60, h: 50 },
       door: { x: 0, y: 50, w: 10, h: 16, length: 10, at: { x: 15, y: 34 } },
     },
+    basement: { width: 60, height: 8, file: 'structures/Basement60.png' },
   },
 };
 

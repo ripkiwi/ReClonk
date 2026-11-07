@@ -20,6 +20,8 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `items/Flint.png` | `Objects.c4d/Items.c4d/Weapons.c4d/Flint.c4d/Graphics.png` |
 | `items/Flag.png`, `items/FlagOverlay.png` | `Objects.c4d/Items.c4d/Equipment.c4d/Flag.c4d/Graphics.png`, `Overlay.png` |
 | `structures/Hut2.png` | `Objects.c4d/Structures.c4d/Hut2.c4d/Graphics.png` (wooden hut) |
+| `structures/Basement60.png` | `Objects.c4d/Structures.c4d/Basements.c4d/Basement60.c4d/Graphics.png` (the hut's stone basement) |
+| `goals/Melee.png` | `Objects.c4d/Goals.c4d/Melee.c4d/Graphics.png` (goal picture in the scenario properties) |
 | `materials/*.png` | `Material.c4g/` textures |
 | `sky/Clouds1.jpg` | `planet/Graphics.c4g/Clouds1.jpg` |
 | `clonk/Rank.png` | `Objects.c4d/Crew.c4d/Clonk.c4d/Rank.png` |

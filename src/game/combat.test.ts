@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Rng } from '../core/rng';
 import { Landscape } from '../landscape/landscape';
 import { Mat } from '../landscape/materials';
+import { sval } from '../landscape/mapCreator';
 import { NO_CONTROL, type Clonk, type ControlState } from '../objects/clonk';
 import { ENERGY_UNIT } from '../objects/defs';
 import { CrewAI } from './ai';
@@ -256,21 +257,34 @@ describe('Crews', () => {
 
 describe('Lakes', () => {
   it('a clonk can always swim out of the lake', () => {
-    for (const seed of [1337, 4242, 777]) {
+    const s = scenario('goldmine');
+    // Hills and a water level that fills the valleys with lakes.
+    s.landscape.amplitude = sval(40);
+    s.landscape.period = sval(15);
+    s.landscape.liquidLevel = sval(50);
+    for (const seed of [1337, 4242, 777, 1, 2, 3]) {
       for (const side of [-1, 1]) {
-        const round = startRound(scenario('goldmine', { seed }), profileWithCrew(1));
+        const round = startRound(s, profileWithCrew(1), [], seed);
         const w = round.world;
-        let lx = -1;
-        let ly = -1;
-        for (let x = 0; x < w.land.width && lx < 0; x++) {
+        // A lake with a bank on both sides (not one that runs into the edge of the map).
+        const lakeTop = (x: number): number => {
           for (let y = 0; y < w.land.height; y++) {
-            if (w.land.isLiquid(x, y)) [lx, ly] = [x, y];
-            if (w.land.isLiquid(x, y) || w.land.isSolid(x, y)) break;
+            if (w.land.isLiquid(x, y)) return y;
+            if (w.land.isSolid(x, y)) return -1;
           }
+          return -1;
+        };
+        let lx = -1;
+        let rx = -1;
+        for (let x = 1; x < w.land.width && rx < 0; x++) {
+          if (lakeTop(x) < 0 || lakeTop(x - 1) >= 0) continue;
+          let end = x;
+          while (end < w.land.width && lakeTop(end) >= 0) end++;
+          if (end < w.land.width && end - x > 40) [lx, rx] = [x, end];
         }
         expect(lx).toBeGreaterThanOrEqual(0);
         const c = round.crew[0];
-        c.setPosition(lx + 50, ly + 3);
+        c.setPosition(Math.floor((lx + rx) / 2), lakeTop(lx) + 3);
         c.setAction('Swim');
         let out = false;
         for (let t = 0; t < 36 * 30 && !out; t++) {

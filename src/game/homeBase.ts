@@ -57,8 +57,38 @@ export function findBuildSite(world: World, id: string, nearX: number): number {
 }
 
 /**
+ * Lay a building's stone basement right under it, like the original's
+ * buildings do when they're put up: solid ground that can't be dug, only
+ * broken by blasts. Remembers the ground it replaced, to put back if it breaks.
+ */
+export function layBasement(world: World, s: Structure, floor: number): void {
+  const b = s.def.basement;
+  if (!b) return;
+  const { land } = world;
+  const x0 = s.x - Math.floor(b.width / 2);
+  const n = b.width * b.height;
+  const saved = { cells: new Uint8Array(n), tex: new Uint8Array(n), tunnel: new Uint8Array(n) };
+  for (let dy = 0; dy < b.height; dy++) {
+    for (let dx = 0; dx < b.width; dx++) {
+      const x = x0 + dx;
+      const y = floor + dy;
+      if (!land.inBounds(x, y)) continue;
+      const i = y * land.width + x;
+      const k = dy * b.width + dx;
+      saved.cells[k] = land.cells[i];
+      saved.tex[k] = land.tex[i];
+      saved.tunnel[k] = land.tunnel[i];
+      land.set(x, y, Mat.Basement);
+      land.setTunnel(x, y, true);
+    }
+  }
+  s.basement = { x: x0, y: floor, w: b.width, h: b.height, damage: 0, saved };
+}
+
+/**
  * Put up a building on the surface at column `x`: level the ground under it
- * (clear hills above, fill dips below with earth), then place it standing on that floor.
+ * (clear hills above, fill dips below with earth), then place it standing on
+ * that floor, on its basement.
  */
 export function buildOnSurface(world: World, id: string, x: number, base = -1): Structure {
   const def = STRUCTURES[id];
@@ -74,7 +104,9 @@ export function buildOnSurface(world: World, id: string, x: number, base = -1): 
     for (let y = floor; y < land.height && land.get(xx, y) === Mat.Sky; y++) land.set(xx, y, Mat.Earth);
   }
   // Bottom edge of the building sits on the floor row.
-  return world.addStructure(id, x, floor - (def.offset.y + def.height), base);
+  const s = world.addStructure(id, x, floor - (def.offset.y + def.height), base);
+  layBasement(world, s, floor);
+  return s;
 }
 
 /**

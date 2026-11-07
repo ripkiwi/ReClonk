@@ -4,7 +4,7 @@ import type { Clonk, CrewInfo } from '../objects/clonk';
 import { CrewAI } from './ai';
 import { dryGround, groundAt, setupDefaultBases } from './homeBase';
 import { hireClonk, idleMember, PLAYER_COLORS, type CrewMember, type CrewResult, type Profile } from './profiles';
-import type { ScenarioDef } from './scenarios';
+import { crewCount, type ScenarioDef } from './scenarios';
 import { World } from './world';
 
 /** The local player's number in the world. Multiplayer will hand out more. */
@@ -22,6 +22,8 @@ export interface RoundPlayer {
 /** A scenario being played by one profile. */
 export interface Round {
   scenario: ScenarioDef;
+  /** The map's seed: the scenario's, or a new one when the scenario wants a new map every round. */
+  seed: number;
   profile: Profile;
   map: GeneratedMap;
   world: World;
@@ -52,15 +54,20 @@ function startColumns(world: World, map: GeneratedMap, crews: number): number[] 
   return Array.from({ length: crews }, (_, i) => dryGround(world, Math.round((w * (i + 0.5)) / crews)));
 }
 
+/** A seed for a new map, for scenarios that want a new map every round. */
+export function newSeed(): number {
+  return Math.floor(Math.random() * 1e6);
+}
+
 /**
  * Build the world for a scenario and put the profile's crew into it. Clonks
  * come from the crew like in the original: the most experienced one who takes
  * part and isn't in the round yet, or a new recruit with a random name from
  * `names` who joins the crew for good. Buying a clonk in the shop works the same way.
  */
-export function startRound(scenario: ScenarioDef, profile: Profile, names: readonly string[] = []): Round {
-  const map = generateMap(scenario.width, scenario.height, scenario.seed, scenario.map);
-  const world = World.fromMap(map, scenario.seed);
+export function startRound(scenario: ScenarioDef, profile: Profile, names: readonly string[] = [], seed = scenario.seed): Round {
+  const map = generateMap(scenario.landscape, seed, { players: crewCount(scenario) });
+  const world = World.fromMap(map, seed);
   const recruited = new Set<string>();
   const recruit = (): CrewInfo => {
     const busy = new Set(world.crewOf(LOCAL_PLAYER).flatMap((c) => (c.info ? [c.info.memberId] : [])));
@@ -84,7 +91,7 @@ export function startRound(scenario: ScenarioDef, profile: Profile, names: reado
   }
 
   // Computer clonks get names too, from a generator of their own so the map and the round stay the same.
-  const aiNames = new Rng(scenario.seed ^ 0xa1);
+  const aiNames = new Rng(seed ^ 0xa1);
   const pool = names.length ? names : ['Clonk'];
   const columns = startColumns(world, map, players.length);
   const localCrew: CrewInfo[] = [];
@@ -110,7 +117,7 @@ export function startRound(scenario: ScenarioDef, profile: Profile, names: reado
         : recruit();
       if (!p.computer) localCrew.push(info);
       // Line the rest of the crew up next to the first clonk.
-      const x = Math.max(8, Math.min(scenario.width - 8, start.x + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 14));
+      const x = Math.max(8, Math.min(world.land.width - 8, start.x + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 14));
       const c = world.addClonk(x, i === 0 ? start.y : groundAt(world, x) - 10, p.id);
       if (!p.computer) c.controlStyle = profile.controlStyle;
       c.join(info);
@@ -119,6 +126,7 @@ export function startRound(scenario: ScenarioDef, profile: Profile, names: reado
   });
   return {
     scenario,
+    seed,
     profile,
     map,
     world,

@@ -1,9 +1,10 @@
-import type { ItemId } from '../landscape/materials';
-import type { MapOptions } from '../landscape/generate';
-import { LIMITS, mapOptions, type ScenarioDef } from '../game/scenarios';
+import { crewCount, LIMITS, type ScenarioDef } from '../game/scenarios';
 import type { ShopId } from '../game/world';
+import { MAX_MAP_PLAYER_EXTEND, type SVal } from '../landscape/mapCreator';
+import { MATERIALS, Mat, TEXMAP, texIndex, TUNNEL, type ItemId, type TexEntry } from '../landscape/materials';
+import { CONTENT_BASE } from '../render/assets';
 import { bigButton, h } from './dom';
-import { scenarioPreview } from './preview';
+import { mapPreview } from './preview';
 
 export interface SettingsOptions {
   /** The scenario whose settings are edited. It isn't changed until `onSave`. */
@@ -16,87 +17,577 @@ export interface SettingsOptions {
   onCancel(): void;
 }
 
-type Lim = { min: number; max: number; step: number };
+/*
+ * The original's Scenario Properties dialog (Clonk Rage editor: C4ScenarioDlg,
+ * C4PageLandscape, C4LandscapeCtrl, C4IdListCtrl, Slider), rebuilt on our
+ * paper. Controls sit where the original's dialog templates put them: the
+ * templates measure in dialog units, turned into pixels here.
+ */
+const DX = 1.585;
+const DY = 1.76;
+const px = (n: number, d: number): string => `${Math.round(n * d)}px`;
+function at(x: number, y: number, w?: number, hgt?: number): Partial<CSSStyleDeclaration> {
+  return { left: px(x, DX), top: px(y, DY), ...(w !== undefined ? { width: px(w, DX) } : {}), ...(hgt !== undefined ? { height: px(hgt, DY) } : {}) };
+}
 
-const ITEMS: [ItemId, string][] = [
-  ['flint', 'Flints'],
-  ['rock', 'Rocks'],
-  ['gold', 'Gold'],
-];
-const FOR_SALE: [ShopId, string][] = [
-  ['flint', 'Flints'],
-  ['rock', 'Rocks'],
-  ['clonk', 'Clonks'],
-];
+/** An object's picture in its graphics file (the DefCore's Picture), for the ID lists. */
+interface Picture {
+  file: string;
+  /** Size of the whole file. */
+  sheet: [number, number];
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+const PICTURES: Record<ItemId | 'clonk' | 'hut' | 'melee', Picture> = {
+  flint: { file: 'items/Flint.png', sheet: [64, 70], x: 0, y: 6, w: 64, h: 64 },
+  rock: { file: 'items/Rock.png', sheet: [64, 70], x: 0, y: 6, w: 64, h: 64 },
+  gold: { file: 'items/Gold.png', sheet: [64, 70], x: 0, y: 6, w: 64, h: 64 },
+  clonk: { file: 'clonk/Graphics.png', sheet: [256, 280], x: 192, y: 100, w: 32, h: 40 },
+  hut: { file: 'structures/Hut2.png', sheet: [100, 66], x: 0, y: 0, w: 60, h: 50 },
+  melee: { file: 'goals/Melee.png', sheet: [64, 64], x: 0, y: 0, w: 64, h: 64 },
+};
+
+function picture(p: Picture, size: number): HTMLElement {
+  const s = Math.min(size / p.w, size / p.h);
+  return h('span', {
+    class: 'idl-pic',
+    style: {
+      width: `${p.w * s}px`,
+      height: `${p.h * s}px`,
+      backgroundImage: `url("${CONTENT_BASE}${p.file}")`,
+      backgroundSize: `${p.sheet[0] * s}px ${p.sheet[1] * s}px`,
+      backgroundPosition: `${-p.x * s}px ${-p.y * s}px`,
+    },
+  });
+}
+
+/** A square of a material texture in the material's colours, like the landscape draws it. */
+function swatch(t: TexEntry, size: number): HTMLCanvasElement {
+  const canvas = h('canvas', { class: 'idl-pic', width: size, height: size });
+  const colors = t.mat === Mat.Sky ? TUNNEL.colors : MATERIALS[t.mat].colors;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  const css = (c: number): string => `#${c.toString(16).padStart(6, '0')}`;
+  ctx.fillStyle = css(colors[1]);
+  ctx.fillRect(0, 0, size, size);
+  const img = new Image();
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0, size * 2, size * 2, 0, 0, size, size);
+    const data = ctx.getImageData(0, 0, size, size);
+    const d = data.data;
+    // Stretch the pattern over the material's dark-to-light colours, like the landscape does.
+    let lo = 765;
+    let hi = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      lo = Math.min(lo, d[i] + d[i + 1] + d[i + 2]);
+      hi = Math.max(hi, d[i] + d[i + 1] + d[i + 2]);
+    }
+    for (let i = 0; i < d.length; i += 4) {
+      const b = (d[i] + d[i + 1] + d[i + 2] - lo) / Math.max(1, hi - lo);
+      const [a, c, k] = b < 0.5 ? [colors[0], colors[1], b * 2] : [colors[1], colors[2], b * 2 - 1];
+      for (let ch = 0; ch < 3; ch++) {
+        const s = 16 - ch * 8;
+        d[i + ch] = ((a >> s) & 255) + (((c >> s) & 255) - ((a >> s) & 255)) * k;
+      }
+      d[i + 3] = 255;
+    }
+    ctx.putImageData(data, 0, 0);
+  };
+  img.src = `${CONTENT_BASE}materials/${t.texture}.png`;
+  return canvas;
+}
+
+/** One entry of an ID list: an object (or material) with a count. */
+interface IdEntry {
+  name: string;
+  icon(): HTMLElement;
+  get(): number;
+  set(v: number): void;
+  max: number;
+}
 
 /**
- * The settings of a scenario, like the original's scenario properties:
- * the map, what lies in the ground, the crew and the home base, with a map
- * preview that follows every change.
+ * The original's ID list (C4IdListCtrl): object pictures with their count
+ * underneath in a white box, and buttons on the right that raise and lower
+ * the count of the selected one. Click a picture to select it; + and - keys
+ * and double clicks work too, Shift changes by 10.
+ */
+function idList(entries: IdEntry[], o: { x: number; y: number; w: number; hgt: number; label: string; title?: string; format?: (n: number) => string; onChange(): void }): HTMLElement[] {
+  const fmt = o.format ?? ((n: number) => `${n}x`);
+  let selected = 0;
+  const tiles = entries.map((e, i) => {
+    const count = h('span', { class: 'idl-count' });
+    const tile = h('button', {
+      class: 'idl-tile',
+      title: e.name,
+      onclick: () => select(i),
+      ondblclick: () => change(1),
+      onkeydown: (ev: KeyboardEvent) => {
+        const step = ev.shiftKey ? 10 : 1;
+        if (ev.key === '+' || ev.key === '=') change(step);
+        else if (ev.key === '-') change(-step);
+        else if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') select(Math.min(entries.length - 1, selected + 1), true);
+        else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') select(Math.max(0, selected - 1), true);
+        else return;
+        ev.preventDefault();
+      },
+    }, e.icon(), count);
+    return { tile, count };
+  });
+  const refresh = (): void => {
+    entries.forEach((e, i) => {
+      const n = e.get();
+      tiles[i].count.textContent = fmt(n);
+      tiles[i].tile.classList.toggle('zero', n === 0);
+      tiles[i].tile.classList.toggle('sel', i === selected);
+    });
+  };
+  const select = (i: number, focus = false): void => {
+    selected = i;
+    if (focus) tiles[i].tile.focus();
+    refresh();
+  };
+  const change = (d: number): void => {
+    const e = entries[selected];
+    e.set(Math.max(0, Math.min(e.max, Math.round((e.get() + d) * 10) / 10)));
+    refresh();
+    o.onChange();
+  };
+  // Hold a button to keep counting.
+  const hold = (d: number): ((ev: PointerEvent) => void) => (ev) => {
+    ev.preventDefault();
+    const step = ev.shiftKey ? d * 10 : d;
+    change(step);
+    let timer = window.setTimeout(function again() {
+      change(step);
+      timer = window.setTimeout(again, 70);
+    }, 400);
+    const stop = (): void => {
+      clearTimeout(timer);
+      removeEventListener('pointerup', stop);
+      removeEventListener('pointercancel', stop);
+    };
+    addEventListener('pointerup', stop);
+    addEventListener('pointercancel', stop);
+  };
+  refresh();
+  const box = h('div', { class: 'idl', style: at(o.x, o.y, o.w, o.hgt), title: o.title ?? '' }, ...tiles.map((t) => t.tile));
+  const buttons = h(
+    'div',
+    { class: 'idl-btns', style: at(o.x + o.w, o.y, 15, o.hgt) },
+    h('button', { title: 'More (Shift: 10 more)', onpointerdown: hold(1) }, '+'),
+    h('button', { title: 'Fewer (Shift: 10 fewer)', onpointerdown: hold(-1) }, '−'),
+  );
+  return [h('div', { class: 'pp-label', style: at(o.x, o.y - 10, o.w + 15) }, o.label), box, buttons];
+}
+
+/**
+ * The original's slider (Slider.cpp): a coloured thumb in a white groove.
+ * Dragging sets the value. Right-dragging (or Shift-dragging) away from the
+ * thumb sets the random range, drawn as a bar around it: every round then picks
+ * a value from that range. Arrow keys: left and right move the value, up and
+ * down widen and narrow the random range.
+ */
+function slider(o: {
+  x: number;
+  y: number;
+  w: number;
+  color: string;
+  label: string;
+  value: SVal;
+  random: boolean;
+  show(v: SVal): string;
+  onChange(): void;
+}): HTMLElement[] {
+  const v = o.value;
+  const W = Math.round(o.w * DX);
+  const HALF = 5;
+  const RND_MAX = 100;
+  const groove = h('div', { class: 'os', tabIndex: 0, style: { ...at(o.x, o.y), width: `${W}px` } });
+  groove.style.setProperty('--c', o.color);
+  const bar = h('div', { class: 'os-rnd' });
+  const thumb = h('div', { class: 'os-thumb' });
+  groove.append(bar, thumb);
+  const out = h('span', { class: 'pp-value' });
+  const valPos = (): number => HALF + ((v.std - v.min) * (W - 2 * HALF)) / Math.max(1, v.max - v.min);
+  const draw = (): void => {
+    const p = valPos();
+    const r = (v.rnd * W) / RND_MAX;
+    thumb.style.left = `${p - HALF}px`;
+    bar.style.left = `${Math.max(p - HALF - r, 3)}px`;
+    bar.style.width = `${Math.max(0, Math.min(p + HALF + r, W - 3) - Math.max(p - HALF - r, 3))}px`;
+    bar.style.display = v.rnd > 0 ? '' : 'none';
+    out.textContent = o.show(v);
+    groove.title = `${o.label.replace(/:$/, '')}: ${o.show(v)}${o.random ? '\nDrag to set. Right-drag or Shift-drag sets a random range: each round picks a value in it.' : ''}`;
+  };
+  const setFrom = (clientX: number, randomDrag: boolean): void => {
+    const rect = groove.getBoundingClientRect();
+    const scale = rect.width / W || 1;
+    const x = (clientX - rect.left) / scale;
+    if (randomDrag) {
+      const p = valPos();
+      const d = x > p + HALF ? x - (p + HALF) : x < p - HALF ? p - HALF - x : 0;
+      v.rnd = Math.round((Math.max(0, Math.min(W, d)) * RND_MAX) / W);
+    } else {
+      const t = (Math.max(HALF, Math.min(W - HALF, x)) - HALF) / (W - 2 * HALF);
+      v.std = Math.round(v.min + t * (v.max - v.min));
+    }
+    draw();
+    o.onChange();
+  };
+  groove.addEventListener('contextmenu', (e) => e.preventDefault());
+  groove.addEventListener('pointerdown', (e) => {
+    const randomDrag = o.random && (e.button === 2 || e.shiftKey);
+    if (e.button !== 0 && !randomDrag) return;
+    e.preventDefault();
+    groove.focus();
+    groove.setPointerCapture(e.pointerId);
+    setFrom(e.clientX, randomDrag);
+    const move = (ev: PointerEvent): void => setFrom(ev.clientX, randomDrag);
+    const up = (): void => {
+      groove.removeEventListener('pointermove', move);
+      groove.removeEventListener('pointerup', up);
+    };
+    groove.addEventListener('pointermove', move);
+    groove.addEventListener('pointerup', up);
+  });
+  groove.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') v.std = Math.min(v.max, v.std + 1);
+    else if (e.key === 'ArrowLeft') v.std = Math.max(v.min, v.std - 1);
+    else if (e.key === 'ArrowUp' && o.random) v.rnd = Math.min(RND_MAX, v.rnd + 1);
+    else if (e.key === 'ArrowDown' && o.random) v.rnd = Math.max(0, v.rnd - 1);
+    else return;
+    e.preventDefault();
+    draw();
+    o.onChange();
+  });
+  draw();
+  return [h('div', { class: 'pp-label', style: at(o.x, o.y - 10, o.w) }, o.label, out), groove];
+}
+
+function checkbox(label: string, x: number, y: number, w: number, get: () => boolean, set: (v: boolean) => void, title = ''): HTMLLabelElement {
+  const input = h('input', { type: 'checkbox', checked: get(), onchange: () => set(input.checked) });
+  return h('label', { class: 'pp-check', style: at(x, y, w), title }, input, label);
+}
+
+/** A number field with a spin button, like the original's edit-and-spin controls. */
+function spin(x: number, y: number, w: number, lim: { min: number; max: number; step: number }, get: () => number, set: (v: number) => void, title = ''): HTMLInputElement {
+  const input = h('input', {
+    type: 'number',
+    class: 'pp-number',
+    min: lim.min,
+    max: lim.max,
+    step: lim.step,
+    value: String(get()),
+    title,
+    style: at(x, y, w),
+    onchange: () => {
+      const v = Math.max(lim.min, Math.min(lim.max, Math.round(Number(input.value) || 0)));
+      set(v);
+      input.value = String(v);
+    },
+  });
+  return input;
+}
+
+const ITEM_NAMES: [ItemId, string][] = [
+  ['flint', 'Flint'],
+  ['rock', 'Rock'],
+  ['gold', 'Gold'],
+];
+const FOR_SALE: [ShopId, string, Picture][] = [
+  ['flint', 'Flint', PICTURES.flint],
+  ['rock', 'Rock', PICTURES.rock],
+  ['clonk', 'Clonk', PICTURES.clonk],
+];
+/** Textures a material layer can use: everything but sky and basements. */
+const LAYER_TEXTURES = TEXMAP.filter((t) => t.mat !== Mat.Basement && t.name !== 'Sky' && t.name !== 'Water-Liquid');
+const GROUNDS = ['Earth', 'Earth-Rough', 'Earth-Smooth2', 'Earth-Ridge', 'Sand', 'Sand-Smooth3'];
+
+/** The tabs of the dialog, in the original's order. */
+type Tab = 'game' | 'equipment' | 'landscape' | 'environment' | 'weather';
+let lastTab: Tab = 'landscape';
+
+/**
+ * The settings of a scenario, laid out like the original's Scenario
+ * Properties: Game, Equipment, Landscape and Environment tabs, the landscape
+ * with its coloured sliders and a live map preview.
  */
 export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
   const s = o.scenario;
-  // Work on a copy with every map setting spelled out.
-  const d: ScenarioDef = structuredClone({ ...s, map: mapOptions(s) });
-  const map = d.map as MapOptions;
+  const d: ScenarioDef = structuredClone(s);
+  const l = d.landscape;
 
-  const preview = h('div', { class: 'preview' }, scenarioPreview(d, 206, 136));
+  // ---- Map preview (Landscape tab), redrawn shortly after every change.
+  const view = { screen: true, layers: true, players: Math.min(crewCount(d), MAX_MAP_PLAYER_EXTEND) };
+  const mapBox = h('div', { class: 'pp-map', style: at(135, 15, 180, 185) });
+  const drawMap = (): void => {
+    const players = l.mapPlayerExtend ? view.players : 1;
+    mapBox.replaceChildren(mapPreview(l, d.seed, { layers: view.layers, screen: view.screen, players }, mapBox.clientWidth || 280, mapBox.clientHeight || 320));
+  };
   let timer = 0;
   const changed = (): void => {
     clearTimeout(timer);
-    timer = window.setTimeout(() => preview.replaceChildren(scenarioPreview(d, 206, 136)), 150);
+    timer = window.setTimeout(drawMap, 60);
   };
 
-  /** A slider with its value shown next to it. */
-  const slider = (label: string, lim: Lim, get: () => number, set: (v: number) => void, show: (v: number) => string): HTMLElement => {
-    const out = h('span', { class: 'set-value' }, show(get()));
-    const input = h('input', {
-      type: 'range',
-      min: lim.min,
-      max: lim.max,
-      step: lim.step,
-      value: String(get()),
-      oninput: () => {
-        set(Number(input.value));
-        out.textContent = show(get());
-        changed();
-      },
-    });
-    return h('label', { class: 'set-row' }, h('span', { class: 'set-label' }, label), input, out);
+  // ---- Game
+  const description = h('textarea', { class: 'pp-desc', maxLength: 400, style: at(199, 19, 186, 76), oninput: () => (d.description = description.value) });
+  description.value = d.description;
+  const goalNote = h('div', { class: 'pp-hint', style: at(6, 53, 186, 20) });
+  const showGoal = (): void => {
+    goalNote.textContent = d.goal === 'melee' && d.opponents === 0 ? 'Melee needs computer crews to fight.' : d.goal === 'melee' ? 'The last crew standing wins.' : '';
   };
+  showGoal();
+  const gamePage = h(
+    'div',
+    { class: 'pp-page' },
+    ...idList(
+      [{ name: 'Melee: the last crew standing wins', icon: () => picture(PICTURES.melee, 28), get: () => (d.goal === 'melee' ? 1 : 0), set: (v) => (d.goal = v ? 'melee' : 'none'), max: 1 }],
+      { x: 6, y: 19, w: 171, hgt: 30, label: 'Goals:', format: (n) => (n ? 'on' : 'off'), onChange: showGoal },
+    ),
+    goalNote,
+    h('div', { class: 'pp-label', style: at(199, 9, 186) }, 'Description:'),
+    description,
+    h('div', { class: 'pp-label', style: at(6, 86, 120) }, 'Computer crews:'),
+    spin(6, 96, 30, LIMITS.opponents, () => d.opponents, (v) => {
+      d.opponents = v;
+      view.players = Math.min(crewCount(d), MAX_MAP_PLAYER_EXTEND);
+      showGoal();
+      syncPlayers();
+      changed();
+    }, 'Computer crews to play against, each as big as yours'),
+    h('div', { class: 'pp-hint', style: at(44, 97, 140) }, 'each as big as yours'),
+  );
 
-  /** A small number field, kept within its limits. Object densities may have one decimal. */
-  const number = (lim: Lim, get: () => number, set: (v: number) => void, title = '', decimals = false): HTMLInputElement => {
-    const show = (v: number): string => String(decimals ? Math.round(v * 10) / 10 : v);
-    const input = h('input', {
-      type: 'number',
-      class: 'set-number',
-      min: lim.min,
-      max: lim.max,
-      step: decimals ? 'any' : lim.step,
-      value: show(get()),
-      title,
-      onchange: () => {
-        const n = Number(input.value) || 0;
-        const v = Math.max(lim.min, Math.min(lim.max, decimals ? Math.round(n * 10) / 10 : Math.round(n)));
-        set(v);
-        input.value = show(v);
-        changed();
-      },
-    });
-    return input;
+  // ---- Equipment
+  // Gold and the shop only matter with a home base.
+  const baseOnly: HTMLElement[] = [
+    h('div', { class: 'pp-label', style: at(6, 25, 45) }, 'Wealth:'),
+    spin(6, 35, 35, LIMITS.wealth, () => d.base.wealth, (v) => (d.base.wealth = v), 'Gold in the home base at the start'),
+    ...idList(
+      FOR_SALE.map(([id, name, pic]) => ({
+        name: `${name}s for sale in the home base`,
+        icon: () => picture(pic, id === 'clonk' ? 26 : 22),
+        get: () => d.base.stock[id] ?? 0,
+        set: (v: number) => (d.base.stock[id] = v),
+        max: LIMITS.stock.max,
+      })),
+      { x: 206, y: 116, w: 170, hgt: 30, label: 'Home base material:', onChange: () => {} },
+    ),
+  ];
+  const showBase = (): void => baseOnly.forEach((e) => e.classList.toggle('off', !d.homeBase));
+  showBase();
+  const equipPage = h(
+    'div',
+    { class: 'pp-page' },
+    h('div', { class: 'pp-hint', style: at(6, 5, 380) }, 'Values for every crew, the computer crews too.'),
+    ...idList(
+      [{ name: 'Clonks in the crew', icon: () => picture(PICTURES.clonk, 30), get: () => d.crewSize, set: (v) => (d.crewSize = Math.max(1, v)), max: LIMITS.crewSize.max }],
+      { x: 6, y: 66, w: 170, hgt: 30, label: 'Crew:', onChange: () => {} },
+    ),
+    ...idList(
+      [{
+        name: 'Wooden hut with your flag: your home base. An ordinary hut stands nearby.',
+        icon: () => picture(PICTURES.hut, 30),
+        get: () => (d.homeBase ? 1 : 0),
+        set: (v) => {
+          d.homeBase = v > 0;
+          showBase();
+        },
+        max: 1,
+      }],
+      { x: 206, y: 65, w: 170, hgt: 30, label: 'Buildings:', onChange: () => {} },
+    ),
+    ...idList(
+      ITEM_NAMES.map(([id, name]) => ({
+        name: `Each clonk carries a ${name.toLowerCase()}`,
+        icon: () => picture(PICTURES[id], 22),
+        get: () => (d.startItems.includes(id) ? 1 : 0),
+        set: (v: number) => (d.startItems = v ? [id] : []),
+        max: 1,
+      })),
+      { x: 6, y: 116, w: 170, hgt: 30, label: 'Material:', title: 'What each clonk carries at the start (one object)', onChange: () => {} },
+    ),
+    ...baseOnly,
+  );
+
+  // ---- Landscape
+  const zoomEdit = h('input', { class: 'pp-number pp-zoom', readOnly: true, tabIndex: -1, style: at(105, 50, 20) });
+  const size = (n: number): string => `${n * l.mapZoom.std} px`;
+  const plain = (v: SVal): string => (v.rnd ? `${v.std} ±${v.rnd}` : String(v.std));
+  const sliders: HTMLElement[] = [];
+  const sl = (label: string, y: number, w: number, color: string, value: SVal, random: boolean, show: (v: SVal) => string): void => {
+    sliders.push(...slider({ x: 5, y, w, color, label, value, random, show, onChange: () => {
+      zoomEdit.value = String(l.mapZoom.std);
+      changed();
+    } }));
   };
+  // The original's colours: red for size, green for the hills, blue for the water.
+  sl('Width:', 15, 120, 'rgb(255,0,0)', l.mapWidth, false, (v) => size(v.std) + (l.mapPlayerExtend ? ' each' : ''));
+  sl('Height:', 35, 120, 'rgb(215,0,0)', l.mapHeight, false, (v) => size(v.std));
+  sl('Zoom factor:', 55, 95, 'rgb(195,0,0)', l.mapZoom, false, () => '');
+  sl('Amplitude:', 75, 120, 'rgb(0,215,0)', l.amplitude, true, plain);
+  sl('Phase:', 95, 120, 'rgb(0,195,0)', l.phase, true, plain);
+  sl('Period:', 115, 120, 'rgb(0,175,0)', l.period, true, plain);
+  sl('Random:', 135, 120, 'rgb(0,155,0)', l.random, true, plain);
+  sl('Water level:', 155, 120, 'rgb(0,0,255)', l.liquidLevel, true, plain);
+  zoomEdit.value = String(l.mapZoom.std);
 
-  const checkbox = (label: string, get: () => boolean, set: (v: boolean) => void): HTMLElement => {
-    const input = h('input', {
-      type: 'checkbox',
-      checked: get(),
-      onchange: () => {
-        set(input.checked);
-        changed();
-      },
-    });
-    return h('label', { class: 'set-row' }, h('span', { class: 'set-label' }, label), input);
+  const radios = [1, 2, 3, 4].map((n) => {
+    const input = h('input', { type: 'radio', name: 'preview-for', checked: view.players === n, onchange: () => {
+      view.players = n;
+      changed();
+    } });
+    return { n, input, label: h('label', { class: 'pp-check', style: at(325, 45 + n * 10, 60) }, input, n === 1 ? '1 player' : `${n} players`) };
+  });
+  const previewFor = h('div', { class: 'pp-label', style: at(325, 45, 70) }, 'Preview for');
+  const syncPlayers = (): void => {
+    for (const r of radios) {
+      r.input.checked = r.n === view.players;
+      r.label.classList.toggle('off', !l.mapPlayerExtend);
+    }
+    previewFor.classList.toggle('off', !l.mapPlayerExtend);
+  };
+  syncPlayers();
+
+  const seed = spin(325, 115, 46, LIMITS.seed, () => d.seed, (v) => {
+    d.seed = v;
+    changed();
+  }, 'Every number gives a different map from the same settings');
+  const reroll = h('button', {
+    class: 'pp-button',
+    style: at(357, 114.5, 34, 12),
+    title: 'Another map from the same settings',
+    onclick: () => {
+      d.seed = Math.floor(Math.random() * LIMITS.seed.max);
+      seed.value = String(d.seed);
+      changed();
+    },
+  }, 'New');
+
+  const landscapePage = h(
+    'div',
+    { class: 'pp-page' },
+    ...sliders,
+    zoomEdit,
+    checkbox('Top open', 5, 170, 120, () => l.topOpen, (v) => {
+      l.topOpen = v;
+      changed();
+    }, 'Open sky above the map; otherwise there is a ceiling'),
+    checkbox('Bottom open', 5, 179, 120, () => l.bottomOpen, (v) => {
+      l.bottomOpen = v;
+      changed();
+    }, 'Whatever falls out of the bottom of the map is gone'),
+    checkbox('Width according to player number', 5, 189, 128, () => l.mapPlayerExtend, (v) => {
+      l.mapPlayerExtend = v;
+      syncPlayers();
+      changed();
+    }, 'The map gets wider for every crew taking part (up to 4)'),
+    h('div', { class: 'pp-label', style: at(135, 5, 182) }, 'Dynamic map:'),
+    mapBox,
+    h('div', { class: 'pp-label', style: at(325, 5, 70) }, 'Display'),
+    checkbox('Screen size', 325, 15, 70, () => view.screen, (v) => {
+      view.screen = v;
+      changed();
+    }),
+    checkbox('Layers', 325, 25, 70, () => view.layers, (v) => {
+      view.layers = v;
+      changed();
+    }),
+    previewFor,
+    ...radios.map((r) => r.label),
+    h('div', { class: 'pp-label', style: at(325, 105, 70) }, 'Map number'),
+    seed,
+    reroll,
+    checkbox('New map every round', 325, 132, 70, () => d.newMapEachRound, (v) => (d.newMapEachRound = v), 'Like the original: a new map each round. Otherwise always the map shown here.'),
+  );
+
+  // ---- Environment
+  // Layers may name just the material ("Rock" is Rock-Rough), like in the original's Scenario.txt.
+  const sameTex = (a: string, b: string): boolean => texIndex(a, 'Rough') === texIndex(b, 'Rough');
+  const layerCount = (name: string): number => l.layers.find((x) => sameTex(x.name, name))?.count ?? 0;
+  const setLayer = (name: string, v: number): void => {
+    const i = l.layers.findIndex((x) => sameTex(x.name, name));
+    if (i >= 0 && v === 0) l.layers.splice(i, 1);
+    else if (i >= 0) l.layers[i].count = v;
+    else if (v > 0 && l.layers.length < LIMITS.maxLayers) l.layers.push({ name, count: v });
+  };
+  const ground = h(
+    'select',
+    { class: 'pp-select', style: at(5, 172, 80), onchange: () => {
+      l.material = ground.value;
+      changed();
+    } },
+    ...GROUNDS.map((g) => h('option', { value: g }, g.replace('-', ' '))),
+  );
+  ground.value = GROUNDS.includes(l.material) ? l.material : 'Earth';
+  const inEarthLevel = slider({ x: 205, y: 120, w: 170, color: 'rgb(130,90,40)', label: 'Objects in earth amount:', value: l.inEarthLevel, random: true, show: plain, onChange: changed });
+  const environmentPage = h(
+    'div',
+    { class: 'pp-page' },
+    ...idList(
+      LAYER_TEXTURES.map((t) => ({
+        name: t.name.startsWith('Tunnel') ? `${t.name} (caves)` : t.name,
+        icon: () => swatch(t, 20),
+        get: () => layerCount(t.name),
+        set: (v: number) => setLayer(t.name, v),
+        max: LIMITS.layer.max,
+      })),
+      { x: 5, y: 15, w: 170, hgt: 140, label: 'Material layers:', title: 'Veins of other materials drawn into the ground: how many per 15000 map pixels', format: String, onChange: changed },
+    ),
+    h('div', { class: 'pp-label', style: at(5, 162, 80) }, 'Ground:'),
+    ground,
+    ...idList(
+      ITEM_NAMES.map(([id, name]) => ({
+        name: `${name}: share of the objects in the earth`,
+        icon: () => picture(PICTURES[id], 22),
+        get: () => l.inEarth[id] ?? 0,
+        set: (v: number) => (l.inEarth[id] = v),
+        max: LIMITS.share.max,
+      })),
+      { x: 205, y: 15, w: 170, hgt: 30, label: 'Objects in earth types:', onChange: changed },
+    ),
+    ...inEarthLevel,
+    ...idList(
+      ITEM_NAMES.map(([id, name]) => ({
+        name: `${name}s lying on the ground, per 1000 pixels of map width`,
+        icon: () => picture(PICTURES[id], 22),
+        get: () => l.onSurface[id] ?? 0,
+        set: (v: number) => (l.onSurface[id] = v),
+        max: LIMITS.objects.max,
+      })),
+      { x: 205, y: 66, w: 170, hgt: 30, label: 'Objects on the surface:', title: 'Per 1000 pixels of map width', format: String, onChange: changed },
+    ),
+    h('div', { class: 'pp-hint', style: at(205, 100, 186, 10) }, 'per 1000 pixels of map width'),
+  );
+
+  // ---- Tabs
+  const pages: Record<Tab, HTMLElement | null> = {
+    game: gamePage,
+    equipment: equipPage,
+    landscape: landscapePage,
+    environment: environmentPage,
+    weather: null,
+  };
+  const names: Record<Tab, string> = { game: 'Game', equipment: 'Equipment', landscape: 'Landscape', environment: 'Environment', weather: 'Weather' };
+  const pageBox = h('div', { class: 'pp-pages' });
+  const tabButtons = (Object.keys(names) as Tab[]).map((t) =>
+    h('button', {
+      class: 'pp-tab',
+      disabled: !pages[t],
+      title: pages[t] ? '' : 'No weather yet',
+      onclick: () => show(t),
+    }, names[t]),
+  );
+  const show = (t: Tab): void => {
+    lastTab = t;
+    (Object.keys(names) as Tab[]).forEach((k, i) => tabButtons[i].classList.toggle('on', k === t));
+    pageBox.replaceChildren(pages[t] ?? h('div'));
+    if (t === 'landscape') drawMap();
   };
 
   const title = h('input', {
@@ -106,148 +597,20 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     spellcheck: false,
     oninput: () => (d.title = title.value),
   });
-  const description = h('textarea', {
-    class: 'set-desc',
-    rows: 2,
-    maxLength: 400,
-    oninput: () => (d.description = description.value),
-  });
-  description.value = d.description;
-
-  const seed = number(LIMITS.seed, () => d.seed, (v) => (d.seed = v), 'Every number gives a different map');
-  const reroll = h(
-    'button',
-    {
-      class: 'ink-button',
-      title: 'A new random map with the same settings',
-      onclick: () => {
-        d.seed = Math.floor(Math.random() * LIMITS.seed.max);
-        seed.value = String(d.seed);
-        changed();
-      },
-    },
-    'New map',
-  );
-
-  const per = 'How many per 1000 pixels of map width';
-  const objects = h('table', { class: 'set-table' }, h('tr', {}, h('th', {}), h('th', {}, 'In the earth'), h('th', {}, 'On the surface')));
-  for (const [id, name] of ITEMS) {
-    objects.append(
-      h(
-        'tr',
-        {},
-        h('td', {}, name),
-        h('td', {}, number(LIMITS.objects, () => map.buried[id] ?? 0, (v) => (map.buried[id] = v), per, true)),
-        h('td', {}, number(LIMITS.objects, () => map.onSurface[id] ?? 0, (v) => (map.onSurface[id] = v), per, true)),
-      ),
-    );
-  }
-
-  const carry = h(
-    'select',
-    {
-      class: 'set-select',
-      onchange: () => {
-        d.startItems = carry.value ? [carry.value as ItemId] : [];
-      },
-    },
-    h('option', { value: '' }, 'nothing'),
-    ...ITEMS.map(([id, name]) => h('option', { value: id }, name.replace(/s$/, '').toLowerCase())),
-  );
-  carry.value = d.startItems[0] ?? '';
-
-  const stock = h(
-    'table',
-    { class: 'set-table' },
-    h('tr', {}, h('th', {}), ...FOR_SALE.map(([, name]) => h('th', {}, name))),
-    h(
-      'tr',
-      {},
-      h('td', {}, 'For sale'),
-      ...FOR_SALE.map(([id, name]) => h('td', {}, number(LIMITS.stock, () => d.base.stock[id] ?? 0, (v) => (d.base.stock[id] = v), `${name} the shop has in stock`))),
-    ),
-  );
-  const baseRows = h(
-    'div',
-    {},
-    h('label', { class: 'set-row' }, h('span', { class: 'set-label' }, 'Gold'), number(LIMITS.wealth, () => d.base.wealth, (v) => (d.base.wealth = v), 'Starting gold')),
-    stock,
-  );
-  const showBase = (): void => void baseRows.classList.toggle('off', !d.homeBase);
-  showBase();
-
-  // The last crew standing wins (the original's Melee goal). It only matters with someone to fight.
-  const goalBox = h('input', {
-    type: 'checkbox',
-    checked: d.goal === 'melee',
-    onchange: () => (d.goal = goalBox.checked ? 'melee' : 'none'),
-  });
-  const goalRow = h(
-    'label',
-    { class: 'set-row', title: 'Computer crews to play against. The round ends when only one crew has clonks left.' },
-    h('span', { class: 'set-label' }),
-    goalBox,
-    'Last crew standing wins',
-  );
-  const showGoal = (): void => void goalRow.classList.toggle('off', d.opponents === 0);
-  showGoal();
-
   const note = o.original
     ? `${s.title} comes with the game, so your changes are saved as a new scenario.`
     : o.basedOnTitle
       ? `Your own scenario, based on ${o.basedOnTitle}. Changes are saved to it.`
       : 'Your own scenario. Changes are saved to it.';
 
-  const pct = (v: number): string => `${Math.round(v * 100)}%`;
-  const times = (v: number): string => `×${v.toFixed(1)}`;
   const paper = h(
     'div',
-    { class: 'paper settings', style: { left: '86px', top: '16px' } },
-    h(
-      'div',
-      { class: 'paper-body' },
-      title,
-      h('div', { class: 'sub' }, note),
-      h(
-        'div',
-        { class: 'set-columns' },
-        h(
-          'div',
-          {},
-          h('h3', {}, 'Map'),
-          slider('Width', LIMITS.width, () => d.width, (v) => (d.width = v), String),
-          slider('Height', LIMITS.height, () => d.height, (v) => (d.height = v), String),
-          h('div', { class: 'set-row' }, h('span', { class: 'set-label' }, 'Seed'), seed, reroll),
-          slider('Hills', LIMITS.hilliness, () => map.hilliness, (v) => (map.hilliness = v), pct),
-          slider('Rock veins', LIMITS.veins, () => map.rockVeins, (v) => (map.rockVeins = v), times),
-          slider('Gold veins', LIMITS.veins, () => map.goldVeins, (v) => (map.goldVeins = v), times),
-          checkbox('Lake', () => map.lake, (v) => (map.lake = v)),
-          h('h3', {}, 'Objects ', h('small', { class: 'hint', title: per }, 'per 1000 px of width')),
-          objects,
-          h('h3', {}, 'Description'),
-          description,
-        ),
-        h(
-          'div',
-          {},
-          preview,
-          h('h3', {}, 'Crew'),
-          slider('Clonks', LIMITS.crewSize, () => d.crewSize, (v) => (d.crewSize = v), String),
-          h('label', { class: 'set-row' }, h('span', { class: 'set-label' }, 'Each carries'), carry),
-          slider('Opponents', LIMITS.opponents, () => d.opponents, (v) => {
-            d.opponents = v;
-            showGoal();
-          }, (v) => (v ? String(v) : 'none')),
-          goalRow,
-          h('h3', { class: 'set-check' }, 'Home base ', checkbox('', () => d.homeBase, (v) => {
-            d.homeBase = v;
-            showBase();
-          })),
-          baseRows,
-        ),
-      ),
-    ),
+    { class: 'paper settings' },
+    h('div', { class: 'paper-body' }, title, h('div', { class: 'sub' }, note), h('div', { class: 'pp-tabs' }, ...tabButtons), pageBox),
   );
+  show(lastTab);
+  // The map box has its size once it's on the page.
+  requestAnimationFrame(() => lastTab === 'landscape' && drawMap());
   return [
     paper,
     bigButton('Cancel', 150, 540, () => o.onCancel()),

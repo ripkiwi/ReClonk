@@ -1,5 +1,5 @@
-import type { ItemId } from '../landscape/materials';
-import { DEFAULT_MAP, type MapOptions } from '../landscape/generate';
+import { texIndex, type ItemId } from '../landscape/materials';
+import { DEFAULT_LANDSCAPE, MAX_MAP_PLAYER_EXTEND, sval, type LandscapeDef, type SVal } from '../landscape/mapCreator';
 import type { Goal, ShopId } from './world';
 
 /** Starting gold and what the home base's shop has in stock (Scenario.txt Wealth and HomeBaseMaterial). */
@@ -17,10 +17,12 @@ export interface ScenarioDef {
   id: string;
   title: string;
   description: string;
-  width: number;
-  height: number;
+  /** The map, described like the original's [Landscape] section. */
+  landscape: LandscapeDef;
+  /** Which of the maps the landscape values can make. */
   seed: number;
-  map: Partial<MapOptions>;
+  /** A new map every round, like the original; otherwise always the seed's map. */
+  newMapEachRound: boolean;
   /** How many clonks of the player's crew take part. */
   crewSize: number;
   /** What each clonk carries at the start. */
@@ -37,23 +39,47 @@ export interface ScenarioDef {
   basedOn?: string;
 }
 
-/** The default home base start: 25 gold, and flints, rocks and clonks to buy. */
+/** The home base start of the original Gold Mine: 50 gold, flints and clonks to buy. */
 export const DEFAULT_BASE: BaseSettings = {
-  wealth: 25,
-  stock: { flint: 10, rock: 10, clonk: 5 },
+  wealth: 50,
+  stock: { flint: 5, clonk: 3 },
 };
 
-/** The scenarios that come with the game. They are never changed: editing one saves a copy. */
+/** The material layers of the original Gold Mine and Minor Melee (without the ore, coal and sulphur we don't have yet). */
+const LAYERS = (gold: number, water: number): LandscapeDef['layers'] => [
+  { name: 'Rock', count: 7 },
+  { name: 'Rock-Ridge', count: 7 },
+  { name: 'Gold', count: gold },
+  { name: 'Granite', count: 4 },
+  { name: 'Water-Smooth', count: water },
+  { name: 'Earth-Rough', count: 50 },
+  { name: 'Earth-Smooth2', count: 50 },
+];
+
+/** The scenarios that come with the game, with the original's values. They are never changed: editing one saves a copy. */
 export const SCENARIOS: readonly ScenarioDef[] = [
   {
     id: 'goldmine',
     title: 'Gold Mine',
     description:
-      'Rolling hills full of rock and gold veins. Dig down, find flints in the earth, blast the gold veins loose and sell the nuggets at your hut. Watch out for the lake.',
-    width: 1400,
-    height: 640,
+      'Mining gold is one of the most basic activities in Clonk. Collect loose chunks of gold and sell them at your hut. With the money, buy flints to blast the solid gold veins loose.',
+    landscape: {
+      ...DEFAULT_LANDSCAPE,
+      mapWidth: sval(80, 0, 64, 250),
+      mapHeight: sval(60, 0, 40, 250),
+      amplitude: sval(10, 10),
+      phase: sval(50, 50),
+      period: sval(10, 10),
+      random: sval(20, 20),
+      liquid: 'Water-Smooth',
+      liquidLevel: sval(20, 30),
+      mapPlayerExtend: true,
+      layers: LAYERS(8, 5),
+      inEarth: { rock: 1, gold: 1, flint: 1 },
+      inEarthLevel: sval(65),
+    },
     seed: 1337,
-    map: {},
+    newMapEachRound: true,
     crewSize: 1,
     startItems: ['flint'],
     homeBase: true,
@@ -65,22 +91,25 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     id: 'minor-melee',
     title: 'Minor Melee',
     description:
-      'A pretty flat stretch of land with flints everywhere: lying around, and buried just below the surface. A computer crew wants the place for itself. Grab a flint and let it fly: the last crew standing wins.',
-    width: 1000,
-    height: 480,
-    seed: 4242,
-    map: {
-      hilliness: 0.12,
-      rockVeins: 0.6,
-      goldVeins: 0.4,
-      lake: false,
-      buried: { flint: 90, rock: 10, gold: 4 },
-      onSurface: { flint: 45 },
+      'The most basic and straightforward battle in Clonk. Run, dodge, jump, and throw rocks and flints: weaken the enemy with hits before you take them on with your fists. Flints lie all around. The last crew standing wins.',
+    landscape: {
+      ...DEFAULT_LANDSCAPE,
+      mapHeight: sval(60, 0, 40, 250),
+      amplitude: sval(11),
+      phase: sval(50, 50),
+      random: sval(46),
+      liquid: 'Water-Smooth',
+      liquidLevel: sval(43),
+      layers: LAYERS(7, 7),
+      inEarth: { rock: 1, flint: 1 },
+      onSurface: { flint: 30 },
     },
+    seed: 4242,
+    newMapEachRound: true,
     crewSize: 3,
     startItems: ['flint'],
     homeBase: false,
-    base: DEFAULT_BASE,
+    base: { wealth: 0, stock: { flint: 5, clonk: 5 } },
     opponents: 1,
     goal: 'melee',
   },
@@ -95,25 +124,35 @@ export function isOriginal(s: ScenarioDef): boolean {
   return SCENARIOS.some((o) => o.id === s.id);
 }
 
-/** The full map options of a scenario, with the defaults filled in. */
-export function mapOptions(s: ScenarioDef): MapOptions {
-  const m = s.map;
+/** How many crews take part in a round of the scenario: the player and the computer crews. */
+export function crewCount(s: ScenarioDef): number {
+  return 1 + s.opponents;
+}
+
+/** The usual size of the scenario's landscape in pixels (without its random spread). */
+export function landscapeSize(s: ScenarioDef): { width: number; height: number } {
+  const l = s.landscape;
+  const extend = l.mapPlayerExtend ? Math.min(crewCount(s), MAX_MAP_PLAYER_EXTEND) : 1;
   return {
-    ...DEFAULT_MAP,
-    ...m,
-    buried: { ...DEFAULT_MAP.buried, ...m.buried },
-    onSurface: { ...DEFAULT_MAP.onSurface, ...m.onSurface },
+    width: Math.min(l.mapWidth.std * extend, l.mapWidth.max) * l.mapZoom.std,
+    height: l.mapHeight.std * l.mapZoom.std,
   };
 }
 
 /** Limits for every setting, so a hand-edited or old save can't break the game. */
 export const LIMITS = {
-  width: { min: 400, max: 3000, step: 50 },
-  height: { min: 240, max: 1000, step: 20 },
   seed: { min: 0, max: 999999, step: 1 },
-  hilliness: { min: 0, max: 2, step: 0.05 },
-  veins: { min: 0, max: 3, step: 0.1 },
-  /** Objects per 1000 pixels of map width. */
+  /** Map size in map pixels and zoom (landscape pixels per map pixel). */
+  mapWidth: { min: 20, max: 250, step: 1 },
+  mapHeight: { min: 20, max: 250, step: 1 },
+  mapZoom: { min: 5, max: 15, step: 1 },
+  /** Amplitude, phase, period, random, water level and objects-in-earth level. */
+  percent: { min: 0, max: 100, step: 1 },
+  /** Amount of a material layer, and share of an object in the earth. */
+  layer: { min: 0, max: 100, step: 1 },
+  share: { min: 0, max: 10, step: 1 },
+  maxLayers: 12,
+  /** Objects on the surface per 1000 pixels of map width. */
   objects: { min: 0, max: 200, step: 1 },
   crewSize: { min: 1, max: 12, step: 1 },
   opponents: { min: 0, max: 3, step: 1 },
@@ -142,30 +181,82 @@ function counts<K extends string>(ids: readonly K[], raw: unknown, lim: { min: n
   return out;
 }
 
+/** A value with a random spread, kept within its own range and the setting's limits. */
+function svalIn(raw: unknown, f: SVal, lim: { min: number; max: number }): SVal {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Partial<SVal>;
+  const min = Math.round(clamp(r.min, lim, f.min));
+  const max = Math.round(clamp(r.max, { min, max: lim.max }, Math.max(f.max, min)));
+  return {
+    std: Math.round(clamp(r.std, { min, max }, f.std)),
+    rnd: Math.round(clamp(r.rnd, { min: 0, max: lim.max - lim.min }, f.rnd)),
+    min,
+    max,
+  };
+}
+
+/** The landscape section within limits, missing values taken from `f`. */
+function landscapeIn(raw: unknown, f: LandscapeDef): LandscapeDef {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Partial<LandscapeDef>;
+  const P = LIMITS.percent;
+  const bool = (v: unknown, fb: boolean): boolean => (typeof v === 'boolean' ? v : fb);
+  const mat = (v: unknown, fb: string): string => (typeof v === 'string' && texIndex(v) ? v : fb);
+  const layers = Array.isArray(r.layers)
+    ? r.layers
+        .filter((l): l is { name: string; count: number } => !!l && typeof l === 'object' && typeof l.name === 'string' && texIndex(l.name) > 0)
+        .slice(0, LIMITS.maxLayers)
+        .map((l) => ({ name: l.name, count: Math.round(clamp(l.count, LIMITS.layer, 0)) }))
+    : f.layers.map((l) => ({ ...l }));
+  return {
+    mapWidth: svalIn(r.mapWidth, f.mapWidth, LIMITS.mapWidth),
+    mapHeight: svalIn(r.mapHeight, f.mapHeight, LIMITS.mapHeight),
+    mapZoom: svalIn(r.mapZoom, f.mapZoom, LIMITS.mapZoom),
+    amplitude: svalIn(r.amplitude, f.amplitude, P),
+    phase: svalIn(r.phase, f.phase, P),
+    period: svalIn(r.period, f.period, P),
+    random: svalIn(r.random, f.random, P),
+    liquidLevel: svalIn(r.liquidLevel, f.liquidLevel, P),
+    mapPlayerExtend: bool(r.mapPlayerExtend, f.mapPlayerExtend),
+    topOpen: bool(r.topOpen, f.topOpen),
+    bottomOpen: bool(r.bottomOpen, f.bottomOpen),
+    material: mat(r.material, f.material),
+    liquid: mat(r.liquid, f.liquid),
+    layers,
+    inEarth: r.inEarth ? counts(ITEM_IDS, r.inEarth, LIMITS.share) : { ...f.inEarth },
+    inEarthLevel: svalIn(r.inEarthLevel, f.inEarthLevel, P),
+    onSurface: r.onSurface ? counts(ITEM_IDS, r.onSurface, LIMITS.objects, false) : { ...f.onSurface },
+  };
+}
+
+/** A scenario saved before maps had the original's landscape values: keep its size and surface objects. */
+function migrateLandscape(raw: Partial<ScenarioDef> & { width?: unknown; height?: unknown; map?: { onSurface?: unknown } }, f: LandscapeDef): unknown {
+  if (raw.landscape || raw.width === undefined) return raw.landscape;
+  const zoom = f.mapZoom.std;
+  const size = (v: unknown, s: SVal): SVal => ({ ...s, std: typeof v === 'number' ? Math.round(v / zoom) : s.std, max: Math.max(s.max, 250) });
+  return {
+    ...f,
+    mapWidth: size(raw.width, f.mapWidth),
+    mapHeight: size(raw.height, f.mapHeight),
+    mapPlayerExtend: false,
+    onSurface: raw.map?.onSurface ?? f.onSurface,
+  };
+}
+
 /**
  * Make a scenario safe to play: every setting in range, missing settings
  * taken from `fallback` (the original it was copied from, or Gold Mine).
  */
 export function normalizeScenario(raw: Partial<ScenarioDef>, fallback: ScenarioDef = SCENARIOS[0]): ScenarioDef {
   const f = fallback;
-  const m = (raw.map ?? f.map) as Partial<MapOptions>;
-  const map: Partial<MapOptions> = {};
-  if (m.hilliness !== undefined) map.hilliness = clamp(m.hilliness, LIMITS.hilliness, 1);
-  if (m.rockVeins !== undefined) map.rockVeins = clamp(m.rockVeins, LIMITS.veins, 1);
-  if (m.goldVeins !== undefined) map.goldVeins = clamp(m.goldVeins, LIMITS.veins, 1);
-  if (m.lake !== undefined) map.lake = !!m.lake;
-  if (m.buried) map.buried = counts(ITEM_IDS, m.buried, LIMITS.objects, false) as Record<ItemId, number>;
-  if (m.onSurface) map.onSurface = counts(ITEM_IDS, m.onSurface, LIMITS.objects, false);
   const base = raw.base ?? f.base;
   const items = Array.isArray(raw.startItems) ? raw.startItems.filter((i) => ITEM_IDS.includes(i)).slice(0, 1) : f.startItems;
   return {
     id: typeof raw.id === 'string' && raw.id ? raw.id : f.id,
     title: (typeof raw.title === 'string' ? raw.title.trim().slice(0, 40) : '') || f.title,
     description: typeof raw.description === 'string' ? raw.description.slice(0, 400) : f.description,
-    width: Math.round(clamp(raw.width, LIMITS.width, f.width)),
-    height: Math.round(clamp(raw.height, LIMITS.height, f.height)),
+    landscape: landscapeIn(migrateLandscape(raw, f.landscape), f.landscape),
     seed: Math.round(clamp(raw.seed, LIMITS.seed, f.seed)),
-    map,
+    // Scenarios saved before this setting existed always had the same map.
+    newMapEachRound: typeof raw.newMapEachRound === 'boolean' ? raw.newMapEachRound : raw.landscape ? f.newMapEachRound : false,
     crewSize: Math.round(clamp(raw.crewSize, LIMITS.crewSize, f.crewSize)),
     startItems: items,
     homeBase: typeof raw.homeBase === 'boolean' ? raw.homeBase : f.homeBase,

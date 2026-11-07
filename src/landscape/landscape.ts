@@ -1,5 +1,5 @@
 import { Rng } from '../core/rng';
-import { LIQUID, MATERIALS, Mat, SOLID } from './materials';
+import { DEFAULT_TEX, LIQUID, MATERIALS, Mat, SOLID } from './materials';
 
 /** How far a liquid pixel looks sideways for somewhere lower to flow to. */
 const LIQUID_SLIDE = 12;
@@ -49,6 +49,12 @@ export class Rect {
  */
 export class Landscape {
   readonly cells: Uint8Array;
+  /** Texture map index of every pixel: which texture its material is drawn with. */
+  readonly tex: Uint8Array;
+  /** Open sky above the map (otherwise it's a ceiling). */
+  topOpen = true;
+  /** Nothing below the map: things that fall out are gone (otherwise it's a floor). */
+  bottomOpen = false;
   /** 1 where an empty pixel shows tunnel background instead of sky. */
   readonly tunnel: Uint8Array;
   /** Pixels changed since the renderer last looked. */
@@ -61,6 +67,7 @@ export class Landscape {
     readonly height: number,
   ) {
     this.cells = new Uint8Array(width * height);
+    this.tex = new Uint8Array(width * height);
     this.tunnel = new Uint8Array(width * height);
     this.dirty.addRect(0, 0, width - 1, height - 1);
     this.active.addRect(0, 0, width - 1, height - 1);
@@ -72,8 +79,10 @@ export class Landscape {
 
   get(x: number, y: number): Mat {
     if (this.inBounds(x, y)) return this.cells[y * this.width + x] as Mat;
-    // Above the map is open sky; the sides and bottom are solid walls.
-    return y < 0 && x >= 0 && x < this.width ? Mat.Sky : Mat.Granite;
+    // The sides are solid walls; above and below depend on the scenario.
+    if (x < 0 || x >= this.width) return Mat.Granite;
+    if (y < 0) return this.topOpen ? Mat.Sky : Mat.Granite;
+    return this.bottomOpen ? Mat.Sky : Mat.Granite;
   }
 
   density(x: number, y: number): number {
@@ -89,11 +98,23 @@ export class Landscape {
     return d >= LIQUID && d < SOLID;
   }
 
+  /** Put a material into a pixel, drawn with the material's own texture. */
   set(x: number, y: number, m: Mat): void {
     if (!this.inBounds(x, y)) return;
     const i = y * this.width + x;
     if (this.cells[i] === m) return;
     this.cells[i] = m;
+    this.tex[i] = DEFAULT_TEX[m];
+    this.dirty.add(x, y);
+    this.active.add(x, y, LIQUID_SLIDE + 1);
+  }
+
+  /** Put a material into a pixel with a given texture map entry (for map zooming). */
+  paint(x: number, y: number, m: Mat, tex: number): void {
+    if (!this.inBounds(x, y)) return;
+    const i = y * this.width + x;
+    this.cells[i] = m;
+    this.tex[i] = tex;
     this.dirty.add(x, y);
     this.active.add(x, y, LIQUID_SLIDE + 1);
   }
@@ -177,10 +198,20 @@ export class Landscape {
         const d = MATERIALS[m].density;
         if (d < LIQUID || d >= SOLID) continue;
 
+        if (y === this.height - 1 && this.bottomOpen) {
+          // Pours out of the bottom of the map.
+          cells[idx] = Mat.Sky;
+          this.tex[idx] = 0;
+          this.dirty.add(x, y);
+          this.active.add(x, y, LIQUID_SLIDE + 1);
+          continue;
+        }
         const target = this.findFlow(x, y, rng);
         if (target < 0) continue;
         cells[idx] = Mat.Sky;
         cells[target] = m;
+        this.tex[target] = this.tex[idx];
+        this.tex[idx] = 0;
         moved.add(target);
         const tx = target % w;
         const ty = (target - tx) / w;
