@@ -24,6 +24,10 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
   hang and swim faster (original rule, maxing out at rank 20).
 - **Two scenarios:** *Gold Mine* (rolling hills, rock and gold veins, a lake, your home base) and
   *Minor Melee* (a pretty flat map with flints everywhere, on the surface and just below it).
+- **Scenario settings**, like the original's scenario properties: map size and seed, hills, rock and gold veins,
+  the lake, objects in the earth and on the surface, crew size and what each clonk carries, and the home base
+  (gold and shop stock), with a map preview that follows every change. Editing a scenario that comes with the
+  game saves a copy under *Your scenarios*; editing one of yours changes it. Your scenarios are kept in the browser.
 - Walk, jump, climb walls, hang from ceilings, swim. Dig through earth and sand; rock, gold and granite can't be dug.
 - A clonk carries one item. Throw it; flints explode on impact. Blasting rock and gold veins drops rocks and
   gold nuggets (one per 75 blasted pixels, like the original); granite only cracks.
@@ -126,8 +130,8 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
 1. **Foundations** (done): project setup, landscape sandbox, CI, deploy.
 2. **A clonk** (now): walk, jump, climb, swim, dig, throw rocks and flints that blast terrain;
    menus, player profiles, crews, ranks and the first two scenarios.
-3. **Economy and bases** (started): huts and flags, healing, buying and selling, buying clonks are in; next: scenario settings,
-   fights and thrown-object hits, construction kits, then castles and elevators.
+3. **Economy and bases** (started): huts and flags, healing, buying and selling, buying clonks and scenario settings
+   are in; next: fights and thrown-object hits, construction kits, then castles and elevators.
 4. **Modding and content:** a public modding API in TypeScript + JSON (the base game itself is a mod), boats, scenarios, a Classic content pack.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
 

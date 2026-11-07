@@ -7,16 +7,25 @@ const SKY_BOTTOM = [0xc4, 0xdf, 0xf6];
 const TUNNEL = [0x5c, 0x42, 0x1e];
 const ITEM_COLORS: Record<string, number[]> = { flint: [0xc0, 0x20, 0x10], gold: [0xff, 0xe0, 0x30], rock: [0x50, 0x50, 0x50] };
 
+/** Recent previews, by everything that shapes the map, so edited scenarios get a fresh picture. */
 const cache = new Map<string, HTMLCanvasElement>();
+const CACHE_SIZE = 12;
 
 /**
  * A small picture of a scenario's map, like the title image the original shows
  * in its scenario book. Generated from the scenario itself, so mods get one for free.
  */
 export function scenarioPreview(s: ScenarioDef, width = 206, height = 156): HTMLCanvasElement {
-  const key = `${s.id}:${width}x${height}`;
+  const key = JSON.stringify([s.width, s.height, s.seed, s.map, width, height]);
   const cached = cache.get(key);
-  if (cached) return cached;
+  if (cached) {
+    // A canvas can only be in one place on the page; hand out a copy.
+    const copy = document.createElement('canvas');
+    copy.width = width;
+    copy.height = height;
+    copy.getContext('2d')?.drawImage(cached, 0, 0);
+    return copy;
+  }
 
   const map = generateMap(s.width, s.height, s.seed, s.map);
   const { land } = map;
@@ -69,5 +78,10 @@ export function scenarioPreview(s: ScenarioDef, width = 206, height = 156): HTML
   }
   ctx.putImageData(img, 0, 0);
   cache.set(key, canvas);
-  return canvas;
+  if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value!);
+  const copy = document.createElement('canvas');
+  copy.width = width;
+  copy.height = height;
+  copy.getContext('2d')?.drawImage(canvas, 0, 0);
+  return copy;
 }

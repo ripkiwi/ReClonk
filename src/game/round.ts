@@ -55,7 +55,9 @@ export function startRound(scenario: ScenarioDef, profile: Profile, names: reado
   world.recruit = (player) => (player === LOCAL_PLAYER ? recruit() : null);
 
   // With a home base the crew starts at its door; otherwise on the surface at the spawn point.
-  const start = scenario.homeBase ? setupDefaultBases(world, LOCAL_PLAYER, map.spawn.x).home.exitPoint() : map.spawn;
+  const start = scenario.homeBase
+    ? setupDefaultBases(world, LOCAL_PLAYER, map.spawn.x, scenario.base).home.exitPoint()
+    : map.spawn;
   for (let i = 0; i < scenario.crewSize; i++) {
     const info = recruit();
     // Line the rest of the crew up next to the first clonk.

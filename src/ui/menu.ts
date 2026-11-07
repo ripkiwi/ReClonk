@@ -17,12 +17,14 @@ import {
 } from '../game/profiles';
 import { rankName } from '../game/ranks';
 import type { Round } from '../game/round';
-import { SCENARIOS, type ScenarioDef } from '../game/scenarios';
+import { deleteScenario, loadScenarios, saveEdit, saveScenarios } from '../game/scenarioStore';
+import { isOriginal, SCENARIOS, scenarioById, type ScenarioDef } from '../game/scenarios';
 import { KEY_HELP } from '../input/keyboard';
 import { bigButton, expBar, expProgress, h, portrait, rankBadge } from './dom';
 import { scenarioPreview } from './preview';
+import { scenarioSettings } from './scenarioSettings';
 
-export type MenuScreen = 'main' | 'players' | 'scenarios' | 'credits';
+export type MenuScreen = 'main' | 'players' | 'scenarios' | 'settings' | 'credits';
 
 export interface MenuOptions {
   root: HTMLElement;
@@ -64,6 +66,8 @@ const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' 
 export class Menu {
   private el: HTMLElement | null = null;
   private scenarioId = SCENARIOS[0].id;
+  /** The player's own scenarios: edited copies of the originals. */
+  private readonly own: ScenarioDef[];
   private readonly onKey = (e: KeyboardEvent): void => {
     if (e.code !== 'Escape' || !this.el || !this.back) return;
     e.preventDefault();
@@ -73,7 +77,13 @@ export class Menu {
   private back: (() => void) | null = null;
 
   constructor(private readonly o: MenuOptions) {
+    this.own = loadScenarios(o.storage);
     addEventListener('keydown', this.onKey);
+  }
+
+  /** The scenario selected in the scenario book. */
+  private get scenario(): ScenarioDef {
+    return scenarioById(this.scenarioId, this.own) ?? SCENARIOS[0];
   }
 
   get visible(): boolean {
@@ -94,6 +104,8 @@ export class Menu {
         return this.mount(this.playersScreen(), 'bg-players', () => this.go('main'));
       case 'scenarios':
         return this.mount(this.scenarioScreen(), 'bg-scenarios', () => this.go('main'));
+      case 'settings':
+        return this.mount(this.settingsScreen(), 'bg-main', () => this.go('scenarios'));
       case 'credits':
         return this.mount(this.creditsScreen(), 'bg-main', () => this.go('main'));
     }
@@ -375,9 +387,10 @@ export class Menu {
 
   private scenarioScreen(): HTMLElement[] {
     const profile = activeProfile(this.o.store);
-    const scenario = SCENARIOS.find((s) => s.id === this.scenarioId) ?? SCENARIOS[0];
-    const list = h('ul', { class: 'list scen-list' });
-    for (const s of SCENARIOS) {
+    const scenario = this.scenario;
+    const list = h('ul', { class: 'list scen-list', style: { maxHeight: '262px' } });
+    for (const s of [...SCENARIOS, ...this.own]) {
+      if (s === this.own[0]) list.append(h('li', { class: 'scen-group' }, 'Your scenarios'));
       list.append(
         h(
           'li',
@@ -448,6 +461,31 @@ export class Menu {
       h('p', { class: 'scen-desc' }, scenario.description),
       profile ? h('h3', {}, 'Your crew') : null,
       crewLine,
+      h(
+        'div',
+        { class: 'scen-actions' },
+        h(
+          'button',
+          { class: 'ink-button', title: 'Change the map, the crew and the home base', onclick: () => this.go('settings') },
+          'Settings',
+        ),
+        isOriginal(scenario)
+          ? null
+          : h(
+              'button',
+              {
+                class: 'link',
+                onclick: () => {
+                  if (!confirm(`Delete your scenario ${scenario.title}?`)) return;
+                  deleteScenario(this.own, scenario.id);
+                  saveScenarios(this.o.storage, this.own);
+                  this.scenarioId = scenario.basedOn ?? SCENARIOS[0].id;
+                  this.go('scenarios');
+                },
+              },
+              'Delete',
+            ),
+      ),
     );
 
     return [
@@ -456,6 +494,23 @@ export class Menu {
       bigButton('Back', 92, 538, () => this.go('main')),
       bigButton('Start', 470, 538, () => profile && this.play(scenario, profile), !profile),
     ];
+  }
+
+  /** Settings of the selected scenario. Saving an original makes a copy; your own are changed in place. */
+  private settingsScreen(): HTMLElement[] {
+    const scenario = this.scenario;
+    return scenarioSettings({
+      scenario,
+      original: isOriginal(scenario),
+      basedOnTitle: scenario.basedOn ? scenarioById(scenario.basedOn)?.title : undefined,
+      onCancel: () => this.go('scenarios'),
+      onSave: (edited) => {
+        const saved = saveEdit(this.own, edited);
+        saveScenarios(this.o.storage, this.own);
+        this.scenarioId = saved.id;
+        this.go('scenarios');
+      },
+    });
   }
 
   private play(scenario: ScenarioDef, profile: Profile): void {

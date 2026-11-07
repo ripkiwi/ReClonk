@@ -1,9 +1,17 @@
 import type { ItemId } from '../landscape/materials';
-import type { MapOptions } from '../landscape/generate';
+import { DEFAULT_MAP, type MapOptions } from '../landscape/generate';
+import type { ShopId } from './world';
+
+/** Starting gold and what the home base's shop has in stock (Scenario.txt Wealth and HomeBaseMaterial). */
+export interface BaseSettings {
+  wealth: number;
+  stock: Partial<Record<ShopId, number>>;
+}
 
 /**
  * A scenario: the map, what each clonk starts with, and how many clonks a player brings.
- * Scenarios are plain data so they can later live in JSON files and come from mods.
+ * Scenarios are plain data, so players can copy and change them, and later
+ * they can live in JSON files and come from mods.
  */
 export interface ScenarioDef {
   id: string;
@@ -19,9 +27,20 @@ export interface ScenarioDef {
   startItems: ItemId[];
   /** Start next to your own hut with your flag (gold, healing, buying and selling). */
   homeBase: boolean;
+  /** Starting gold and shop stock, used with a home base. */
+  base: BaseSettings;
+  /** Set on a player's own scenario: the original it was copied from. */
+  basedOn?: string;
 }
 
-export const SCENARIOS: ScenarioDef[] = [
+/** The default home base start: 25 gold, and flints, rocks and clonks to buy. */
+export const DEFAULT_BASE: BaseSettings = {
+  wealth: 25,
+  stock: { flint: 10, rock: 10, clonk: 5 },
+};
+
+/** The scenarios that come with the game. They are never changed: editing one saves a copy. */
+export const SCENARIOS: readonly ScenarioDef[] = [
   {
     id: 'goldmine',
     title: 'Gold Mine',
@@ -34,6 +53,7 @@ export const SCENARIOS: ScenarioDef[] = [
     crewSize: 1,
     startItems: ['flint'],
     homeBase: true,
+    base: DEFAULT_BASE,
   },
   {
     id: 'minor-melee',
@@ -54,9 +74,96 @@ export const SCENARIOS: ScenarioDef[] = [
     crewSize: 3,
     startItems: ['flint'],
     homeBase: false,
+    base: DEFAULT_BASE,
   },
 ];
 
-export function scenarioById(id: string): ScenarioDef | undefined {
-  return SCENARIOS.find((s) => s.id === id);
+export function scenarioById(id: string, own: readonly ScenarioDef[] = []): ScenarioDef | undefined {
+  return SCENARIOS.find((s) => s.id === id) ?? own.find((s) => s.id === id);
+}
+
+/** True for the scenarios that come with the game. */
+export function isOriginal(s: ScenarioDef): boolean {
+  return SCENARIOS.some((o) => o.id === s.id);
+}
+
+/** The full map options of a scenario, with the defaults filled in. */
+export function mapOptions(s: ScenarioDef): MapOptions {
+  const m = s.map;
+  return {
+    ...DEFAULT_MAP,
+    ...m,
+    buried: { ...DEFAULT_MAP.buried, ...m.buried },
+    onSurface: { ...DEFAULT_MAP.onSurface, ...m.onSurface },
+  };
+}
+
+/** Limits for every setting, so a hand-edited or old save can't break the game. */
+export const LIMITS = {
+  width: { min: 400, max: 3000, step: 50 },
+  height: { min: 240, max: 1000, step: 20 },
+  seed: { min: 0, max: 999999, step: 1 },
+  hilliness: { min: 0, max: 2, step: 0.05 },
+  veins: { min: 0, max: 3, step: 0.1 },
+  /** Objects per 1000 pixels of map width. */
+  objects: { min: 0, max: 200, step: 1 },
+  crewSize: { min: 1, max: 12, step: 1 },
+  wealth: { min: 0, max: 1000, step: 5 },
+  stock: { min: 0, max: 99, step: 1 },
+};
+
+const ITEM_IDS: ItemId[] = ['flint', 'rock', 'gold'];
+const SHOP_IDS: ShopId[] = ['flint', 'rock', 'clonk'];
+
+function clamp(v: unknown, lim: { min: number; max: number }, fallback: number): number {
+  const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+  return Math.max(lim.min, Math.min(lim.max, n));
+}
+
+/** Per-item numbers within limits. Object densities keep their fractions, so an unchanged copy makes the same map. */
+function counts<K extends string>(ids: readonly K[], raw: unknown, lim: { min: number; max: number }, whole = true): Partial<Record<K, number>> {
+  const out: Partial<Record<K, number>> = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const id of ids) {
+    const v = (raw as Record<string, unknown>)[id];
+    if (v === undefined) continue;
+    const n = clamp(v, lim, 0);
+    out[id] = whole ? Math.round(n) : n;
+  }
+  return out;
+}
+
+/**
+ * Make a scenario safe to play: every setting in range, missing settings
+ * taken from `fallback` (the original it was copied from, or Gold Mine).
+ */
+export function normalizeScenario(raw: Partial<ScenarioDef>, fallback: ScenarioDef = SCENARIOS[0]): ScenarioDef {
+  const f = fallback;
+  const m = (raw.map ?? f.map) as Partial<MapOptions>;
+  const map: Partial<MapOptions> = {};
+  if (m.hilliness !== undefined) map.hilliness = clamp(m.hilliness, LIMITS.hilliness, 1);
+  if (m.rockVeins !== undefined) map.rockVeins = clamp(m.rockVeins, LIMITS.veins, 1);
+  if (m.goldVeins !== undefined) map.goldVeins = clamp(m.goldVeins, LIMITS.veins, 1);
+  if (m.lake !== undefined) map.lake = !!m.lake;
+  if (m.buried) map.buried = counts(ITEM_IDS, m.buried, LIMITS.objects, false) as Record<ItemId, number>;
+  if (m.onSurface) map.onSurface = counts(ITEM_IDS, m.onSurface, LIMITS.objects, false);
+  const base = raw.base ?? f.base;
+  const items = Array.isArray(raw.startItems) ? raw.startItems.filter((i) => ITEM_IDS.includes(i)).slice(0, 1) : f.startItems;
+  return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : f.id,
+    title: (typeof raw.title === 'string' ? raw.title.trim().slice(0, 40) : '') || f.title,
+    description: typeof raw.description === 'string' ? raw.description.slice(0, 400) : f.description,
+    width: Math.round(clamp(raw.width, LIMITS.width, f.width)),
+    height: Math.round(clamp(raw.height, LIMITS.height, f.height)),
+    seed: Math.round(clamp(raw.seed, LIMITS.seed, f.seed)),
+    map,
+    crewSize: Math.round(clamp(raw.crewSize, LIMITS.crewSize, f.crewSize)),
+    startItems: items,
+    homeBase: typeof raw.homeBase === 'boolean' ? raw.homeBase : f.homeBase,
+    base: {
+      wealth: Math.round(clamp(base?.wealth, LIMITS.wealth, f.base.wealth)),
+      stock: counts(SHOP_IDS, base?.stock, LIMITS.stock),
+    },
+    ...(raw.basedOn ? { basedOn: String(raw.basedOn) } : {}),
+  };
 }
