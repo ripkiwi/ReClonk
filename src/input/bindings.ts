@@ -1,3 +1,4 @@
+import { cleanMusicSettings, defaultMusicSettings, type MusicSettings } from '../audio/music';
 import type { ControlStyle } from '../objects/clonk';
 import type { KeyValueStore } from '../game/profiles';
 import { LAYOUTS, type KeyLayout } from './keyboard';
@@ -74,12 +75,14 @@ export interface Settings {
   keys: Partial<Record<ControlStyle, KeyLayout>>;
   /** Show the strip of key hints at the bottom during a round. Off by default. */
   showKeyHelp: boolean;
+  /** Menu and in-game music. */
+  music: MusicSettings;
 }
 
 const STORAGE_KEY = 'reclonk.settings.v1';
 
 export function defaultSettings(): Settings {
-  return { keys: {}, showKeyHelp: false };
+  return { keys: {}, showKeyHelp: false, music: defaultMusicSettings() };
 }
 
 export function loadSettings(storage: KeyValueStore): Settings {
@@ -89,6 +92,7 @@ export function loadSettings(storage: KeyValueStore): Settings {
     if (!raw) return settings;
     const data = JSON.parse(raw) as Partial<Settings>;
     settings.showKeyHelp = data.showKeyHelp === true;
+    settings.music = cleanMusicSettings(data.music);
     for (const style of Object.keys(LAYOUTS) as ControlStyle[]) {
       const saved = data.keys?.[style];
       if (saved && typeof saved === 'object') settings.keys[style] = cleanLayout(saved, style);
