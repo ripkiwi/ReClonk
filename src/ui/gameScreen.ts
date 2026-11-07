@@ -4,7 +4,8 @@ import { FixedLoop } from '../core/loop';
 import { PLAYER_COLORS } from '../game/profiles';
 import { LOCAL_PLAYER, type Round } from '../game/round';
 import type { WorldEvent } from '../game/world';
-import { Keyboard, KEY_HELP } from '../input/keyboard';
+import { keyHelp, layoutFor, type Settings } from '../input/bindings';
+import { Keyboard } from '../input/keyboard';
 import type { GameAssets } from '../render/assets';
 import { BaseHud } from '../render/baseHud';
 import { WorldView } from '../render/worldView';
@@ -17,6 +18,8 @@ export interface GameEnv {
   sounds: Sounds;
   /** Where DOM overlays (HUD, pause menu) go. */
   ui: HTMLElement;
+  /** Key bindings and the key help switch. */
+  settings: Settings;
 }
 
 /** Sounds picked at random, like the original's Blast* and Hurt*. */
@@ -70,15 +73,17 @@ export class GameScreen {
     }
     app.stage.addChild(this.view.root);
 
-    this.keyboard = new Keyboard(round.profile.controlStyle);
+    const style = round.profile.controlStyle;
+    const layout = layoutFor(env.settings, style);
+    this.keyboard = new Keyboard(style, window, layout);
     // The selected clonks of the crew follow the keys; the world keeps track of who's selected.
     this.loop = new FixedLoop(() => round.world.step(new Map([[LOCAL_PLAYER, this.keyboard.read()]])));
-    this.hud = new Hud(env.ui, assets, round.profile.controlStyle, {
+    this.hud = new Hud(env.ui, assets, env.settings.showKeyHelp ? keyHelp(style, layout) : null, {
       onMenu: () => this.pause(),
       // Click picks a clonk, Shift-click adds it to the group or takes it out.
       onCrew: (index, add) => this.keyboard.command(add ? { type: 'toggle', index } : { type: 'pick', index }),
     });
-    this.baseHud = new BaseHud(round.world, assets, LOCAL_PLAYER, round.profile.controlStyle, false, color);
+    this.baseHud = new BaseHud(round.world, assets, LOCAL_PLAYER, style, false, color, layout);
     app.stage.addChild(this.baseHud.root);
     this.announce = h('div', { class: 'announce' });
     env.ui.append(this.announce);
@@ -173,7 +178,8 @@ export class GameScreen {
     this.keyboard.reset();
     this.env.sounds.play('Click', 0.6);
     const keys = h('table', { class: 'keys' });
-    for (const [k, a] of KEY_HELP[this.round.profile.controlStyle]) keys.append(h('tr', {}, h('td', {}, k), h('td', {}, a)));
+    const style = this.round.profile.controlStyle;
+    for (const [k, a] of keyHelp(style, layoutFor(this.env.settings, style))) keys.append(h('tr', {}, h('td', {}, k), h('td', {}, a)));
     const paper = h(
       'div',
       { class: 'paper', style: { left: '86px', top: '40px' } },

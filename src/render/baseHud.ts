@@ -2,6 +2,8 @@ import { Container, Graphics, Sprite, Text, type TextStyleOptions } from 'pixi.j
 import { TICKS_PER_SECOND } from '../core/loop';
 import { shopEntry, type World } from '../game/world';
 import type { Clonk, ControlStyle } from '../objects/clonk';
+import { buildingKeys } from '../input/bindings';
+import { LAYOUTS, type KeyLayout } from '../input/keyboard';
 import { BUILD_PLANS, CLONK, ENERGY_UNIT, ITEMS, STRUCTURES } from '../objects/defs';
 import { frame, type GameAssets } from './assets';
 
@@ -15,18 +17,13 @@ const style = (size: number, fill = '#ffffff'): TextStyleOptions => ({
 /** Messages stay on screen this long. */
 const MESSAGE_TICKS = TICKS_PER_SECOND * 3;
 
-/** Key names for the building hints, per control style. */
-const KEYS: Record<ControlStyle, { choose: string; buy: string; sell: string; up: string; down: string }> = {
-  jumpAndRun: { choose: '←/→', buy: '↑ or E', sell: 'E', up: '↑', down: '↓' },
-  classic: { choose: 'Z/C or ←/→', buy: 'S/↑ or A', sell: 'A', up: 'S/↑', down: 'X/↓' },
-};
-
 /**
  * HUD for one player's crew: energy bar, gold, and while inside a building
  * what you can do there (leave, buy, sell), plus short messages.
  */
 export class BaseHud {
   readonly root = new Container();
+  private readonly keys: ReturnType<typeof buildingKeys>;
   private readonly bars = new Graphics();
   private readonly energyText = new Text({ text: '', style: style(14) });
   private readonly coin = new Sprite();
@@ -44,12 +41,15 @@ export class BaseHud {
     private readonly world: World,
     private readonly assets: GameAssets,
     private readonly player: number,
-    private readonly style: ControlStyle = 'jumpAndRun',
+    style: ControlStyle = 'jumpAndRun',
     /** Draw the energy bar and gold here. Off when another HUD shows them. */
     private readonly showStatus = true,
     /** The player's shirt colour, for clonks in the shop. */
     private readonly color = 0x2a5bd7,
+    /** The player's keys, for the hints; the style's defaults if not given. */
+    layout: KeyLayout = LAYOUTS[style],
   ) {
+    this.keys = buildingKeys(layout);
     const g = ITEMS.gold.graphic;
     this.coin.texture = frame(assets.items[g.file], g.facet.x, g.facet.y, g.facet.w, g.facet.h);
     this.coin.scale.set(3);
@@ -129,7 +129,7 @@ export class BaseHud {
     }
 
     let height = 64;
-    const k = KEYS[this.style];
+    const k = this.keys;
     if (clonk.menu !== null) {
       this.hint.text = `${k.choose} choose · ${k.buy} buy · ${k.down} close`;
       height = 130;
@@ -171,7 +171,7 @@ export class BaseHud {
         this.menuRow.addChild(cell);
       });
     }
-    const k = KEYS[this.style];
+    const k = this.keys;
     this.title.text = 'Construction kit: build here';
     this.hint.text = `${k.choose} choose · ${k.buy} build · ${k.down} close`;
     const height = 146;
