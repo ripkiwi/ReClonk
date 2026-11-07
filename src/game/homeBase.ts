@@ -1,13 +1,8 @@
 import { Mat } from '../landscape/materials';
 import { STRUCTURES } from '../objects/defs';
 import type { Structure } from '../objects/structure';
-import type { PlayerState, ShopId, World } from './world';
-
-/** Starting money and home base stock for the default scenario (like Scenario.txt Wealth / HomeBaseMaterial). */
-export const DEFAULT_START: { wealth: number; stock: Partial<Record<ShopId, number>> } = {
-  wealth: 25,
-  stock: { flint: 10, rock: 10, clonk: 5 },
-};
+import { DEFAULT_BASE, type BaseSettings } from './scenarios';
+import type { PlayerState, World } from './world';
 
 /** First solid (or liquid) row in a column. */
 export function groundAt(world: World, x: number): number {
@@ -76,8 +71,13 @@ export function buildOnSurface(world: World, id: string, x: number, base = -1): 
  * home base) where the crew starts, starting gold and stock, and an ordinary
  * hut without a flag a bit further away.
  */
-export function setupDefaultBases(world: World, player: number, spawnX: number): { home: Structure; player: PlayerState } {
-  const state = world.addPlayer(player, DEFAULT_START);
+export function setupDefaultBases(
+  world: World,
+  player: number,
+  spawnX: number,
+  start: BaseSettings = DEFAULT_BASE,
+): { home: Structure; player: PlayerState } {
+  const state = world.addPlayer(player, start);
   const home = buildOnSurface(world, 'hut', findBuildSite(world, 'hut', spawnX), player);
   const awayX = spawnX + (spawnX < world.land.width / 2 ? 260 : -260);
   buildOnSurface(world, 'hut', findBuildSite(world, 'hut', awayX));
