@@ -1,3 +1,4 @@
+import type { Music } from '../audio/music';
 import type { Sounds } from '../audio/sounds';
 import {
   activeProfile,
@@ -30,6 +31,7 @@ export type MenuScreen = 'main' | 'players' | 'scenarios' | 'settings' | 'option
 export interface MenuOptions {
   root: HTMLElement;
   sounds: Sounds;
+  music: Music;
   storage: KeyValueStore;
   store: ProfileStore;
   /** Game settings: key bindings and the in-game key help. */
@@ -545,6 +547,7 @@ export class Menu {
       style: activeProfile(this.o.store)?.controlStyle ?? 'jumpAndRun',
       save: () => saveSettings(this.o.storage, this.o.settings),
       click: () => this.o.sounds.play('Click', 0.5),
+      onMusic: () => this.o.music.refresh(),
       onBack: () => this.go('main'),
     });
   }
@@ -568,11 +571,12 @@ export class Menu {
         ),
         h('h3', {}, 'LegacyClonk'),
         h('p', {}, 'The LegacyClonk Team and contributors keep the Clonk Rage engine alive and published its content under CC BY-NC 4.0.'),
-        h('h3', {}, 'Graphics, sounds, font and names'),
+        h('h3', {}, 'Graphics, sounds, music, font and names'),
         h(
           'p',
           {},
           'The clonk, items, hut, flag, materials, menu backgrounds, portraits, rank symbols, sounds, the Endeavour font and the clonk names ' +
+            'and the music (Frontend, Pizza Strings, Rocking-Horse and Sloping Off) ' +
             'are original Clonk Rage content by RedWolf Design, used under CC BY-NC 4.0. ' +
             'Main menu picture by Matthes Bender and Christopher Graulich.',
         ),

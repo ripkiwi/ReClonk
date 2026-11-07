@@ -3,6 +3,7 @@
 import 'pixi.js/unsafe-eval';
 import './ui/menu.css';
 import { Application } from 'pixi.js';
+import { Music } from './audio/music';
 import { Sounds } from './audio/sounds';
 import { applyRoundResults, loadProfiles, saveProfiles, type KeyValueStore, type Profile } from './game/profiles';
 import { newSeed, roundResults, startRound, type Round } from './game/round';
@@ -93,15 +94,25 @@ async function start(): Promise<void> {
     sounds.load(),
   ]);
   // Browsers only allow sound after the player has clicked or pressed a key.
-  for (const ev of ['pointerdown', 'keydown'] as const) addEventListener(ev, () => sounds.unlock(), { capture: true });
-
   const store = storage();
   const profiles = loadProfiles(store);
   const settings = loadSettings(store);
+  const music = new Music(settings.music);
+  for (const ev of ['pointerdown', 'keydown'] as const) {
+    addEventListener(
+      ev,
+      () => {
+        sounds.unlock();
+        music.unlock();
+      },
+      { capture: true },
+    );
+  }
   void keyboardLabels();
   let game: GameScreen | null = null;
 
   const play = (scenario: ScenarioDef, profile: Profile): void => {
+    music.game();
     game = new GameScreen({ app, assets, sounds, ui, settings }, startRound(scenario, profile, names, scenario.newMapEachRound ? newSeed() : scenario.seed), finish);
   };
 
@@ -131,13 +142,15 @@ async function start(): Promise<void> {
       },
       menu: () => {
         close();
+        music.menu();
         menu.show('main');
       },
     });
   };
 
-  const menu = new Menu({ root: ui, sounds, storage: store, store: profiles, settings, names, onPlay: play });
+  const menu = new Menu({ root: ui, sounds, music, storage: store, store: profiles, settings, names, onPlay: play });
   loading.remove();
+  music.menu();
   menu.show('main');
 }
 

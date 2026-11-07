@@ -812,3 +812,6 @@ button {
 .key-table td { padding: 0 4px; }
 .key-cell { min-height: 20px; gap: 3px; }
 .key-chip, .key-add { line-height: 17px; font-size: 12px; }
+.key-settings .music-row { display: flex; align-items: center; gap: 18px; }
+.key-settings .volume-row { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.key-settings .volume-row input { width: 120px; accent-color: #7a5020; }
