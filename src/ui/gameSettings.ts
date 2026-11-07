@@ -22,6 +22,8 @@ export interface GameSettingsOptions {
   /** Store the changed settings. */
   save(): void;
   click(): void;
+  /** The music settings changed. */
+  onMusic(): void;
   onBack(): void;
 }
 
@@ -144,9 +146,43 @@ export function gameSettings(o: GameSettingsOptions): HTMLElement[] {
       },
     });
 
+    const music = settings.music;
+    const musicCheck = (key: 'menu' | 'game'): HTMLElement =>
+      h('input', {
+        type: 'checkbox',
+        checked: music[key],
+        onchange: (e: Event) => {
+          music[key] = (e.target as HTMLInputElement).checked;
+          o.save();
+          o.onMusic();
+          o.click();
+        },
+      });
+    const volume = h('input', {
+      type: 'range',
+      min: '0',
+      max: '100',
+      step: '5',
+      value: String(music.volume),
+      title: 'Music volume',
+      oninput: (e: Event) => {
+        music.volume = Number((e.target as HTMLInputElement).value);
+        o.onMusic();
+      },
+      onchange: () => o.save(),
+    });
+
     body.replaceChildren(
       h('h1', {}, 'Settings'),
       h('div', { class: 'sub' }, 'Saved in this browser, for every player.'),
+      h('h3', {}, 'Music'),
+      h(
+        'div',
+        { class: 'music-row' },
+        h('label', { class: 'check-row' }, musicCheck('menu'), ' In the menus'),
+        h('label', { class: 'check-row' }, musicCheck('game'), ' During a round'),
+        h('label', { class: 'volume-row' }, 'Volume ', volume),
+      ),
       h('h3', {}, 'During a round'),
       h('label', { class: 'check-row' }, help, ' Show the key help along the bottom of the screen'),
       h('p', { class: 'hint-line' }, 'The keys are always listed in the pause menu (Esc).'),

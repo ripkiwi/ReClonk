@@ -1,12 +1,12 @@
 # Classic content pack
 
-Original Clonk graphics, sounds, font and names, used unmodified (only renamed and reorganised
+Original Clonk graphics, sounds, music, font and names, used unmodified (only renamed and reorganised
 into folders) unless the table says otherwise.
 
 **Author:** RedWolf Design (Matthes Bender et al.), from the Clonk Rage game content as
 published by the LegacyClonk project. The main menu picture is by Matthes Bender and Christopher Graulich.
 
-- https://github.com/legacyclonk/content (`Objects.c4d`, `Material.c4g`, `Sound.c4g`)
+- https://github.com/legacyclonk/content (`Objects.c4d`, `Material.c4g`, `Sound.c4g`, `Music.c4g`)
 - https://github.com/legacyclonk/LegacyClonk (`planet/Graphics.c4g`, `planet/System.c4g`)
 
 **License:** [Creative Commons Attribution-NonCommercial 4.0 (CC BY-NC 4.0)](https://creativecommons.org/licenses/by-nc/4.0/), see [COPYING.txt](COPYING.txt).
@@ -30,6 +30,7 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `gui/Startup*.png` | `planet/Graphics.c4g/Startup*.png` (menu backgrounds, buttons, dialog paper, control type icons) |
 | `fonts/Endeavour.ttf` | `planet/System.c4g/Endeavour.ttf` |
 | `Names.txt` | `planet/System.c4g/Names.txt`, **line endings and blank lines removed** |
+| `music/Frontend.ogg`, `music/PizzaStrings.ogg`, `music/Rocking-Horse.ogg`, `music/SlopingOff.ogg` | `Music.c4g/Frontend.ogg`, `Pizza Strings.ogg`, `Rocking-Horse.ogg`, `Sloping Off.ogg` (Clonk Rage 4.9.11.3 music by RedWolf Design; **spaces removed from the file names**, audio unchanged) |
 | `sound/*.wav` | `Sound.c4g/` (`Blast1-3`, `Click`, `Die`, `Eliminated`, `Grab`, `Hurt1-3`, `Kime1-3`, `Punch1-3`, `Trumpet`) |
 
 'Clonk' is a registered trademark of Matthes Bender.
