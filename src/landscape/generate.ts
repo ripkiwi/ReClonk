@@ -126,17 +126,28 @@ export function generateMap(width: number, height: number, seed: number, options
   let lowest = Math.floor(width * 0.1);
   for (let x = lowest; x < width * 0.9; x++) if (surface[x] > surface[lowest]) lowest = x;
   const lakeR = 28;
-  const lakeTop = opt.lake ? surface[lowest] - lakeR : 1;
-  const lakeBottom = opt.lake ? surface[lowest] + lakeR : 0;
-  for (let y = lakeTop; y <= lakeBottom; y++) {
-    for (let x = lowest - lakeR * 2; x <= lowest + lakeR * 2; x++) {
-      const dx = (x - lowest) / 2;
-      const dy = y - surface[lowest];
-      if (dx * dx + dy * dy > lakeR * lakeR || !land.inBounds(x, y)) continue;
-      const waterLine = surface[lowest] - 4;
-      if (land.get(x, y) === Mat.Granite) continue;
-      land.set(x, y, y >= waterLine ? Mat.Water : Mat.Sky);
-      land.setTunnel(x, y, false);
+  if (opt.lake) {
+    // A basin with gently sloping sides and banks, so a clonk that falls in
+    // can swim to the edge and walk out again.
+    const waterLine = surface[lowest] - 4;
+    const half = lakeR * 2;
+    for (const side of [-1, 1]) {
+      for (let d = side < 0 ? 1 : 0; ; d++) {
+        const x = lowest + side * d;
+        const bank = d <= half ? waterLine : waterLine - Math.floor((d - half) / 2);
+        if (!land.inBounds(x, 0) || (d > half && bank <= surface[x])) break;
+        const depth = Math.min(lakeR, Math.floor(((half - d) * 2) / 3));
+        for (let y = Math.min(surface[x], bank); y < bank + Math.max(0, depth); y++) {
+          if (!land.inBounds(x, y) || land.get(x, y) === Mat.Granite) continue;
+          land.set(x, y, y >= waterLine ? Mat.Water : Mat.Sky);
+          land.setTunnel(x, y, false);
+        }
+        if (d > half) {
+          // A sandy shore, like the rest of the surface.
+          for (let y = bank; y < bank + 3 && land.isSolid(x, y); y++) if (land.get(x, y) === Mat.Earth) land.set(x, y, Mat.Sand);
+          surface[x] = Math.max(surface[x], bank);
+        }
+      }
     }
   }
 

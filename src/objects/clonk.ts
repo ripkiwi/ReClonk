@@ -12,6 +12,7 @@ import {
   CNAT,
   CORNER_RANGE,
   GRAVITY,
+  HIT_SPEED_2,
   HIT_SPEED_3,
   HIT_SPEED_4,
   SWIM_ACCEL,
@@ -71,6 +72,11 @@ export interface ClonkActions {
   useItem: () => boolean;
 }
 
+/** Walking speed while squaring up in a fist fight (DFA_FIGHT). */
+const FIGHT_SPEED = physical(95, CLONK.physical.walk);
+/** Fighters stand this far apart, centre to centre (half the shape width plus 2). */
+const FIGHT_GAP = CLONK.width / 2 + 2;
+
 export type ControlStyle = 'jumpAndRun' | 'classic';
 
 /** The persistent identity of a clonk while it's in the world (name, rank, experience). */
@@ -82,6 +88,8 @@ export interface CrewInfo {
   experience: number;
   /** Experience earned this round. */
   gained: number;
+  /** Enemy clonks this one knocked out this round. */
+  kills?: number;
   controlCount: number;
   portrait: number;
 }
@@ -110,7 +118,8 @@ const COMDIRS: ComDir[] = [
   { x: 0, y: 1 }, { x: -1, y: 1 }, { x: -1, y: 0 }, { x: -1, y: -1 },
 ];
 const comIndex = (c: ComDir): number => COMDIRS.findIndex((d) => d.x === c.x && d.y === c.y);
-const THROW_SPEED = physical(400, P.throw);
+/** Speed of a thrown object, sideways and up (ObjectActionThrow). */
+export const THROW_SPEED = physical(400, P.throw);
 /** A clonk walking to the leader gives up after this many ticks (20 seconds). */
 const GO_TO_TICKS = 36 * 20;
 /** Close enough to the leader. */
@@ -139,6 +148,16 @@ export class Clonk extends GameObject {
   /** Walking over to this x position (the crew gathering at its leader), or null. */
   goTo: number | null = null;
   private goToTicks = 0;
+  /** The clonk this one is in a fist fight with. */
+  fightTarget: Clonk | null = null;
+  /** Who hurt this clonk last, credited if it dies (the original's LastEnergyLossCausePlayer). */
+  lastHurtBy: Clonk | null = null;
+  /** Ticks spent stuck in the ground in mid-air. */
+  private stuckTicks = 0;
+  /** Set when the current action started or started over this tick (the original's StartCall). */
+  actionStarted = false;
+  /** The action that just ran out this tick (the original's EndCall). */
+  actionEnded: string | null = null;
 
   constructor(
     x: number,
@@ -152,6 +171,20 @@ export class Clonk extends GameObject {
 
   private get rank(): number {
     return this.info?.rank ?? 0;
+  }
+  /** Full energy: 50 points, plus 5 per rank up to rank 10 (C4PhysicalInfo::PromotionUpdate). */
+  get maxEnergy(): number {
+    return (50 + 5 * Math.max(0, Math.min(10, this.rank))) * ENERGY_UNIT;
+  }
+  /** Fighting strength, trained towards the maximum at rank 20 like climbing. */
+  get fight(): number {
+    return trained(P.fight, this.rank);
+  }
+
+  /** Give the clonk its crew identity, starting with full energy for its rank. */
+  join(info: CrewInfo | null): void {
+    this.info = info;
+    this.energy = this.maxEnergy;
   }
   private get scaleSpeed(): number {
     return physical(200, trained(P.scale, this.rank));
@@ -200,6 +233,8 @@ export class Clonk extends GameObject {
       this.action = a;
       this.phase = 0;
       this.phaseDelay = 0;
+      this.actionStarted = true;
+      if (a.procedure !== 'fight') this.fightTarget = null;
     }
     if (xdir !== undefined) this.xdir = xdir;
     if (ydir !== undefined) this.ydir = ydir;
@@ -233,6 +268,25 @@ export class Clonk extends GameObject {
     this.setAction('Tumble', xdir, ydir);
   }
 
+  /**
+   * Knocked away by a hit or a punch (C4Object::Fling, ObjectActionTumble):
+   * tumble off, facing where the blow came from.
+   */
+  fling(xdir: number, ydir: number): void {
+    if (!this.alive) return;
+    this.dir = xdir < 0 ? 1 : -1;
+    this.comDir = STOP;
+    this.tumble(xdir, ydir);
+  }
+
+  /** Square up to a hostile clonk (ObjectActionFight). */
+  startFight(target: Clonk): void {
+    this.setAction('Fight');
+    this.fightTarget = target;
+    this.comDir = STOP;
+    this.goTo = null;
+  }
+
   /** Climb over the top of a wall or out of water. */
   private cornerScale(land: Landscape, scaling: boolean): boolean {
     const ok = (rx: number, ry: number): boolean =>
@@ -255,6 +309,7 @@ export class Clonk extends GameObject {
 
   /** Apply a player's controls. Hold a direction to move; see README for the key layout. */
   control(c: ControlState, out: ClonkActions): void {
+    if (this.action.procedure === 'fight') return this.controlFight(c);
     if (this.action.disabled) return;
     if (this.goTo !== null) {
       // Walking over to the leader until the player takes over again.
@@ -394,6 +449,16 @@ export class Clonk extends GameObject {
   }
 
   /**
+   * In a fist fight, down backs off (the original's stop) and throw swings a
+   * punch right away instead of waiting for the fight's own dice.
+   */
+  private controlFight(c: ControlState): void {
+    this.goTo = null;
+    if (c.pressedDown || (this.controlStyle === 'classic' && c.doubleDown)) return this.walk();
+    if (c.pressedThrow && this.action.name === 'Fight' && this.phase >= 2) this.setAction('Punch');
+  }
+
+  /**
    * The player switched to another clonk. With jump'n'run controls a clonk
    * only walks while a key is held, so it stops; whatever it does on its own
    * (digging) goes on. Classic commands carry on, as in the original.
@@ -459,6 +524,8 @@ export class Clonk extends GameObject {
 
   /** One tick: procedure physics, digging, movement, reactions, animation. */
   tick(land: Landscape): void {
+    this.actionStarted = false;
+    this.actionEnded = null;
     if (this.action.inLiquid && this.inLiquid(land)) this.setAction(this.action.inLiquid);
 
     let advance = 1;
@@ -499,6 +566,24 @@ export class Clonk extends GameObject {
       case 'flight':
         this.ydir += GRAVITY;
         break;
+      case 'fight': {
+        // Square up to the opponent: face it and keep a step away (DFA_FIGHT).
+        const t = this.fightTarget;
+        if (!t || t.action.procedure !== 'fight' || t.contained || this.contained || this.inLiquid(land)) {
+          this.walk();
+          break;
+        }
+        if (t.x > this.x) this.setDir(1);
+        if (t.x < this.x) this.setDir(-1);
+        const at = this.dir === -1 ? t.x + FIGHT_GAP : t.x - FIGHT_GAP;
+        this.xdir = towards(this.xdir, this.x === at ? 0 : this.x < at ? FIGHT_SPEED : -FIGHT_SPEED, FIGHT_SPEED);
+        if (Math.abs(this.x - t.x) > CLONK.width || Math.abs(this.y - t.y) > CLONK.width) {
+          this.walk();
+          break;
+        }
+        this.ydir = 0;
+        break;
+      }
       case 'dead':
         this.ydir += GRAVITY;
         if (land.isSolid(this.x, this.y + 10)) this.xdir = decel(this.xdir, WALK_ACCEL);
@@ -556,11 +641,38 @@ export class Clonk extends GameObject {
 
     const speed = Math.abs(this.xdir) + Math.abs(this.ydir);
     const goingUp = this.ydir < 0;
+    const x0 = this.x;
+    const y0 = this.y;
     const moved = this.doMovement(land);
     if (moved.contact) this.contactAction(land, moved.contact, speed, goingUp);
     if (moved.lostAttach && this.tAttach) this.noAttachAction(land);
+    this.checkStuck(land, x0 === this.x && y0 === this.y);
 
     this.animate(advance);
+  }
+
+  /**
+   * A clonk flung against a lump of earth can get hooked on it in mid-air,
+   * unable to fall or move (the original just said "... is stuck"). After a
+   * second of that it slips off to the nearest spot it can fall from.
+   */
+  private checkStuck(land: Landscape, still: boolean): void {
+    if (!still || this.action.procedure !== 'flight') {
+      this.stuckTicks = 0;
+      return;
+    }
+    if (++this.stuckTicks < 36) return;
+    this.stuckTicks = 0;
+    const free = (x: number, y: number): boolean =>
+      !contactCheck(land, this.vertices, x, y).count && !contactCheck(land, this.vertices, x, y + 1).count;
+    for (let r = 1; r <= 16; r++) {
+      for (const [dx, dy] of [[-r, 0], [r, 0], [0, -r], [-r, -r], [r, -r], [0, r], [-r, r], [r, r]]) {
+        if (free(this.x + dx, this.y + dy)) {
+          this.setPosition(this.x + dx, this.y + dy);
+          return;
+        }
+      }
+    }
   }
 
   private animate(advance: number): void {
@@ -572,13 +684,19 @@ export class Clonk extends GameObject {
       this.phase += reverse ? -1 : 1;
       if (this.phase < 0) this.phase = a.length - 1;
       if (this.phase >= a.length) {
-        if (a.next === a.name) this.phase = 0;
-        else if (a.next === 'Hold') {
+        if (a.next === a.name) {
+          this.phase = 0;
+          this.actionStarted = true;
+        } else if (a.next === 'Hold') {
           this.phase = a.length - 1;
           this.phaseDelay = 0;
           return;
         } else {
+          const target = this.fightTarget;
+          this.actionEnded = a.name;
           this.setAction(a.next);
+          // Punching and reeling go back to the same fight.
+          if (this.action.procedure === 'fight') this.fightTarget = target;
           return;
         }
       }
@@ -657,8 +775,9 @@ export class Clonk extends GameObject {
           if (cd.x === -side) this.jump(this.xdir / 2, this.ydir);
           return;
         case 'swim':
+          // Climb out onto the bank if there's room, else hold on to the wall.
+          if (this.cornerScale(land, false)) return;
           if (cd.x === side) return this.scale(side);
-          this.cornerScale(land, false);
           return;
         case 'hangle':
           this.scale(side);
@@ -689,7 +808,7 @@ export class Clonk extends GameObject {
   doEnergy(points: number, exact = false): boolean {
     if (!this.alive) return false;
     const change = exact ? points : points * ENERGY_UNIT;
-    this.energy = Math.max(0, Math.min(CLONK.energy, this.energy + change));
+    this.energy = Math.max(0, Math.min(this.maxEnergy, this.energy + change));
     if (this.energy > 0) return false;
     this.die();
     return true;
@@ -699,6 +818,7 @@ export class Clonk extends GameObject {
     this.alive = false;
     this.menu = null;
     this.goTo = null;
+    this.fightTarget = null;
     this.comDir = STOP;
     this.setAction('Dead', 0);
   }
@@ -709,6 +829,8 @@ export class Clonk extends GameObject {
     const r = CLONK.collection;
     for (const item of items) {
       if (item.container || item.removed || item.noCollect > 0) continue;
+      // Something flying fast hits the clonk instead of landing in its hands (CrossCheck).
+      if (Math.abs(item.xdir) + Math.abs(item.ydir) >= HIT_SPEED_2) continue;
       const dx = item.x - this.x;
       const dy = item.y - this.y;
       if (dx >= r.x && dx < r.x + r.w && dy >= r.y && dy < r.y + r.h) {
@@ -735,6 +857,7 @@ function attachFor(a: ActionDef, dir: -1 | 1): number {
     case 'walk':
     case 'kneel':
     case 'throw':
+    case 'fight':
       return CNAT.Bottom;
     case 'scale':
       return dir === -1 ? CNAT.Left : CNAT.Right;
@@ -743,6 +866,12 @@ function attachFor(a: ActionDef, dir: -1 | 1): number {
     default:
       return CNAT.None;
   }
+}
+
+/** Move `v` towards `target` by at most `step` (the original's Towards). */
+function towards(v: number, target: number, step: number): number {
+  if (Math.abs(v - target) <= step) return target;
+  return v < target ? v + step : v - step;
 }
 
 function decel(v: number, a: number): number {

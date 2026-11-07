@@ -28,6 +28,6 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `gui/Startup*.png` | `planet/Graphics.c4g/Startup*.png` (menu backgrounds, buttons, dialog paper, control type icons) |
 | `fonts/Endeavour.ttf` | `planet/System.c4g/Endeavour.ttf` |
 | `Names.txt` | `planet/System.c4g/Names.txt`, **line endings and blank lines removed** |
-| `sound/*.wav` | `Sound.c4g/` (`Blast1-3`, `Click`, `Grab`, `Trumpet`) |
+| `sound/*.wav` | `Sound.c4g/` (`Blast1-3`, `Click`, `Die`, `Eliminated`, `Grab`, `Hurt1-3`, `Kime1-3`, `Punch1-3`, `Trumpet`) |
 
 'Clonk' is a registered trademark of Matthes Bender.

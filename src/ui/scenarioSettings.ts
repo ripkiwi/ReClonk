@@ -40,11 +40,11 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
   const d: ScenarioDef = structuredClone({ ...s, map: mapOptions(s) });
   const map = d.map as MapOptions;
 
-  const preview = h('div', { class: 'preview' }, scenarioPreview(d));
+  const preview = h('div', { class: 'preview' }, scenarioPreview(d, 206, 136));
   let timer = 0;
   const changed = (): void => {
     clearTimeout(timer);
-    timer = window.setTimeout(() => preview.replaceChildren(scenarioPreview(d)), 150);
+    timer = window.setTimeout(() => preview.replaceChildren(scenarioPreview(d, 206, 136)), 150);
   };
 
   /** A slider with its value shown next to it. */
@@ -176,6 +176,22 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
   const showBase = (): void => void baseRows.classList.toggle('off', !d.homeBase);
   showBase();
 
+  // The last crew standing wins (the original's Melee goal). It only matters with someone to fight.
+  const goalBox = h('input', {
+    type: 'checkbox',
+    checked: d.goal === 'melee',
+    onchange: () => (d.goal = goalBox.checked ? 'melee' : 'none'),
+  });
+  const goalRow = h(
+    'label',
+    { class: 'set-row', title: 'Computer crews to play against. The round ends when only one crew has clonks left.' },
+    h('span', { class: 'set-label' }),
+    goalBox,
+    'Last crew standing wins',
+  );
+  const showGoal = (): void => void goalRow.classList.toggle('off', d.opponents === 0);
+  showGoal();
+
   const note = o.original
     ? `${s.title} comes with the game, so your changes are saved as a new scenario.`
     : o.basedOnTitle
@@ -218,11 +234,15 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
           h('h3', {}, 'Crew'),
           slider('Clonks', LIMITS.crewSize, () => d.crewSize, (v) => (d.crewSize = v), String),
           h('label', { class: 'set-row' }, h('span', { class: 'set-label' }, 'Each carries'), carry),
-          h('h3', {}, 'Home base'),
-          checkbox('Start at a hut', () => d.homeBase, (v) => {
+          slider('Opponents', LIMITS.opponents, () => d.opponents, (v) => {
+            d.opponents = v;
+            showGoal();
+          }, (v) => (v ? String(v) : 'none')),
+          goalRow,
+          h('h3', { class: 'set-check' }, 'Home base ', checkbox('', () => d.homeBase, (v) => {
             d.homeBase = v;
             showBase();
-          }),
+          })),
           baseRows,
         ),
       ),

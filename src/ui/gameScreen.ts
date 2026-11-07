@@ -19,8 +19,16 @@ export interface GameEnv {
   ui: HTMLElement;
 }
 
-/** Explosion sounds, picked at random like the original's Blast* sounds. */
+/** Sounds picked at random, like the original's Blast* and Hurt*. */
+const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)];
 const BLASTS = ['Blast1', 'Blast2', 'Blast3'] as const;
+const HURTS = ['Hurt1', 'Hurt2', 'Hurt3'] as const;
+const KIMES = ['Kime1', 'Kime2', 'Kime3'] as const;
+const PUNCHES = ['Punch1', 'Punch2', 'Punch3'] as const;
+/** The original's DeathAnnounce messages. */
+const DEATH_MESSAGES = ['%s is dead.', '%s has\ndeceased.', '%s\nrests in peace.'];
+/** How long the round goes on after it's decided before the results show: 3.5 seconds. */
+const END_DELAY_TICKS = 126;
 
 /** A round being played: runs the simulation, draws it, and shows the HUD and pause menu. */
 export class GameScreen {
@@ -33,6 +41,10 @@ export class GameScreen {
   private paused = false;
   private pauseEl: HTMLElement | null = null;
   private stopped = false;
+  /** Big messages at the top of the screen: eliminations and the end of the round. */
+  private readonly announce: HTMLElement;
+  /** The tick at which a decided round ends. */
+  private endAt = Infinity;
   private readonly onTick = (t: Ticker): void => this.frame(t.deltaMS);
   private readonly onKey = (e: KeyboardEvent): void => {
     if (this.stopped || (e.code !== 'Escape' && e.code !== 'KeyP')) return;
@@ -49,7 +61,8 @@ export class GameScreen {
   ) {
     const { app, assets } = env;
     const color = PLAYER_COLORS[round.profile.color % PLAYER_COLORS.length];
-    this.view = new WorldView(round.world, assets, () => color);
+    const colors = new Map(round.players.map((p) => [p.id, p.color]));
+    this.view = new WorldView(round.world, assets, (owner) => colors.get(owner) ?? color);
     const lead = this.follow;
     if (lead) {
       this.view.camX = lead.x - app.screen.width / 4;
@@ -67,6 +80,8 @@ export class GameScreen {
     });
     this.baseHud = new BaseHud(round.world, assets, LOCAL_PLAYER, round.profile.controlStyle, false, color);
     app.stage.addChild(this.baseHud.root);
+    this.announce = h('div', { class: 'announce' });
+    env.ui.append(this.announce);
     addEventListener('keydown', this.onKey);
     app.ticker.add(this.onTick);
   }
@@ -86,6 +101,14 @@ export class GameScreen {
       if (e.type === 'recruit' && e.clonk.info) {
         const fresh = this.round.recruited.has(e.clonk.info.memberId);
         this.view.say(e.clonk, fresh ? `${e.clonk.info.name}\njoins the crew!` : `${e.clonk.info.name}\nreporting!`);
+      } else if (e.type === 'death') {
+        this.view.say(e.clonk, pick(DEATH_MESSAGES).replace('%s', e.clonk.info?.name ?? 'Clonk'));
+      } else if (e.type === 'eliminated') {
+        this.show(e.player === LOCAL_PLAYER ? 'Your crew is out!' : `${this.playerName(e.player)} is eliminated.`);
+        if (e.player === LOCAL_PLAYER) this.endSoon();
+      } else if (e.type === 'gameOver') {
+        this.show(e.winner === LOCAL_PLAYER ? 'Victory!' : e.winner < 0 ? 'Nobody is left standing.' : `${this.playerName(e.winner)} wins.`);
+        this.endSoon();
       }
     }
     this.playSounds(world.events);
@@ -93,6 +116,23 @@ export class GameScreen {
     const lead = this.follow;
     this.hud.update(lead, world.players.get(LOCAL_PLAYER), crew, cursor);
     if (lead) this.baseHud.update(this.env.app.screen.width, this.env.app.screen.height, lead);
+    if (world.tick >= this.endAt) this.end();
+  }
+
+  private playerName(id: number): string {
+    return this.round.players.find((p) => p.id === id)?.name ?? `Player ${id + 1}`;
+  }
+
+  private show(text: string): void {
+    this.announce.textContent = text;
+    this.announce.classList.remove('show');
+    void this.announce.offsetWidth;
+    this.announce.classList.add('show');
+  }
+
+  /** The round is decided: let it play on for a moment, then show the results. */
+  private endSoon(): void {
+    this.endAt = Math.min(this.endAt, this.round.world.tick + END_DELAY_TICKS);
   }
 
   private playSounds(events: readonly WorldEvent[]): void {
@@ -105,6 +145,17 @@ export class GameScreen {
       else if (e.type === 'collect' && e.clonk === near) this.env.sounds.play('Grab', 0.8);
       else if (e.type === 'promotion') this.env.sounds.play('Trumpet');
       else if (e.type === 'recruit') this.env.sounds.play('Click', 0.9);
+      // Like the original clonk script: a swing sometimes grunts and whooshes,
+      // a clonk who takes a blow sometimes cries out, and dying always makes a sound.
+      else if (e.type === 'swing') {
+        if (Math.random() < 1 / 3) this.env.sounds.play(pick(KIMES), volumeAt(e.clonk.x, e.clonk.y));
+        if (Math.random() < 1 / 5) this.env.sounds.play(pick(PUNCHES), volumeAt(e.clonk.x, e.clonk.y));
+      } else if (e.type === 'punch' || e.type === 'hit') {
+        const c = e.type === 'punch' ? e.target : e.clonk;
+        if (c.alive && Math.random() < 1 / 5) this.env.sounds.play(pick(HURTS), volumeAt(c.x, c.y));
+      } else if (e.type === 'death') this.env.sounds.play('Die', volumeAt(e.clonk.x, e.clonk.y));
+      else if (e.type === 'eliminated') this.env.sounds.play('Eliminated');
+      else if (e.type === 'gameOver' && e.winner === LOCAL_PLAYER) this.env.sounds.play('Trumpet');
     }
   }
 
@@ -157,6 +208,7 @@ export class GameScreen {
     this.stopped = true;
     this.pauseEl?.remove();
     this.pauseEl = null;
+    this.announce.remove();
     this.env.app.ticker.remove(this.onTick);
     this.keyboard.dispose();
     removeEventListener('keydown', this.onKey);
@@ -173,6 +225,7 @@ export class GameScreen {
       removeEventListener('keydown', this.onKey);
       this.hud.dispose();
       this.pauseEl?.remove();
+      this.announce.remove();
     }
     this.view.destroy();
     this.baseHud.root.destroy({ children: true });

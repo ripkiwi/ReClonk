@@ -24,6 +24,8 @@ export interface CrewMember {
   participates?: boolean;
   /** Rounds in which this clonk lost all its energy. Missing in old saves, which means none. */
   deaths?: number;
+  /** Enemy clonks it knocked out, over all rounds. */
+  kills?: number;
 }
 
 /** A player profile, like the original's .c4p player file. */
@@ -169,6 +171,8 @@ export interface CrewResult {
   controlCount: number;
   /** Lost all its energy. It stays in the crew; only its death count goes up. */
   died?: boolean;
+  /** Enemy clonks it knocked out this round. */
+  kills?: number;
 }
 
 /** Bonus experience for finishing a round, so a crew visibly grows over a few games. */
@@ -192,6 +196,7 @@ export function applyRoundResults(
     m.controlCount = r.controlCount;
     m.rounds++;
     if (r.died) m.deaths = (m.deaths ?? 0) + 1;
+    if (r.kills) m.kills = (m.kills ?? 0) + r.kills;
     m.rank = Math.max(m.rank, rankForExperience(m.experience));
     if (m.rank > from) promotions.push({ member: m, from, to: m.rank });
   }

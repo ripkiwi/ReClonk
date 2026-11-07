@@ -118,7 +118,7 @@ describe('Rounds', () => {
     const round = startRound(scenarioById('minor-melee')!, profile());
     const c = round.crew[0];
     c.doExperience(37);
-    expect(roundResults(round)[0]).toEqual({ memberId: c.info!.memberId, experienceGained: 37, controlCount: 0, died: false });
+    expect(roundResults(round)[0]).toEqual({ memberId: c.info!.memberId, experienceGained: 37, controlCount: 0, died: false, kills: 0 });
   });
 });
 

@@ -1,6 +1,6 @@
 import type { ItemId } from '../landscape/materials';
 import { DEFAULT_MAP, type MapOptions } from '../landscape/generate';
-import type { ShopId } from './world';
+import type { Goal, ShopId } from './world';
 
 /** Starting gold and what the home base's shop has in stock (Scenario.txt Wealth and HomeBaseMaterial). */
 export interface BaseSettings {
@@ -29,6 +29,10 @@ export interface ScenarioDef {
   homeBase: boolean;
   /** Starting gold and shop stock, used with a home base. */
   base: BaseSettings;
+  /** Computer crews to play against, each as big as the player's crew. */
+  opponents: number;
+  /** How the round is won: 'melee' ends it when only one crew is left standing. */
+  goal: Goal;
   /** Set on a player's own scenario: the original it was copied from. */
   basedOn?: string;
 }
@@ -54,12 +58,14 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     startItems: ['flint'],
     homeBase: true,
     base: DEFAULT_BASE,
+    opponents: 0,
+    goal: 'none',
   },
   {
     id: 'minor-melee',
     title: 'Minor Melee',
     description:
-      'A pretty flat stretch of land with flints everywhere: lying around, and buried just below the surface. Grab one and let it fly.',
+      'A pretty flat stretch of land with flints everywhere: lying around, and buried just below the surface. A computer crew wants the place for itself. Grab a flint and let it fly: the last crew standing wins.',
     width: 1000,
     height: 480,
     seed: 4242,
@@ -75,6 +81,8 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     startItems: ['flint'],
     homeBase: false,
     base: DEFAULT_BASE,
+    opponents: 1,
+    goal: 'melee',
   },
 ];
 
@@ -108,6 +116,7 @@ export const LIMITS = {
   /** Objects per 1000 pixels of map width. */
   objects: { min: 0, max: 200, step: 1 },
   crewSize: { min: 1, max: 12, step: 1 },
+  opponents: { min: 0, max: 3, step: 1 },
   wealth: { min: 0, max: 1000, step: 5 },
   stock: { min: 0, max: 99, step: 1 },
 };
@@ -164,6 +173,8 @@ export function normalizeScenario(raw: Partial<ScenarioDef>, fallback: ScenarioD
       wealth: Math.round(clamp(base?.wealth, LIMITS.wealth, f.base.wealth)),
       stock: counts(SHOP_IDS, base?.stock, LIMITS.stock),
     },
+    opponents: Math.round(clamp(raw.opponents, LIMITS.opponents, f.opponents)),
+    goal: raw.goal === 'melee' || raw.goal === 'none' ? raw.goal : f.goal,
     ...(raw.basedOn ? { basedOn: String(raw.basedOn) } : {}),
   };
 }

@@ -126,7 +126,7 @@ export class Hud {
     const energy = c?.alive ? c.energy : 0;
     if (energy !== s.energy) {
       s.energy = energy;
-      const frac = energy / CLONK.energy;
+      const frac = energy / (c?.maxEnergy ?? CLONK.energy);
       this.energy.style.width = `${(frac * 100).toFixed(1)}%`;
       this.energy.classList.toggle('low', frac <= 0.3);
       this.energyText.textContent = c && !c.alive ? 'dead' : String(Math.ceil(energy / ENERGY_UNIT));
@@ -168,7 +168,7 @@ export class Hud {
       const cell = this.cells[i];
       const info = c.info;
       const state = !c.alive ? 'dead' : cursor?.leader === c ? 'leader' : cursor?.selected.has(c) ? 'selected' : '';
-      const energy = c.alive ? Math.ceil((c.energy / CLONK.energy) * 20) : 0;
+      const energy = c.alive ? Math.ceil((c.energy / c.maxEnergy) * 20) : 0;
       const key = `${info?.memberId}:${info?.rank}:${state}:${energy}:${!!c.contained}`;
       if (key === cell.key) return;
       cell.key = key;
