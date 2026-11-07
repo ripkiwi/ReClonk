@@ -37,8 +37,21 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
   preview with the screen size frame, layers and "preview for 1 to 4 players") and *Environment* (material layers,
   ground, objects in the earth and on the surface). Editing a scenario that comes with the game saves a copy under
   *Your scenarios*; editing one of yours changes it. Your scenarios are kept in the browser.
-- **Basements:** buildings stand on the original's 60×8 stone basement. It can't be dug; nine flint blasts next to
-  it break it into four rocks.
+- **Basements:** huts stand on the original's 60×8 stone basement, guard towers on a 48×8 one. It can't be dug;
+  nine flint blasts next to it break it into four rocks. Elevators have no basement.
+- **Construction kits** (15 gold in your base): double dig opens the build menu (wooden hut, elevator, guard tower)
+  and puts up a construction site where the clonk stands. Like the original, the site needs room (at most 5% solid)
+  and level enough ground, and small dips under it (less than 20 pixels deep) are filled with the ground's own
+  material, so a building on slightly skewed ground stands on solid ground. The clonk builds it up from the bottom
+  (a hut takes about 18 seconds, a guard tower about 37); walk away to stop, press down at the site to carry on.
+  Clonks you switch away from keep building.
+- **Elevator:** its case hangs at the bottom with its floor level with the ground. Stand in it and press down to hold
+  on: `Q` drills the shaft deeper through earth and sand (not rock), holding up or down rides (classic: tap up or down,
+  left/right stops), left or right walks off. Whatever stands on the case rides along. A case that's free comes to
+  a clonk of yours standing still next to the shaft, like the original. Enemies can't work your elevator.
+- **Guard tower:** stone walls and a roof platform. Go in through the door and you come out on the roof, where you
+  can throw over the battlements. Its two gates open when it's finished; press down in the tower to hold on to it,
+  then left or right opens or shuts that gate. A shut gate keeps clonks out.
 - Walk, jump, climb walls, hang from ceilings, swim. Dig through earth and sand; rock, gold and granite can't be dug.
 - A clonk carries one item. Throw it; flints explode on impact. Blasting rock and gold veins drops rocks and
   gold nuggets (one per 75 blasted pixels, like the original); granite only cracks.
@@ -46,7 +59,8 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
 - In Gold Mine you start next to your own wooden hut. The flag on its roof makes it your **home base**; a hut without
   a flag is just a building you can shelter in. Jump in a doorway to go in, press down to come out.
 - In your base: carried gold sells automatically (5 gold), you heal 2 energy every 3 ticks, and the base
-  pays 5 gold per 100 energy, like the original. Buy flints (5), rocks (1) and clonks (25), or sell what you carry.
+  pays 5 gold per 100 energy, like the original. Buy flints (5), rocks (1), construction kits (15) and clonks (25),
+  or sell what you carry.
 - **Crews like the original:** a new player starts with an empty crew. Each round brings in your most
   experienced clonk who takes part, or recruits a new one with a random name who joins your crew for good.
   Buying a clonk in your base works the same way. A clonk that dies stays in the crew with all it learned;
@@ -83,9 +97,9 @@ Each player picks a control style in the player screen.
 |---|---|
 | `A` / `D` or `←` / `→` | Walk (hold) |
 | `W`, `↑` or `Space` | Jump; climb up while on a wall; in a doorway, go in |
-| `S` / `↓` | Climb down, let go of a ceiling, leave a building. With the whole crew selected: gather everyone at the leader |
+| `S` / `↓` | Climb down, let go of a ceiling, leave a building. At a construction site: build. In an elevator case or guard tower: hold on to work it. With the whole crew selected: gather everyone at the leader |
 | `Q` | Dig the way you hold (straight down if you hold nothing). The clonk keeps digging on its own, so you can switch to another clonk; hold `A`/`D`/`W`/`S` to steer, `Q` again stops |
-| `Q` `Q` (quickly) | Use what you carry |
+| `Q` `Q` (quickly) | Use what you carry (a construction kit opens the build menu: `←`/`→` choose, `↑`/`E` build, `↓` close) |
 | `E` | Throw the carried item (drop it while climbing or swimming) |
 | `Tab` / `Shift`+`Tab` | Next / previous clonk |
 | `1` to `9` | Pick a clonk by its place in the crew bar |
@@ -100,7 +114,8 @@ Each player picks a control style in the player screen.
 | `X` or `↓` | Stop |
 | `S` or `↑` | Jump; in a doorway, go in |
 | `D` or `Enter` | Dig. While digging, `←` / `→` turn the direction one step; `X` stops |
-| `D` `D` (quickly) | Use what you carry |
+| `D` `D` (quickly) | Use what you carry (a construction kit opens the build menu) |
+| `X` `X` (quickly) | At a construction site: build. In an elevator case or guard tower: hold on to work it |
 | `A` or `Space` | Throw |
 | `Q` / `E` (or `Tab`), `1` to `9` | Previous / next clonk, pick a clonk (the original's crew cursor) |
 | `W` | Select the whole crew; `X` `X` gathers everyone at the leader |

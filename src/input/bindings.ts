@@ -249,7 +249,7 @@ export function keyHelp(style: ControlStyle, k: KeyLayout): [keys: string, actio
   if (style === 'jumpAndRun') {
     add(pairs(k.left, k.right), 'walk (hold)');
     add(list(k.up), 'jump, climb up, go in a door');
-    add(list(k.down), 'climb down, leave a building');
+    add(list(k.down), 'climb down, leave a building, build, hold on to an elevator or tower');
     add(list(k.dig), `dig, again to stop (steer with ${first(k.left)} / ${first(k.right)} / ${first(k.up)} / ${first(k.down)})`);
     if (k.dig.length) add(`${first(k.dig)} ${first(k.dig)}`, 'use what you carry');
     add(list(k.throw), 'throw');
@@ -261,6 +261,7 @@ export function keyHelp(style: ControlStyle, k: KeyLayout): [keys: string, actio
     add(list(k.up), 'jump, go in a door');
     add(list(k.dig), `dig (${first(k.left)} / ${first(k.right)} turn)`);
     if (k.dig.length) add(`${first(k.dig)} ${first(k.dig)}`, 'use what you carry');
+    if (k.down.length) add(`${first(k.down)} ${first(k.down)}`, 'build, hold on to an elevator or tower');
     add(list(k.throw), 'throw');
     add(crew ? `${crew} or 1–9` : '1–9', `${k.crewPrev.length ? 'previous / ' : ''}next clonk, pick a clonk`);
     add(list(k.crewAll), `whole crew (${first(k.down)} ${first(k.down)} gathers them)`);

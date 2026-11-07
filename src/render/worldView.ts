@@ -2,7 +2,7 @@ import { Container, Graphics, Sprite, Text, TilingSprite } from 'pixi.js';
 import { PLAYER_COLORS } from '../game/profiles';
 import { rankName } from '../game/ranks';
 import type { CrewCursor, World, WorldEvent } from '../game/world';
-import { CLONK, FLAG } from '../objects/defs';
+import { CLONK, CONSTRUCTION, ELEVATOR_CASE, FLAG, GATE } from '../objects/defs';
 import type { Clonk } from '../objects/clonk';
 import type { Item } from '../objects/item';
 import type { Structure } from '../objects/structure';
@@ -21,6 +21,22 @@ interface Message {
   follow: Clonk;
 }
 
+interface StructureSprites {
+  /** The whole building, faint, while it's a construction site. */
+  site: Sprite;
+  /** The built part. */
+  body: Sprite;
+  door: Sprite;
+  pole: Sprite;
+  cloth: Sprite;
+  basement: Sprite | null;
+  rope: Graphics;
+  liftCase: Sprite | null;
+  gates: Sprite[];
+  /** Con the body was last drawn for. */
+  con: number;
+}
+
 /** How long a message above a clonk stays up, in ticks. */
 const MESSAGE_TICKS = 36 * 4;
 
@@ -32,7 +48,7 @@ export class WorldView {
   private readonly landscape: LandscapeView;
   private readonly clonkSprites = new Map<Clonk, { body: Sprite; shirt: Sprite }>();
   private readonly itemSprites = new Map<Item, Sprite>();
-  private readonly structureSprites = new Map<Structure, { body: Sprite; door: Sprite; pole: Sprite; cloth: Sprite; basement: Sprite | null }>();
+  private readonly structureSprites = new Map<Structure, StructureSprites>();
   /** Buildings sit behind loose items and clonks. */
   private readonly structureLayer = new Container();
   /** Marks over the selected clonks. */
@@ -204,11 +220,16 @@ export class WorldView {
       let s = this.structureSprites.get(st);
       if (!s) {
         s = {
-          body: new Sprite(frame(tex[g.file], g.facet.x, g.facet.y, g.facet.w, g.facet.h)),
+          site: new Sprite(frame(tex[g.file], g.facet.x, g.facet.y, g.facet.w, g.facet.h)),
+          body: new Sprite(),
           door: new Sprite(),
           pole: new Sprite(),
           cloth: new Sprite(),
           basement: null,
+          rope: new Graphics(),
+          liftCase: null,
+          gates: [],
+          con: -1,
         };
         const b = st.basement;
         if (b && st.def.basement) {
@@ -216,25 +237,36 @@ export class WorldView {
           s.basement.position.set(b.x, b.y);
           this.structureLayer.addChild(s.basement);
         }
-        const left = st.x + st.def.offset.x;
-        const top = st.y + st.def.offset.y;
-        s.body.position.set(left, top);
-        s.door.position.set(left + g.door.at.x, top + g.door.at.y);
+        const left = st.left;
+        const top = st.top;
+        // A construction site shows the whole building faintly, and the built part solid.
+        s.site.position.set(left, top);
+        s.site.alpha = 0.25;
+        if (g.door) s.door.position.set(left + g.door.at.x, top + g.door.at.y);
         // The flag's attach vertex sits on the building's flag vertex.
         const fx = st.x + st.def.flagVertex.x - FLAG.vertex.x - FLAG.width / 2;
         const fy = st.y + st.def.flagVertex.y - FLAG.vertex.y - FLAG.height / 2;
         s.pole.position.set(fx, fy);
         s.cloth.position.set(fx, fy);
-        this.structureLayer.addChild(s.body, s.door, s.pole, s.cloth);
+        this.structureLayer.addChild(s.rope, s.site, s.body, s.door, s.pole, s.cloth);
         this.structureSprites.set(st, s);
       }
       if (s.basement && !st.basement) {
         s.basement.destroy();
         s.basement = null;
       }
+      if (st.con !== s.con) {
+        // The built part, from the bottom up.
+        s.con = st.con;
+        const full = st.complete;
+        const h = full ? g.facet.h : Math.max(1, Math.round((g.facet.h * st.con) / CONSTRUCTION.fullCon));
+        s.body.texture = frame(tex[g.file], g.facet.x, g.facet.y + g.facet.h - h, g.facet.w, h);
+        s.body.position.set(st.left, st.top + g.facet.h - h);
+        s.site.visible = !full;
+      }
       const d = st.doorFrame;
-      s.door.visible = st.door > 0;
-      if (st.door > 0) s.door.texture = frame(tex[g.file], g.door.x + d * g.door.w, g.door.y, g.door.w, g.door.h);
+      s.door.visible = !!g.door && st.door > 0;
+      if (g.door && st.door > 0) s.door.texture = frame(tex[g.file], g.door.x + d * g.door.w, g.door.y, g.door.w, g.door.h);
 
       s.pole.visible = s.cloth.visible = st.hasFlag;
       if (st.hasFlag) {
@@ -245,6 +277,30 @@ export class WorldView {
         s.cloth.texture = frame(tex[FLAG.graphic.overlay], phase * FLAG.width, y, FLAG.width, FLAG.height);
         s.cloth.tint = this.colorOf(st.base);
       }
+
+      // Elevator: the case, hanging from its rope (LiftCase, stretched from the elevator's top).
+      const k = st.liftCase;
+      if (k) {
+        const c = ELEVATOR_CASE;
+        if (!s.liftCase) {
+          s.liftCase = new Sprite(frame(tex[c.file], 0, 0, c.width, c.height));
+          this.structureLayer.addChild(s.liftCase);
+        }
+        s.liftCase.position.set(k.left, k.boxTop);
+        const rx = st.left + c.rope.x;
+        const ry = st.top + c.rope.y;
+        s.rope.clear().rect(rx, ry, c.rope.facet.w, Math.max(0, k.boxTop - ry)).fill(0x5a3a1a);
+      }
+      // Guard tower gates.
+      st.gates.forEach((gate, i) => {
+        let sp = s.gates[i];
+        if (!sp) {
+          sp = new Sprite(frame(tex[gate.def.file], 0, 0, GATE.width, GATE.height));
+          this.structureLayer.addChild(sp);
+          s.gates[i] = sp;
+        }
+        sp.position.set(gate.left, gate.top);
+      });
     }
   }
 

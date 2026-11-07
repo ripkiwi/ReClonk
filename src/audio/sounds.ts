@@ -5,8 +5,11 @@ export const SOUND_FILES = [
   'Blast1',
   'Blast2',
   'Blast3',
+  'Build1',
+  'Build2',
   'Click',
   'Die',
+  'Elevator',
   'Eliminated',
   'Grab',
   'Hurt1',
@@ -18,6 +21,7 @@ export const SOUND_FILES = [
   'Punch1',
   'Punch2',
   'Punch3',
+  'SteelGate1',
   'Trumpet',
 ] as const;
 export type SoundId = (typeof SOUND_FILES)[number];

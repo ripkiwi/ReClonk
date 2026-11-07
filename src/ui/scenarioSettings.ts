@@ -45,6 +45,7 @@ const PICTURES: Record<ItemId | 'clonk' | 'hut' | 'melee', Picture> = {
   flint: { file: 'items/Flint.png', sheet: [64, 70], x: 0, y: 6, w: 64, h: 64 },
   rock: { file: 'items/Rock.png', sheet: [64, 70], x: 0, y: 6, w: 64, h: 64 },
   gold: { file: 'items/Gold.png', sheet: [64, 70], x: 0, y: 6, w: 64, h: 64 },
+  conkit: { file: 'items/Conkit.png', sheet: [88, 60], x: 8, y: 0, w: 80, h: 60 },
   clonk: { file: 'clonk/Graphics.png', sheet: [256, 280], x: 192, y: 100, w: 32, h: 40 },
   hut: { file: 'structures/Hut2.png', sheet: [100, 66], x: 0, y: 0, w: 60, h: 50 },
   melee: { file: 'goals/Melee.png', sheet: [64, 64], x: 0, y: 0, w: 64, h: 64 },
@@ -301,6 +302,7 @@ const ITEM_NAMES: [ItemId, string][] = [
 const FOR_SALE: [ShopId, string, Picture][] = [
   ['flint', 'Flint', PICTURES.flint],
   ['rock', 'Rock', PICTURES.rock],
+  ['conkit', 'Construction kit', PICTURES.conkit],
   ['clonk', 'Clonk', PICTURES.clonk],
 ];
 /** Textures a material layer can use: everything but sky and basements. */

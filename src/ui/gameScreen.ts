@@ -161,6 +161,13 @@ export class GameScreen {
       } else if (e.type === 'death') this.env.sounds.play('Die', volumeAt(e.clonk.x, e.clonk.y));
       else if (e.type === 'eliminated') this.env.sounds.play('Eliminated');
       else if (e.type === 'gameOver' && e.winner === LOCAL_PLAYER) this.env.sounds.play('Trumpet');
+      else if (e.type === 'construct' || e.type === 'building') {
+        const st = e.structure;
+        this.env.sounds.play(Math.random() < 0.5 ? 'Build1' : 'Build2', volumeAt(st.x, st.y) * 0.8);
+      } else if (e.type === 'built') this.env.sounds.play('Click', volumeAt(e.structure.x, e.structure.y));
+      else if (e.type === 'gate') this.env.sounds.play('SteelGate1', volumeAt(e.x, e.y));
+      else if (e.type === 'elevator') this.env.sounds.play('Elevator', volumeAt(e.x, e.y) * 0.6);
+      else if (e.type === 'click') this.env.sounds.play('Click', volumeAt(e.x, e.y) * 0.7);
     }
   }
 

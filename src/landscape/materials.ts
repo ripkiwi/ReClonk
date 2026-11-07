@@ -26,7 +26,7 @@ export const SOLID = 50;
 /** Density of liquids (C4M_Liquid). */
 export const LIQUID = 25;
 
-export type ItemId = 'rock' | 'gold' | 'flint';
+export type ItemId = 'rock' | 'gold' | 'flint' | 'conkit';
 
 export interface Material {
   name: string;

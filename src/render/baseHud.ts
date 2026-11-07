@@ -4,7 +4,7 @@ import { shopEntry, type World } from '../game/world';
 import type { Clonk, ControlStyle } from '../objects/clonk';
 import { buildingKeys } from '../input/bindings';
 import { LAYOUTS, type KeyLayout } from '../input/keyboard';
-import { CLONK, ENERGY_UNIT, ITEMS } from '../objects/defs';
+import { BUILD_PLANS, CLONK, ENERGY_UNIT, ITEMS, STRUCTURES } from '../objects/defs';
 import { frame, type GameAssets } from './assets';
 
 const style = (size: number, fill = '#ffffff'): TextStyleOptions => ({
@@ -83,8 +83,10 @@ export class BaseHud {
 
   private updateBuilding(screenW: number, clonk: Clonk): void {
     const s = clonk.contained;
-    const show = !!s;
+    const planning = !s && clonk.buildMenu !== null;
+    const show = !!s || planning;
     this.panel.visible = this.title.visible = this.hint.visible = this.menuRow.visible = show;
+    if (planning) return this.updateBuildMenu(screenW, clonk);
     if (!s) return;
     const own = this.world.inOwnBase(clonk);
     this.title.text = own ? `${s.def.name} (your base)` : s.def.name;
@@ -116,7 +118,9 @@ export class BaseHud {
           icon.scale.set(4);
           icon.position.set(8, 8);
         }
-        const label = new Text({ text: `${def.name}\n${def.value}g  x${stock[id] ?? 0}`, style: style(12) });
+        // Long names go on two lines.
+        const name = def.name.length > 8 ? def.name.replace(' ', '\n') : def.name;
+        const label = new Text({ text: `${name}\n${def.value}g  x${stock[id] ?? 0}`, style: style(12) });
         label.position.set(36, 10);
         cell.addChild(box, icon, label);
         cell.position.set(i * 100, 0);
@@ -135,6 +139,42 @@ export class BaseHud {
     } else {
       this.hint.text = `No flag: not your base · ${k.down} leave`;
     }
+    const width = Math.max(360, this.menuRow.width + 24);
+    const x = Math.round(screenW / 2 - width / 2);
+    this.panel.clear().roundRect(x, 10, width, height, 8).fill({ color: 0x000000, alpha: 0.55 }).stroke({ color: 0xffffff, alpha: 0.5, width: 2 });
+    this.title.position.set(x + 12, 16);
+    this.menuRow.position.set(x + 12, 42);
+    this.hint.position.set(x + 12, 10 + height - 24);
+  }
+
+  /** The construction kit's menu: the buildings it can put up where the clonk stands. */
+  private updateBuildMenu(screenW: number, clonk: Clonk): void {
+    const key = `build:${clonk.buildMenu}`;
+    if (key !== this.menuKey) {
+      this.menuKey = key;
+      this.menuRow.removeChildren().forEach((c) => c.destroy({ children: true }));
+      BUILD_PLANS.forEach((id, i) => {
+        const def = STRUCTURES[id];
+        const p = def.graphic.picture;
+        const cell = new Container();
+        const box = new Graphics().roundRect(0, 0, 112, 76, 6);
+        if (i === clonk.buildMenu) box.fill({ color: 0xffe070, alpha: 0.3 }).stroke({ color: 0xffe070, width: 2 });
+        else box.fill({ color: 0x000000, alpha: 0.3 });
+        const pic = new Sprite(frame(this.assets.items[def.graphic.file], p.x, p.y, p.w, p.h));
+        const scale = Math.min(48 / p.w, 52 / p.h);
+        pic.scale.set(scale);
+        pic.position.set(6 + (48 - p.w * scale) / 2, 6 + (52 - p.h * scale) / 2);
+        const label = new Text({ text: def.name.replace(' ', '\n'), style: style(12) });
+        label.position.set(58, 12);
+        cell.addChild(box, pic, label);
+        cell.position.set(i * 120, 0);
+        this.menuRow.addChild(cell);
+      });
+    }
+    const k = this.keys;
+    this.title.text = 'Construction kit: build here';
+    this.hint.text = `${k.choose} choose · ${k.buy} build · ${k.down} close`;
+    const height = 146;
     const width = Math.max(360, this.menuRow.width + 24);
     const x = Math.round(screenW / 2 - width / 2);
     this.panel.clear().roundRect(x, 10, width, height, 8).fill({ color: 0x000000, alpha: 0.55 }).stroke({ color: 0xffffff, alpha: 0.5, width: 2 });
