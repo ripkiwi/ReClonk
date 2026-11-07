@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text, TilingSprite } from 'pixi.js';
 import { PLAYER_COLORS } from '../game/profiles';
 import { rankName } from '../game/ranks';
-import type { World, WorldEvent } from '../game/world';
+import type { CrewCursor, World, WorldEvent } from '../game/world';
 import { CLONK, FLAG } from '../objects/defs';
 import type { Clonk } from '../objects/clonk';
 import type { Item } from '../objects/item';
@@ -35,6 +35,8 @@ export class WorldView {
   private readonly structureSprites = new Map<Structure, { body: Sprite; door: Sprite; pole: Sprite; cloth: Sprite }>();
   /** Buildings sit behind loose items and clonks. */
   private readonly structureLayer = new Container();
+  /** Marks over the selected clonks. */
+  private readonly marks = new Graphics();
   private readonly flashes: Flash[] = [];
   private readonly messages: Message[] = [];
   zoom = 2;
@@ -54,8 +56,38 @@ export class WorldView {
     this.layer.addChild(this.landscape.sprite, this.structureLayer);
   }
 
+  /**
+   * Corner marks around the selected clonks and a small arrow over the leader,
+   * like the original's selection marks.
+   */
+  private updateMarks(cursor: CrewCursor | undefined): void {
+    const g = this.marks;
+    g.clear();
+    if (!cursor) return;
+    const color = 0xffe070;
+    for (const c of cursor.selected) {
+      if (c.contained || !c.alive) continue;
+      const l = c.x - 9;
+      const t = c.y - 12;
+      const r = c.x + 9;
+      const b = c.y + 11;
+      const k = 3;
+      g.moveTo(l, t + k).lineTo(l, t).lineTo(l + k, t)
+        .moveTo(r - k, t).lineTo(r, t).lineTo(r, t + k)
+        .moveTo(l, b - k).lineTo(l, b).lineTo(l + k, b)
+        .moveTo(r - k, b).lineTo(r, b).lineTo(r, b - k);
+    }
+    g.stroke({ color, width: 1, alpha: 0.9 });
+    const lead = cursor.leader;
+    if (lead && !lead.contained && lead.alive) {
+      const bob = Math.round(Math.sin(this.world.tick / 6));
+      const y = lead.y - 17 + bob;
+      g.poly([lead.x - 3, y - 3, lead.x + 3, y - 3, lead.x, y]).fill({ color, alpha: 0.95 });
+    }
+  }
+
   /** Update everything for a screen of the given size, centred on `follow`. */
-  update(screenW: number, screenH: number, follow: Clonk | undefined, events: readonly WorldEvent[]): void {
+  update(screenW: number, screenH: number, follow: Clonk | undefined, events: readonly WorldEvent[], cursor?: CrewCursor): void {
     const { land } = this.world;
     // Pick a zoom that shows roughly 380 world pixels vertically, like the original at 1:1 on an old screen.
     this.zoom = Math.max(1, Math.round(screenH / 380));
@@ -83,6 +115,7 @@ export class WorldView {
     this.updateStructures();
     this.updateItems();
     this.updateClonks();
+    this.updateMarks(cursor);
     this.updateEffects(events);
   }
 
@@ -121,6 +154,8 @@ export class WorldView {
         s.shirt.anchor.set(0.5);
         s.shirt.tint = this.colorOf(c.owner);
         this.layer.addChild(s.body, s.shirt);
+        // Keep the selection marks on top of every clonk.
+        this.layer.addChild(this.marks);
         this.clonkSprites.set(c, s);
       }
       s.body.visible = s.shirt.visible = !c.contained;

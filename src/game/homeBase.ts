@@ -1,12 +1,12 @@
-import { Mat, type ItemId } from '../landscape/materials';
+import { Mat } from '../landscape/materials';
 import { STRUCTURES } from '../objects/defs';
 import type { Structure } from '../objects/structure';
-import type { PlayerState, World } from './world';
+import type { PlayerState, ShopId, World } from './world';
 
 /** Starting money and home base stock for the default scenario (like Scenario.txt Wealth / HomeBaseMaterial). */
-export const DEFAULT_START: { wealth: number; stock: Partial<Record<ItemId, number>> } = {
+export const DEFAULT_START: { wealth: number; stock: Partial<Record<ShopId, number>> } = {
   wealth: 25,
-  stock: { flint: 10, rock: 10 },
+  stock: { flint: 10, rock: 10, clonk: 5 },
 };
 
 /** First solid (or liquid) row in a column. */

@@ -1,5 +1,5 @@
 import { rankName } from '../game/ranks';
-import type { PlayerState } from '../game/world';
+import type { CrewCursor, PlayerState } from '../game/world';
 import { KEY_HELP } from '../input/keyboard';
 import type { Clonk, ControlStyle } from '../objects/clonk';
 import { CLONK, ENERGY_UNIT, ITEMS } from '../objects/defs';
@@ -9,9 +9,24 @@ import { drawItem, expProgress, h, portrait, rankBadge } from './dom';
 /** Seconds before the key help fades back. */
 const HELP_SECONDS = 25;
 
+export interface HudActions {
+  onMenu(): void;
+  /** A crew bar portrait was clicked; `add` with Shift held. */
+  onCrew(index: number, add: boolean): void;
+}
+
+/** One clonk in the crew bar. */
+interface CrewCell {
+  el: HTMLButtonElement;
+  img: HTMLImageElement;
+  energy: HTMLElement;
+  /** What the cell was last drawn with. */
+  key: string;
+}
+
 /**
- * The in-game overlay: the selected clonk's portrait, name, rank and experience,
- * what it carries, a menu button and the key help.
+ * The in-game overlay: the leader's portrait, name, rank and experience,
+ * what it carries, the crew bar, a menu button and the key help.
  */
 export class Hud {
   readonly el: HTMLElement;
@@ -26,6 +41,9 @@ export class Hud {
   private readonly wealth: HTMLElement;
   private readonly wealthText: HTMLElement;
   private readonly help: HTMLElement;
+  /** Portraits of every clonk in the round, to switch between them. Hidden with only one. */
+  private readonly crewBar: HTMLElement;
+  private cells: CrewCell[] = [];
   private shown = {
     rank: -1,
     exp: -1,
@@ -39,7 +57,7 @@ export class Hud {
     root: HTMLElement,
     private readonly assets: GameAssets,
     style: ControlStyle,
-    onMenu: () => void,
+    private readonly actions: HudActions,
   ) {
     this.portrait = portrait(1);
     this.name = h('div', { class: 'crew-name' });
@@ -54,7 +72,8 @@ export class Hud {
     drawItem(coin, ITEMS.gold, assets);
     this.wealth = h('div', { class: 'hud-wealth', title: 'Gold' }, coin, this.wealthText);
     this.help = h('div', { class: 'hud-help' });
-    for (const [keys, action] of KEY_HELP[style]) this.help.append(h('b', {}, keys), ` ${action}   `);
+    this.crewBar = h('div', { class: 'hud-crewbar' });
+    for (const [keys, action] of KEY_HELP[style]) this.help.append(h('span', {}, h('b', {}, keys), ` ${action}`));
     this.el = h(
       'div',
       { class: 'hud' },
@@ -73,7 +92,8 @@ export class Hud {
         ),
         h('div', { class: 'hud-side' }, h('div', { class: 'hud-slot', title: 'Carrying' }, this.slot), this.wealth),
       ),
-      h('button', { class: 'hud-menu', onclick: onMenu }, 'Menu (Esc)'),
+      this.crewBar,
+      h('button', { class: 'hud-menu', onclick: () => actions.onMenu() }, 'Menu (Esc)'),
       this.help,
     );
     root.append(this.el);
@@ -81,7 +101,8 @@ export class Hud {
   }
 
   /** Bring the HUD up to date. Only touches the DOM when something changed. */
-  update(c: Clonk | undefined, player?: PlayerState): void {
+  update(c: Clonk | undefined, player?: PlayerState, crew: readonly Clonk[] = [], cursor?: CrewCursor): void {
+    this.updateCrewBar(crew, cursor);
     const s = this.shown;
     const info = c?.info;
     if (c !== s.clonk) {
@@ -122,6 +143,43 @@ export class Hud {
       drawItem(this.slot, c?.carrying?.def, this.assets);
       this.slot.parentElement!.title = c?.carrying ? `Carrying ${c.carrying.def.name}` : 'Empty hands';
     }
+  }
+
+  /** The crew bar: one portrait per clonk, the leader and the selected ones marked. */
+  private updateCrewBar(crew: readonly Clonk[], cursor?: CrewCursor): void {
+    const show = crew.length > 1;
+    this.crewBar.style.display = show ? '' : 'none';
+    if (!show) return;
+    while (this.cells.length < crew.length) {
+      const index = this.cells.length;
+      const img = portrait(1);
+      const energy = h('div');
+      const el = h(
+        'button',
+        { class: 'crew-cell', onclick: (e: MouseEvent) => this.actions.onCrew(index, e.shiftKey) },
+        img,
+        index < 9 ? h('span', { class: 'crew-key' }, String(index + 1)) : null,
+        h('div', { class: 'mini-energy' }, energy),
+      );
+      this.crewBar.append(el);
+      this.cells.push({ el, img, energy, key: '' });
+    }
+    crew.forEach((c, i) => {
+      const cell = this.cells[i];
+      const info = c.info;
+      const state = !c.alive ? 'dead' : cursor?.leader === c ? 'leader' : cursor?.selected.has(c) ? 'selected' : '';
+      const energy = c.alive ? Math.ceil((c.energy / CLONK.energy) * 20) : 0;
+      const key = `${info?.memberId}:${info?.rank}:${state}:${energy}:${!!c.contained}`;
+      if (key === cell.key) return;
+      cell.key = key;
+      cell.img.src = portrait(info?.portrait ?? 1).src;
+      cell.el.className = `crew-cell ${state}`;
+      cell.energy.style.width = `${energy * 5}%`;
+      cell.energy.classList.toggle('low', energy <= 6);
+      const name = info ? `${rankName(info.rank)} ${info.name}` : 'Clonk';
+      const where = !c.alive ? ' (dead)' : c.contained ? ` (in the ${c.contained.def.name})` : '';
+      cell.el.title = `${name}${where}\nClick to control, Shift-click to add to the group`;
+    });
   }
 
   dispose(): void {

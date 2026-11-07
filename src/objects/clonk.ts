@@ -33,16 +33,33 @@ export interface ControlState {
   pressedLeft: boolean;
   pressedRight: boolean;
   pressedThrow: boolean;
-  /** Classic controls have a separate dig key. */
   pressedDig: boolean;
+  /** Dig pressed twice in quick succession: use what the clonk carries (the original's double dig). */
+  pressedUse: boolean;
+  /** Down pressed twice in quick succession. */
+  doubleDown: boolean;
+  /** Change which clonks of the crew follow the controls. */
+  crew: CrewCommand | null;
   /** Number of key presses this tick. Every 5th command earns experience, like the original. */
   commands: number;
 }
 
+/**
+ * Crew selection, like the original's crew cursor: make the next or previous
+ * clonk the leader, pick one by its place in the crew, add or remove one from
+ * the group, or select the whole crew.
+ */
+export type CrewCommand =
+  | { type: 'next' }
+  | { type: 'prev' }
+  | { type: 'all' }
+  | { type: 'pick'; index: number }
+  | { type: 'toggle'; index: number };
+
 export const NO_CONTROL: ControlState = {
   left: false, right: false, up: false, down: false,
   pressedUp: false, pressedDown: false, pressedLeft: false, pressedRight: false,
-  pressedThrow: false, pressedDig: false, commands: 0,
+  pressedThrow: false, pressedDig: false, pressedUse: false, doubleDown: false, crew: null, commands: 0,
 };
 
 /** What the world does for a clonk when the player asks for it. */
@@ -50,6 +67,8 @@ export interface ClonkActions {
   throwItem: (item: Item, xdir: number, ydir: number) => void;
   /** Go into a building whose door the clonk stands in. Returns false if there is none. */
   tryEnter: () => boolean;
+  /** Use the carried item (double dig). Returns false if there's nothing to use. */
+  useItem: () => boolean;
 }
 
 export type ControlStyle = 'jumpAndRun' | 'classic';
@@ -92,6 +111,10 @@ const COMDIRS: ComDir[] = [
 ];
 const comIndex = (c: ComDir): number => COMDIRS.findIndex((d) => d.x === c.x && d.y === c.y);
 const THROW_SPEED = physical(400, P.throw);
+/** A clonk walking to the leader gives up after this many ticks (20 seconds). */
+const GO_TO_TICKS = 36 * 20;
+/** Close enough to the leader. */
+const GO_TO_NEAR = 6;
 
 export class Clonk extends GameObject {
   readonly vertices = CLONK.vertices;
@@ -113,6 +136,9 @@ export class Clonk extends GameObject {
   controlStyle: ControlStyle = 'jumpAndRun';
   /** Set for clonks from a player's crew. */
   info: CrewInfo | null = null;
+  /** Walking over to this x position (the crew gathering at its leader), or null. */
+  goTo: number | null = null;
+  private goToTicks = 0;
 
   constructor(
     x: number,
@@ -230,19 +256,26 @@ export class Clonk extends GameObject {
   /** Apply a player's controls. Hold a direction to move; see README for the key layout. */
   control(c: ControlState, out: ClonkActions): void {
     if (this.action.disabled) return;
+    if (this.goTo !== null) {
+      // Walking over to the leader until the player takes over again.
+      if (!takesOver(c)) return this.followGoTo();
+      this.goTo = null;
+    }
     if (this.controlStyle === 'classic') return this.controlClassic(c, out);
     const held: ComDir = { x: c.left ? -1 : c.right ? 1 : 0, y: c.up ? -1 : c.down ? 1 : 0 };
     switch (this.action.procedure) {
       case 'walk':
         this.comDir = { x: held.x, y: 0 };
         if (c.pressedUp && out.tryEnter()) break;
+        if (c.pressedUse && out.useItem()) break;
         if (c.pressedUp) {
           // Clonks always jump forward.
           const tx = held.x !== 0 ? held.x * WALK_SPEED : this.dir * WALK_SPEED;
           this.jump(tx, -JUMP_SPEED);
-        } else if (c.pressedDown) {
+        } else if (c.pressedDig) {
+          // Dig the way the player is pointing, straight down if nowhere.
           this.setAction('Dig', 0, 0);
-          this.comDir = { x: held.x, y: 1 };
+          this.comDir = held.x !== 0 || held.y !== 0 ? held : { x: 0, y: 1 };
         }
         if (c.pressedThrow) this.throwOrDrop(true, out);
         break;
@@ -269,11 +302,15 @@ export class Clonk extends GameObject {
         if (c.pressedThrow) this.throwOrDrop(false, out);
         break;
       case 'dig':
+        // The clonk keeps digging on its own until dig is pressed again, so it
+        // can be left to dig while the player controls another clonk.
         if (c.pressedThrow) {
           this.walk();
           this.throwOrDrop(true, out);
-        } else if (held.x === 0 && held.y === 0) this.walk();
-        else this.comDir = held;
+        } else if (c.pressedUse) {
+          if (out.useItem()) this.walk();
+        } else if (c.pressedDig) this.walk();
+        else if (held.x !== 0 || held.y !== 0) this.comDir = held;
         break;
       case 'swim':
         if (c.pressedUp && out.tryEnter()) break;
@@ -295,6 +332,7 @@ export class Clonk extends GameObject {
         if (c.pressedRight) this.comDir = { x: 1, y: 0 };
         if (c.pressedDown) this.comDir = STOP;
         if (c.pressedUp && out.tryEnter()) break;
+        if (c.pressedUse && out.useItem()) break;
         if (c.pressedUp) {
           const tx = this.comDir.x !== 0 ? this.comDir.x * WALK_SPEED : this.dir * WALK_SPEED;
           this.jump(tx, -JUMP_SPEED);
@@ -333,6 +371,10 @@ export class Clonk extends GameObject {
         if (c.pressedThrow) this.throwOrDrop(false, out);
         break;
       case 'dig': {
+        if (c.pressedUse && out.useItem()) {
+          this.walk();
+          break;
+        }
         // Left/right turn the dig direction one step at a time.
         const i = comIndex(cd);
         if (c.pressedLeft && i >= 1 && i <= 6) this.comDir = COMDIRS[i + 1];
@@ -347,6 +389,55 @@ export class Clonk extends GameObject {
         if (c.pressedUp) this.comDir = { x: cd.x, y: -1 };
         if (c.pressedDown) this.comDir = { x: cd.x, y: 1 };
         if (c.pressedThrow) this.throwOrDrop(false, out);
+        break;
+    }
+  }
+
+  /**
+   * The player switched to another clonk. With jump'n'run controls a clonk
+   * only walks while a key is held, so it stops; whatever it does on its own
+   * (digging) goes on. Classic commands carry on, as in the original.
+   */
+  release(): void {
+    if (this.controlStyle === 'classic' || this.action.procedure === 'dig') return;
+    this.comDir = STOP;
+  }
+
+  /** Walk over to `x`, for example to gather the crew at its leader. */
+  walkTo(x: number): void {
+    this.goTo = x;
+    this.goToTicks = GO_TO_TICKS;
+  }
+
+  /** One tick of walking towards `goTo`: walk, climb what's in the way, swim. */
+  private followGoTo(): void {
+    const target = this.goTo;
+    if (target === null) return;
+    const dx = target - this.x;
+    if (Math.abs(dx) <= GO_TO_NEAR || --this.goToTicks <= 0) {
+      this.goTo = null;
+      if (this.action.procedure !== 'scale') this.comDir = STOP;
+      return;
+    }
+    const d = dx < 0 ? -1 : 1;
+    switch (this.action.procedure) {
+      case 'walk':
+      case 'flight':
+      case 'kneel':
+      case 'throw':
+      case 'hangle':
+        this.comDir = { x: d, y: 0 };
+        break;
+      case 'dig':
+        this.walk();
+        this.comDir = { x: d, y: 0 };
+        break;
+      case 'scale':
+        if (d === this.dir) this.comDir = { x: 0, y: -1 };
+        else this.jump(d, 0);
+        break;
+      case 'swim':
+        this.comDir = { x: d, y: -1 };
         break;
     }
   }
@@ -607,6 +698,7 @@ export class Clonk extends GameObject {
   private die(): void {
     this.alive = false;
     this.menu = null;
+    this.goTo = null;
     this.comDir = STOP;
     this.setAction('Dead', 0);
   }
@@ -630,6 +722,11 @@ export class Clonk extends GameObject {
     }
     return null;
   }
+}
+
+/** True if the player does something with a clonk that's walking over to the leader (down doesn't count: it's the gather key). */
+function takesOver(c: ControlState): boolean {
+  return c.left || c.right || c.up || c.pressedThrow || c.pressedDig || c.pressedUse;
 }
 
 /** Which surface an action holds on to. */
