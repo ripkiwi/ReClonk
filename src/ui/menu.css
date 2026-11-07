@@ -759,3 +759,56 @@ button {
   80% { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* Settings: key bindings per control style. */
+.key-settings h3 { margin-top: 8px; }
+.key-settings .check-row { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.key-settings .hint-line { margin: 1px 0 0 22px; font-size: 11px; font-style: italic; color: var(--ink-soft); }
+.key-tabs { display: flex; gap: 6px; margin: 2px 0 4px; }
+.key-tabs .ink-button.selected { background: rgba(120, 80, 30, 0.28); font-weight: bold; }
+.key-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.key-table td { padding: 2px 4px; border-top: 1px solid rgba(58, 40, 18, 0.14); }
+.key-table td:first-child { width: 52%; }
+.key-table tr.listening { background: rgba(224, 176, 32, 0.22); }
+.key-table tr.fixed { color: var(--ink-soft); }
+.key-cell { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 22px; }
+.key-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 26px;
+  justify-content: center;
+  border: 1px solid rgba(58, 40, 18, 0.5);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: rgba(255, 245, 220, 0.6);
+  padding: 0 6px;
+  font: inherit;
+  font-weight: bold;
+  color: var(--ink);
+  cursor: pointer;
+}
+.key-chip .x { font-weight: normal; color: var(--ink-soft); opacity: 0; }
+.key-chip:hover .x { opacity: 1; }
+.key-chip:hover { background: rgba(255, 220, 200, 0.8); }
+.key-chip.listening { font-weight: normal; font-style: italic; cursor: default; border-style: dashed; }
+.key-add {
+  width: 22px;
+  border: 1px dashed rgba(58, 40, 18, 0.5);
+  border-radius: 4px;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.key-add:hover { background: rgba(255, 245, 220, 0.6); color: var(--ink); }
+.key-none { font-size: 11px; font-style: italic; color: #a03020; }
+.key-footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 6px; }
+.key-note { font-size: 12px; font-style: italic; color: var(--ink-soft); }
+.key-settings h1 { font-size: 32px; }
+.key-settings .sub { margin-bottom: 0; }
+.key-settings h3 { margin: 4px 0 2px; font-size: 17px; }
+.key-table td { padding: 0 4px; }
+.key-cell { min-height: 20px; gap: 3px; }
+.key-chip, .key-add { line-height: 17px; font-size: 12px; }

@@ -58,30 +58,6 @@ export const LAYOUTS: Record<ControlStyle, KeyLayout> = {
   },
 };
 
-/** What each key does, for help texts in the menu and in game. */
-export const KEY_HELP: Record<ControlStyle, [keys: string, action: string][]> = {
-  jumpAndRun: [
-    ['A / D or ← / →', 'walk (hold)'],
-    ['W, ↑ or Space', 'jump, climb up, go in a door'],
-    ['S / ↓', 'climb down, leave a building'],
-    ['Q', 'dig, again to stop (steer with A / D / W / S)'],
-    ['Q Q', 'use what you carry'],
-    ['E', 'throw'],
-    ['Tab / 1–9', 'next clonk / pick a clonk'],
-    ['R', 'whole crew (S gathers them)'],
-  ],
-  classic: [
-    ['Z (Y) / C or ← / →', 'start walking'],
-    ['X or ↓', 'stop'],
-    ['S or ↑', 'jump, go in a door'],
-    ['D or Enter', 'dig (← / → turn)'],
-    ['D D', 'use what you carry'],
-    ['A or Space', 'throw'],
-    ['Q / E or 1–9', 'previous / next clonk, pick a clonk'],
-    ['W', 'whole crew (X X gathers them)'],
-  ],
-};
-
 /**
  * Turns keyboard events into one ControlState per simulation tick.
  * "Pressed" flags are latched until the next tick reads them, so a quick tap
@@ -113,7 +89,7 @@ export class Keyboard {
       const digit = DIGITS.indexOf(e.code);
       if (digit >= 0) this.crew = { type: 'pick', index: digit };
       else if (k.crewAll.includes(e.code)) this.crew = { type: 'all' };
-      else if (k.crewPrev.includes(e.code) || (e.code === 'Tab' && e.shiftKey)) this.crew = { type: 'prev' };
+      else if (k.crewPrev.includes(e.code) || (e.shiftKey && k.crewNext.includes(e.code))) this.crew = { type: 'prev' };
       else if (k.crewNext.includes(e.code)) this.crew = { type: 'next' };
     }
     this.held.add(e.code);
@@ -127,8 +103,10 @@ export class Keyboard {
   constructor(
     style: ControlStyle,
     private readonly target: Window = window,
+    /** The player's own keys, if they changed them in the settings. */
+    layout: KeyLayout = LAYOUTS[style],
   ) {
-    this.layout = LAYOUTS[style];
+    this.layout = layout;
     this.gameKeys = new Set([...Object.values(this.layout).flat(), ...DIGITS]);
     target.addEventListener('keydown', this.onDown);
     target.addEventListener('keyup', this.onUp);
