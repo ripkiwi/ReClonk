@@ -19,18 +19,21 @@ import { rankName } from '../game/ranks';
 import { LOCAL_PLAYER, type Round } from '../game/round';
 import { deleteScenario, loadScenarios, saveEdit, saveScenarios } from '../game/scenarioStore';
 import { isOriginal, landscapeSize, SCENARIOS, scenarioById, type ScenarioDef } from '../game/scenarios';
-import { KEY_HELP } from '../input/keyboard';
+import { keyHelp, layoutFor, saveSettings, type Settings } from '../input/bindings';
 import { bigButton, expBar, expProgress, h, portrait, rankBadge } from './dom';
 import { scenarioPreview } from './preview';
+import { gameSettings } from './gameSettings';
 import { scenarioSettings } from './scenarioSettings';
 
-export type MenuScreen = 'main' | 'players' | 'scenarios' | 'settings' | 'credits';
+export type MenuScreen = 'main' | 'players' | 'scenarios' | 'settings' | 'options' | 'credits';
 
 export interface MenuOptions {
   root: HTMLElement;
   sounds: Sounds;
   storage: KeyValueStore;
   store: ProfileStore;
+  /** Game settings: key bindings and the in-game key help. */
+  settings: Settings;
   /** Clonk names to hire from (the original's Names.txt). */
   names: readonly string[];
   onPlay(scenario: ScenarioDef, profile: Profile): void;
@@ -117,6 +120,8 @@ export class Menu {
         return this.mount(this.scenarioScreen(), 'bg-scenarios', () => this.go('main'));
       case 'settings':
         return this.mount(this.settingsScreen(), 'bg-main', () => this.go('scenarios'));
+      case 'options':
+        return this.mount(this.optionsScreen(), 'bg-main', () => this.go('main'));
       case 'credits':
         return this.mount(this.creditsScreen(), 'bg-main', () => this.go('main'));
     }
@@ -153,7 +158,8 @@ export class Menu {
       h('div', { class: 'game-subtitle' }, 'Dig, blast and mine for gold'),
       bigButton('Start game', 540, 300, () => this.go(profile ? 'scenarios' : 'players')),
       bigButton('Players', 540, 350, () => this.go('players')),
-      bigButton('Credits', 540, 400, () => this.go('credits')),
+      bigButton('Settings', 540, 400, () => this.go('options')),
+      bigButton('Credits', 540, 450, () => this.go('credits')),
       h(
         'div',
         { class: 'main-player' },
@@ -251,7 +257,7 @@ export class Menu {
             'button',
             {
               class: `ctrl-tile${on ? ' selected' : ''}`,
-              title: KEY_HELP[s.style].map(([k, a]) => `${k}: ${a}`).join('\n'),
+              title: keyHelp(s.style, layoutFor(this.o.settings, s.style)).map(([k, a]) => `${k}: ${a}`).join('\n'),
               onclick: () => {
                 profile.controlStyle = s.style;
                 this.save();
@@ -531,6 +537,17 @@ export class Menu {
   }
 
   // -------------------------------------------------------------- credits
+
+  /** Keys for both control styles, and the in-game key help switch. */
+  private optionsScreen(): HTMLElement[] {
+    return gameSettings({
+      settings: this.o.settings,
+      style: activeProfile(this.o.store)?.controlStyle ?? 'jumpAndRun',
+      save: () => saveSettings(this.o.storage, this.o.settings),
+      click: () => this.o.sounds.play('Click', 0.5),
+      onBack: () => this.go('main'),
+    });
+  }
 
   private creditsScreen(): HTMLElement[] {
     const paper = h(

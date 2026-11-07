@@ -1,7 +1,6 @@
 import { rankName } from '../game/ranks';
 import type { CrewCursor, PlayerState } from '../game/world';
-import { KEY_HELP } from '../input/keyboard';
-import type { Clonk, ControlStyle } from '../objects/clonk';
+import type { Clonk } from '../objects/clonk';
 import { CLONK, ENERGY_UNIT, ITEMS } from '../objects/defs';
 import type { GameAssets } from '../render/assets';
 import { drawItem, expProgress, h, portrait, rankBadge } from './dom';
@@ -56,7 +55,8 @@ export class Hud {
   constructor(
     root: HTMLElement,
     private readonly assets: GameAssets,
-    style: ControlStyle,
+    /** Key hints to show along the bottom, or null to leave them out (the default, see Settings). */
+    keyHelp: readonly [keys: string, action: string][] | null,
     private readonly actions: HudActions,
   ) {
     this.portrait = portrait(1);
@@ -73,7 +73,7 @@ export class Hud {
     this.wealth = h('div', { class: 'hud-wealth', title: 'Gold' }, coin, this.wealthText);
     this.help = h('div', { class: 'hud-help' });
     this.crewBar = h('div', { class: 'hud-crewbar' });
-    for (const [keys, action] of KEY_HELP[style]) this.help.append(h('span', {}, h('b', {}, keys), ` ${action}`));
+    for (const [keys, action] of keyHelp ?? []) this.help.append(h('span', {}, h('b', {}, keys), ` ${action}`));
     this.el = h(
       'div',
       { class: 'hud' },
@@ -94,10 +94,10 @@ export class Hud {
       ),
       this.crewBar,
       h('button', { class: 'hud-menu', onclick: () => actions.onMenu() }, 'Menu (Esc)'),
-      this.help,
+      keyHelp ? this.help : null,
     );
     root.append(this.el);
-    setTimeout(() => this.help.classList.add('faded'), HELP_SECONDS * 1000);
+    if (keyHelp) setTimeout(() => this.help.classList.add('faded'), HELP_SECONDS * 1000);
   }
 
   /** Bring the HUD up to date. Only touches the DOM when something changed. */

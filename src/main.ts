@@ -7,6 +7,7 @@ import { Sounds } from './audio/sounds';
 import { applyRoundResults, loadProfiles, saveProfiles, type KeyValueStore, type Profile } from './game/profiles';
 import { newSeed, roundResults, startRound, type Round } from './game/round';
 import type { ScenarioDef } from './game/scenarios';
+import { loadSettings, setKeyLabels } from './input/bindings';
 import { TEXMAP, TUNNEL } from './landscape/materials';
 import { FLAG, ITEMS, STRUCTURES } from './objects/defs';
 import { CONTENT_BASE, loadAssets } from './render/assets';
@@ -50,6 +51,16 @@ function storage(): KeyValueStore {
   }
 }
 
+/** Name keys the way this keyboard labels them (Chrome and Edge only), e.g. Y and Z on a German one. */
+async function keyboardLabels(): Promise<void> {
+  try {
+    const kb = (navigator as Navigator & { keyboard?: { getLayoutMap(): Promise<ReadonlyMap<string, string>> } }).keyboard;
+    if (kb) setKeyLabels(await kb.getLayoutMap());
+  } catch {
+    // Not allowed or not supported: keep the plain names.
+  }
+}
+
 async function start(): Promise<void> {
   const ui = document.getElementById('ui')!;
   setCssImages();
@@ -81,10 +92,12 @@ async function start(): Promise<void> {
 
   const store = storage();
   const profiles = loadProfiles(store);
+  const settings = loadSettings(store);
+  void keyboardLabels();
   let game: GameScreen | null = null;
 
   const play = (scenario: ScenarioDef, profile: Profile): void => {
-    game = new GameScreen({ app, assets, sounds, ui }, startRound(scenario, profile, names, scenario.newMapEachRound ? newSeed() : scenario.seed), finish);
+    game = new GameScreen({ app, assets, sounds, ui, settings }, startRound(scenario, profile, names, scenario.newMapEachRound ? newSeed() : scenario.seed), finish);
   };
 
   const finish = (round: Round): void => {
@@ -118,7 +131,7 @@ async function start(): Promise<void> {
     });
   };
 
-  const menu = new Menu({ root: ui, sounds, storage: store, store: profiles, names, onPlay: play });
+  const menu = new Menu({ root: ui, sounds, storage: store, store: profiles, settings, names, onPlay: play });
   loading.remove();
   menu.show('main');
 }
