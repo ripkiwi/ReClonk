@@ -1,5 +1,6 @@
 import { texIndex, type ItemId } from '../landscape/materials';
 import { DEFAULT_LANDSCAPE, MAX_MAP_PLAYER_EXTEND, sval, type LandscapeDef, type SVal } from '../landscape/mapCreator';
+import { DEFAULT_WEATHER, type WeatherDef } from './weather';
 import type { Goal, ShopId } from './world';
 
 /** Starting gold and what the home base's shop has in stock (Scenario.txt Wealth and HomeBaseMaterial). */
@@ -35,6 +36,8 @@ export interface ScenarioDef {
   opponents: number;
   /** How the round is won: 'melee' ends it when only one crew is left standing. */
   goal: Goal;
+  /** Seasons, wind, rain, thunderstorms and disasters (the Weather page). */
+  weather: WeatherDef;
   /** Set on a player's own scenario: the original it was copied from. */
   basedOn?: string;
 }
@@ -86,6 +89,8 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     base: DEFAULT_BASE,
     opponents: 0,
     goal: 'none',
+    // Gold Mine's Scenario.txt: a cool climate, a slow year, gusty winds.
+    weather: { ...DEFAULT_WEATHER, climate: sval(40, 10), yearSpeed: sval(20, 10), wind: sval(1, 100, -100, 100) },
   },
   {
     id: 'minor-melee',
@@ -112,6 +117,8 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     base: { wealth: 0, stock: { flint: 5, clonk: 5 } },
     opponents: 1,
     goal: 'melee',
+    // Minor Melee's Scenario.txt: always late spring, gusty winds.
+    weather: { ...DEFAULT_WEATHER, climate: sval(19), startSeason: sval(23), yearSpeed: sval(0), wind: sval(1, 100, -100, 100) },
   },
 ];
 
@@ -155,6 +162,10 @@ export const LIMITS = {
   /** Objects on the surface per 1000 pixels of map width. */
   objects: { min: 0, max: 200, step: 1 },
   crewSize: { min: 1, max: 12, step: 1 },
+  /** Gravity in percent of normal. */
+  gravity: { min: 10, max: 200, step: 1 },
+  /** Wind, to the left (negative) or right. */
+  wind: { min: -100, max: 100, step: 1 },
   opponents: { min: 0, max: 3, step: 1 },
   wealth: { min: 0, max: 1000, step: 5 },
   stock: { min: 0, max: 99, step: 1 },
@@ -224,6 +235,27 @@ function landscapeIn(raw: unknown, f: LandscapeDef): LandscapeDef {
     inEarth: r.inEarth ? counts(ITEM_IDS, r.inEarth, LIMITS.share) : { ...f.inEarth },
     inEarthLevel: svalIn(r.inEarthLevel, f.inEarthLevel, P),
     onSurface: r.onSurface ? counts(ITEM_IDS, r.onSurface, LIMITS.objects, false) : { ...f.onSurface },
+    gravity: svalIn(r.gravity, f.gravity, LIMITS.gravity),
+  };
+}
+
+/** The weather page within limits, missing values taken from `f`. */
+function weatherIn(raw: unknown, f: WeatherDef): WeatherDef {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Partial<WeatherDef>;
+  const P = LIMITS.percent;
+  const bool = (v: unknown, fb: boolean): boolean => (typeof v === 'boolean' ? v : fb);
+  return {
+    climate: svalIn(r.climate, f.climate, P),
+    startSeason: svalIn(r.startSeason, f.startSeason, P),
+    yearSpeed: svalIn(r.yearSpeed, f.yearSpeed, P),
+    rain: svalIn(r.rain, f.rain, P),
+    lightning: svalIn(r.lightning, f.lightning, P),
+    wind: svalIn(r.wind, f.wind, LIMITS.wind),
+    earthquake: svalIn(r.earthquake, f.earthquake, P),
+    volcano: svalIn(r.volcano, f.volcano, P),
+    meteorite: svalIn(r.meteorite, f.meteorite, P),
+    seasonColors: bool(r.seasonColors, f.seasonColors),
+    skyWind: bool(r.skyWind, f.skyWind),
   };
 }
 
@@ -266,6 +298,7 @@ export function normalizeScenario(raw: Partial<ScenarioDef>, fallback: ScenarioD
     },
     opponents: Math.round(clamp(raw.opponents, LIMITS.opponents, f.opponents)),
     goal: raw.goal === 'melee' || raw.goal === 'none' ? raw.goal : f.goal,
+    weather: weatherIn(raw.weather, f.weather),
     ...(raw.basedOn ? { basedOn: String(raw.basedOn) } : {}),
   };
 }

@@ -617,6 +617,9 @@ button {
 .pp-label { display: flex; justify-content: space-between; align-items: baseline; height: 16px; white-space: nowrap; }
 .pp-value { font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .pp-hint { font-size: 11px; font-style: italic; color: var(--ink-soft); }
+/* The words at both ends of a weather slider (the original's greyed-out labels). */
+.pp-end { font-size: 10px; color: var(--ink-soft); opacity: 0.75; }
+.pp-end.right { text-align: right; }
 .pp-check { display: flex; align-items: center; gap: 4px; height: 16px; white-space: nowrap; cursor: pointer; }
 .pp-check input { margin: 0; accent-color: #8a5a00; }
 .pp-number, .pp-select, .pp-desc {

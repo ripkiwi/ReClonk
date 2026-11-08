@@ -1,5 +1,10 @@
+// Loose material, freezing and thawing and earthquakes are ported from the Clonk
+// Rage engine (C4Landscape.cpp: InsertMaterial, FindMatSlide, ShakeFree,
+// ExecuteScan, DoScan). See licenses/clonk_engine_license.txt.
+
 import { Rng } from '../core/rng';
-import { DEFAULT_TEX, LIQUID, MATERIALS, Mat, SOLID } from './materials';
+import { DEFAULT_TEX, LIQUID, MATERIALS, Mat, SOLID, TEMP_CONV_STRENGTH } from './materials';
+import { PxsSystem } from './pxs';
 
 /** How far a liquid pixel looks sideways for somewhere lower to flow to. */
 const LIQUID_SLIDE = 12;
@@ -61,6 +66,18 @@ export class Landscape {
   readonly dirty = new Rect();
   /** Where liquids may still move; the simulation only scans this area. */
   private active = new Rect();
+  /**
+   * Downward acceleration in pixels per tick per tick: the scenario's Gravity
+   * (100 = normal) divided by 500, like the original's GravAccel.
+   */
+  gravity = 0.2;
+  /** Wind for loose pixels in the open (the weather sets it; underground there is none). */
+  wind = 0;
+  /** Loose pixels of material in flight: rain, snow, earth shaken free. */
+  readonly pxs = new PxsSystem(this);
+  /** Column the temperature scan looks at next, and how many columns it scans per tick. */
+  private scanX = 0;
+  private readonly scanSpeed: number;
 
   constructor(
     readonly width: number,
@@ -71,6 +88,7 @@ export class Landscape {
     this.tunnel = new Uint8Array(width * height);
     this.dirty.addRect(0, 0, width - 1, height - 1);
     this.active.addRect(0, 0, width - 1, height - 1);
+    this.scanSpeed = Math.max(2, Math.min(15, Math.trunc(width / 500)));
   }
 
   inBounds(x: number, y: number): boolean {
@@ -195,7 +213,12 @@ export class Landscape {
         const idx = y * w + x;
         if (moved.has(idx)) continue;
         const m = cells[idx] as Mat;
-        const d = MATERIALS[m].density;
+        const mat = MATERIALS[m];
+        const d = mat.density;
+        if (mat.instable && d >= SOLID) {
+          this.slideInstable(x, y, m, rng, moved);
+          continue;
+        }
         if (d < LIQUID || d >= SOLID) continue;
 
         if (y === this.height - 1 && this.bottomOpen) {
@@ -221,6 +244,208 @@ export class Landscape {
         this.active.add(tx, ty, LIQUID_SLIDE + 1);
       }
     }
+  }
+
+  /**
+   * Snow that nothing holds falls and slides down like sand in an hourglass
+   * (the original's mass mover with MaxSlide 1). Snow that sinks into water melts.
+   */
+  private slideInstable(x: number, y: number, m: Mat, rng: Rng, moved: Set<number>): void {
+    const w = this.width;
+    const conv = MATERIALS[m].inMatConvert;
+    if (conv && this.get(x, y + 1) === conv.mat) {
+      this.set(x, y, conv.to);
+      return;
+    }
+    if (y === this.height - 1 && this.bottomOpen) {
+      this.set(x, y, Mat.Sky);
+      return;
+    }
+    let target = -1;
+    if (this.empty(x, y + 1)) target = (y + 1) * w + x;
+    else {
+      const dir = rng.bool() ? 1 : -1;
+      for (const dx of [dir, -dir]) {
+        if (this.empty(x + dx, y) && this.empty(x + dx, y + 1)) {
+          target = (y + 1) * w + x + dx;
+          break;
+        }
+      }
+    }
+    if (target < 0) return;
+    const idx = y * w + x;
+    const tex = this.tex[idx];
+    this.set(x, y, Mat.Sky);
+    const tx = target % w;
+    this.set(tx, (target - tx) / w, m);
+    this.tex[target] = tex;
+    moved.add(target);
+  }
+
+  /**
+   * Put a loose pixel of material into the landscape, like the original's
+   * InsertMaterial: up out of its own kind, then sliding down while it can. If
+   * it ends up over a drop, it falls on as a loose pixel instead (with speed
+   * `vx`, `vy` in tenths of a pixel per tick). Liquids it lands in are pushed
+   * up out of the way. Returns false if there was no room.
+   */
+  insertMaterial(m: Mat, x: number, y: number, vx = 0, vy = 0): boolean {
+    const mat = MATERIALS[m];
+    const d = mat.density;
+    if (!d) return true;
+    if (x < 0 || x >= this.width || y < 0 || y > this.height) return false;
+    while (this.density(x, y) === d) {
+      y--;
+      if (y < 0) return false;
+      if (this.density(x - 1, y) < d) x--;
+      if (this.density(x + 1, y) < d) x++;
+    }
+    if (this.density(x, y) > d) return false;
+    const p = { x, y };
+    const slide = Math.min(mat.maxSlide ?? LIQUID_SLIDE, LIQUID_SLIDE);
+    while (this.findMatSlide(p, d, slide)) {
+      if (this.density(p.x, p.y + 1) < d) {
+        this.pxs.create(m, p.x, p.y, vx / 10, vy / 10);
+        return true;
+      }
+    }
+    if (!this.inBounds(p.x, p.y)) return false;
+    // Snow landing on water melts into it (InMatConvert).
+    const conv = mat.inMatConvert;
+    if (conv && this.get(p.x, p.y + 1) === conv.mat) m = conv.to;
+    const displaced = this.get(p.x, p.y);
+    this.set(p.x, p.y, m);
+    // Push a liquid that was there up out of the way (LandscapeInsertThrust).
+    if (displaced !== m && this.isLiquidMat(displaced)) this.insertMaterial(displaced, p.x, p.y - 1);
+    return true;
+  }
+
+  private isLiquidMat(m: Mat): boolean {
+    const d = MATERIALS[m].density;
+    return d >= LIQUID && d < SOLID;
+  }
+
+  /** One step down, or down to the side within `slide` pixels (C4Landscape::FindMatSlide). */
+  private findMatSlide(p: { x: number; y: number }, d: number, slide: number): boolean {
+    if (this.density(p.x, p.y + 1) < d) {
+      p.y++;
+      return true;
+    }
+    let left = true;
+    let right = true;
+    for (let c = 1; c <= slide && (left || right); c++) {
+      if (left) {
+        if (this.density(p.x - c, p.y) >= d && this.density(p.x - c, p.y + 1) >= d) left = false;
+        else if (this.density(p.x - c, p.y + 1) < d) {
+          p.x -= c;
+          p.y++;
+          return true;
+        }
+      }
+      if (right) {
+        if (this.density(p.x + c, p.y) >= d && this.density(p.x + c, p.y + 1) >= d) right = false;
+        else if (this.density(p.x + c, p.y + 1) < d) {
+          p.x += c;
+          p.y++;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * An earthquake shakes a round area: everything diggable in it comes loose
+   * and falls (C4Landscape::ShakeFree).
+   */
+  shakeFree(cx: number, cy: number, r: number): void {
+    for (let dy = r - 1; dy >= -r; dy--) {
+      const w = Math.trunc(Math.sqrt(r * r - dy * dy));
+      for (let dx = -w; dx < w + (w === 0 ? 1 : 0); dx++) {
+        const x = cx + dx;
+        const y = cy + dy;
+        if (!this.inBounds(x, y)) continue;
+        const m = this.get(x, y);
+        if (!MATERIALS[m].digFree) continue;
+        this.set(x, y, Mat.Sky);
+        this.pxs.create(m, x, y);
+      }
+    }
+  }
+
+  /**
+   * The temperature scan (C4Landscape::ExecuteScan): a few columns per tick,
+   * left to right and round again. Where a patch of water, ice or snow meets
+   * something else, up to TempConvStrength + 1 pixels freeze or melt, so a lake
+   * freezes over from the top and thaws from below, a bit more every pass.
+   */
+  scanTemperature(temp: number): void {
+    // Nothing can freeze or melt between -10 and 5 degrees.
+    if (temp >= -10 && temp <= 5) return;
+    for (let n = 0; n < this.scanSpeed; n++) {
+      const x = this.scanX;
+      let last = -1;
+      for (let y = 0; y < this.height; y++) {
+        const m = this.cells[y * this.width + x];
+        if (last !== m) {
+          if (last !== -1) this.doScan(x, y - 1, last as Mat, 1, temp);
+          y += this.doScan(x, y, m as Mat, 0, temp);
+        }
+        last = m;
+      }
+      this.scanX = (x + 1) % this.width;
+    }
+  }
+
+  /** Freeze or melt one column of a patch, from its top (dir 0) or bottom (dir 1). Returns how many pixels changed. */
+  private doScan(cx: number, cy: number, m: Mat, dir: 0 | 1, temp: number): number {
+    const mat = MATERIALS[m];
+    let to: Mat | null = null;
+    if (mat.belowTemp?.dir === dir && temp < mat.belowTemp.temp) to = mat.belowTemp.to;
+    if (mat.aboveTemp?.dir === dir && temp > mat.aboveTemp.temp) to = mat.aboveTemp.to;
+    if (to === null) return 0;
+    const h = this.height;
+    const inside = (y: number): boolean => y >= 0 && y <= h - 1;
+    const strength = TEMP_CONV_STRENGTH;
+    let left = strength;
+    const ydir = dir === 0 ? 1 : -1;
+    // Changes spread from the left: a column only changes once the one left of it has.
+    const lmat = cx > 0 ? this.get(cx - 1, cy) : -1;
+    if (lmat === m) return 0;
+    if (lmat !== to) {
+      // Left edge of the patch: follow its surface to the right, and don't go
+      // deeper than where the surface dips (the original's PRETTY_TEMP_CONV).
+      const range = Math.max(5, left);
+      let cys = cy;
+      let cxs = cx;
+      while (cxs < this.width - 1) {
+        cxs++;
+        if (this.get(cxs, cys) === m) {
+          cys -= ydir;
+          while (inside(cys) && this.get(cxs, cys) === m) {
+            cys -= ydir;
+            if ((left = Math.min(strength - Math.abs(cys - cy), left)) < 0) return 0;
+          }
+          if (!inside(cys)) break;
+          cys += ydir;
+        } else {
+          cys += ydir;
+          while (inside(cys) && this.get(cxs, cys) !== m) {
+            cys += ydir;
+            if (Math.abs(cys - cy) > range) break;
+          }
+          if (!inside(cys)) break;
+          if (Math.abs(cys - cy) > range) break;
+        }
+      }
+    }
+    let y = cy;
+    for (; left >= 0 && inside(y); y += ydir, left--) {
+      if (this.get(cx, y) !== m) break;
+      if ((cx > 0 ? this.get(cx - 1, y) : -1) === m) break;
+      this.set(cx, y, to);
+    }
+    return Math.abs(y - cy);
   }
 
   private empty(x: number, y: number): boolean {

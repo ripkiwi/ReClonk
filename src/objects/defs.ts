@@ -25,6 +25,8 @@ export interface ItemDef {
   usable?: boolean;
   /** Explosion radius when it hits something hard enough (flints). */
   explodeOnHit?: number;
+  /** Plus 0 to this many less one, picked at random for each explosion (meteors). */
+  explodeRandom?: number;
   /** Image in the content pack and the in-game frame inside it. */
   graphic: { file: string; facet: Facet };
 }
@@ -43,6 +45,11 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   conkit: {
     id: 'conkit', name: 'Construction kit', value: 15, rebuy: true, mass: 15, vertices: itemVertex, usable: true,
     graphic: { file: 'items/Conkit.png', facet: { x: 0, y: 0, w: 8, h: 6 } },
+  },
+  // Meteor (Meteor.c4d): falls out of the sky with a trail of smoke and sparks, and explodes where it hits.
+  meteor: {
+    id: 'meteor', name: 'Meteor', value: 10, mass: 10, vertices: itemVertex, explodeOnHit: 10, explodeRandom: 12,
+    graphic: { file: 'items/Meteor.png', facet: { x: 0, y: 0, w: 6, h: 5 } },
   },
 };
 

@@ -35,8 +35,18 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
   *Equipment* (wealth, crew, buildings, what each clonk carries, home base material), *Landscape* (the original's
   coloured sliders with random ranges, top and bottom open, width according to player number, and the map
   preview with the screen size frame, layers and "preview for 1 to 4 players") and *Environment* (material layers,
-  ground, objects in the earth and on the surface). Editing a scenario that comes with the game saves a copy under
+  ground, objects in the earth and on the surface) and *Weather* (below). Editing a scenario that comes with the game saves a copy under
   *Your scenarios*; editing one of yours changes it. Your scenarios are kept in the browser.
+- **Weather like the original** (`C4Weather` and its weather objects, ported), set on the *Weather* page with the
+  original's sliders: climate, season, time advance, rain, thunderstorms, wind, earthquakes, meteorites and gravity.
+  The year turns (YearSpeed 50 is a 6.5 minute year) and the temperature follows it; the wind changes every
+  1000 ticks. Rain clouds (one per 500 pixels of map width) drop rain that collects in lakes, or snow below
+  0 degrees that the wind blows sideways and piles up. Lakes freeze over from the top below -10 degrees and thaw
+  from below above 10; snow melts above 5. Lightning zigzags down, hurts and knocks over clonks in its way and lights
+  up the world; meteorites fall with a trail of smoke and sparks and explode where they hit; earthquakes knock clonks over, shake earth and sand loose and shake the view.
+  Flags fly with the wind, the wind howls when it's strong, and there's thunder. Optional: season colours and a sky
+  that drifts with the wind. Gold Mine and Minor Melee have the original's weather (no rain, gusty winds). Volcanoes
+  wait for lava.
 - **Basements:** huts stand on the original's 60×8 stone basement, guard towers on a 48×8 one. It can't be dug;
   nine flint blasts next to it break it into four rocks. Elevators have no basement.
 - **Construction kits** (15 gold in your base): double dig opens the build menu (wooden hut, elevator, guard tower)
@@ -147,9 +157,10 @@ npm run preview    # serve the built dist/ locally
 ```
 src/
   core/        fixed-step loop, seeded RNG
-  landscape/   material grid, flowing water, digging and blasting, the original's map creator
+  landscape/   material grid, flowing water, loose pixels (rain, snow), freezing and thawing,
+               digging and blasting, the original's map creator
   objects/     clonk and item behaviour, ported movement physics, object definitions
-  game/        the World (steps everything, explosions, experience), scenarios,
+  game/        the World (steps everything, explosions, experience), weather, scenarios,
                rounds, player profiles and ranks
   input/       keyboard to per-tick controls, per control style
   render/      PixiJS views: sky, textured landscape, sprites, camera, messages
@@ -173,8 +184,8 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
 2. **A clonk** (now): walk, jump, climb, swim, dig, throw rocks and flints that blast terrain;
    menus, player profiles, crews, ranks and the first two scenarios.
 3. **Economy and bases** (started): huts and flags, healing, buying and selling, buying clonks, fights,
-   thrown-object hits, computer crews, the original's Scenario Properties and map creator, and basements under
-   buildings are in; next: construction kits, then castles and elevators.
+   thrown-object hits, computer crews, the original's Scenario Properties and map creator, basements under
+   buildings, construction kits, elevators, guard towers and weather are in; next: more flints, trees and vegetation.
 4. **Modding and content:** a public modding API in TypeScript + JSON (the base game itself is a mod), boats, scenarios, a Classic content pack.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
 
