@@ -287,6 +287,9 @@ export class WorldView {
         g.moveTo(a.x, a.y).lineTo(c.x, c.y);
       }
       g.stroke({ color: 0xc8d8ff, width: 2.5, alpha: 0.35 });
+      g.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+      g.stroke({ color: 0xffffff, width: 1, alpha: 0.95 });
     }
     // New smoke and sparks once per tick for every meteor.
     const tick = this.world.tick;
