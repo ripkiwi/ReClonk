@@ -66,10 +66,19 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
 - A clonk carries one item. Throw it; flints explode on impact. Blasting rock and gold veins drops rocks and
   gold nuggets (one per 75 blasted pixels, like the original); granite only cracks.
 - Flints, rocks and gold lie buried in the ground and come loose when you dig them out.
+- **More flints, like the original:** the T-flint lights its fuse when it lands (or on a double dig in your hands)
+  and goes off 60 ticks later, wherever it is, even in your hands; the super T-flint burns 120 ticks for a
+  bigger blast. Super-flints (radius 30) and tera-flints (40) explode on impact like flints (18).
+- **Trees, bushes and grass:** Gold Mine and Minor Melee get the original's trees (Vegetation and
+  VegetationLevel, now on the Environment tab). Trees sway in strong wind, grow slowly (15 minutes for the big
+  one), and now and then seed a new one nearby, up to 40 in an area. Double dig at a tree to chop it: 10
+  damage every 30 ticks, so a grown tree falls after about 13 seconds; flints damage and fell trees too, and a
+  tree whose ground is blasted away falls over. Double dig at a felled tree to chop it into wood (7 for the big
+  one), which sells for 2 gold. Grass grows along the earth and blows away in blasts.
 - In Gold Mine you start next to your own wooden hut. The flag on its roof makes it your **home base**; a hut without
   a flag is just a building you can shelter in. Jump in a doorway to go in, press down to come out.
 - In your base: carried gold sells automatically (5 gold), you heal 2 energy every 3 ticks, and the base
-  pays 5 gold per 100 energy, like the original. Buy flints (5), rocks (1), construction kits (15) and clonks (25),
+  pays 5 gold per 100 energy, like the original. Buy flints (5), T-flints (4), super-flints (10), wood (2), rocks (1), construction kits (15) and clonks (25),
   or sell what you carry.
 - **Crews like the original:** a new player starts with an empty crew. Each round brings in your most
   experienced clonk who takes part, or recruits a new one with a random name who joins your crew for good.
@@ -185,7 +194,8 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
    menus, player profiles, crews, ranks and the first two scenarios.
 3. **Economy and bases** (started): huts and flags, healing, buying and selling, buying clonks, fights,
    thrown-object hits, computer crews, the original's Scenario Properties and map creator, basements under
-   buildings, construction kits, elevators, guard towers and weather are in; next: more flints, trees and vegetation.
+   buildings, construction kits, elevators, guard towers, weather, T-flints, super- and tera-flints, trees,
+   chopping, wood and grass are in.
 4. **Modding and content:** a public modding API in TypeScript + JSON (the base game itself is a mod), boats, scenarios, a Classic content pack.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
 

@@ -27,6 +27,10 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `structures/Basement48.png` | `Objects.c4d/Structures.c4d/Basements.c4d/Basement48.c4d/Graphics.png` (the guard tower's stone basement) |
 | `items/Conkit.png` | `Objects.c4d/Items.c4d/Equipment.c4d/Conkit.c4d/Graphics.png` (construction kit) |
 | `items/Meteor.png` | `Objects.c4d/Effects.c4d/Meteor.c4d/Graphics.png` (meteorite) |
+| `items/TFlint.png`, `items/SuperFlint.png`, `items/SuperTFlint.png`, `items/TeraFlint.png` | `Objects.c4d/Items.c4d/Weapons.c4d/TFlint.c4d`, `SuperFlint.c4d`, `SuperTFlint.c4d`, `TeraFlint.c4d` `/Graphics.png` |
+| `items/Wood.png` | `Objects.c4d/Items.c4d/Materials.c4d/Wood.c4d/Graphics.png` |
+| `vegetation/Tree1-4.png`, `vegetation/Bush1.png`, `vegetation/Grass.png` | `Objects.c4d/Vegetation.c4d/Tree1-4.c4d`, `Bush1.c4d`, `Grass.c4d` `/Graphics.png` |
+| `sound/Chop1-4.wav`, `Fuse.wav`, `Fusing.wav`, `TreeDown1-3.wav`, `WoodHit1-3.wav`, `RockHit1-3.wav` | `Sound.c4g/` (**renamed to lower-case `.wav`** where the original was `.WAV`) |
 | `goals/Melee.png` | `Objects.c4d/Goals.c4d/Melee.c4d/Graphics.png` (goal picture in the scenario properties) |
 | `materials/*.png` | `Material.c4g/` textures |
 | `sky/Clouds1.jpg` | `planet/Graphics.c4g/Clouds1.jpg` |

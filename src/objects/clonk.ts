@@ -8,6 +8,7 @@ import { GameObject } from './gameObject';
 import { experienceForRank, rankForExperience } from '../game/ranks';
 import type { Item } from './item';
 import type { Structure } from './structure';
+import type { Plant } from './vegetation';
 import {
   CNAT,
   CORNER_RANGE,
@@ -149,6 +150,10 @@ export class Clonk extends GameObject {
   buildMenu: number | null = null;
   /** The building it's working on (Build) or holding on to (Push). */
   workOn: Structure | null = null;
+  /** The tree it's chopping (Chop). */
+  chopping: Plant | null = null;
+  /** Standing at a tree: a dig may be the first press of a double dig that chops it. */
+  atTree = false;
   controlStyle: ControlStyle = 'jumpAndRun';
   /** Set for clonks from a player's crew. */
   info: CrewInfo | null = null;
@@ -245,6 +250,7 @@ export class Clonk extends GameObject {
       this.actionStarted = true;
       if (a.procedure !== 'fight') this.fightTarget = null;
       if (a.procedure !== 'push' && a.procedure !== 'build') this.workOn = null;
+      if (a.procedure !== 'chop') this.chopping = null;
     }
     if (xdir !== undefined) this.xdir = xdir;
     if (ydir !== undefined) this.ydir = ydir;
@@ -290,13 +296,28 @@ export class Clonk extends GameObject {
   }
 
   /**
-   * Start digging. Holding something that can be used (a construction kit),
-   * the clonk waits a moment before it breaks ground: the press may be the
-   * first of a double dig, and a fresh hole would spoil the building site.
+   * Start digging. Holding something that can be used (a construction kit,
+   * a T-flint) or standing at a tree, the clonk waits a moment before it
+   * breaks ground: the press may be the first of a double dig, and a fresh
+   * hole would spoil the building site or sink it below the tree.
    */
   private startDig(): void {
     this.setAction('Dig', 0, 0);
-    this.digWait = this.carrying?.def.usable ? USE_WAIT_TICKS : 0;
+    this.digWait = this.carrying?.def.usable || this.atTree ? USE_WAIT_TICKS : 0;
+  }
+
+  /** Chop a tree down, or a felled one into wood (ObjectActionChop). */
+  startChop(p: Plant): void {
+    this.setAction('Chop', 0, 0);
+    this.chopping = p;
+    this.comDir = STOP;
+    this.goTo = null;
+  }
+
+  /** Turn to face x. */
+  face(x: number): void {
+    if (x > this.x) this.setDir(1);
+    else if (x < this.x) this.setDir(-1);
   }
 
   /** Work on a construction site until it's done (ObjectActionBuild). */
@@ -409,7 +430,8 @@ export class Clonk extends GameObject {
           this.walk();
           this.throwOrDrop(true, out);
         } else if (c.pressedUse) {
-          if (out.useItem()) this.walk();
+          // Using it stops the digging (and may start chopping).
+          out.useItem();
         } else if (c.pressedDig) this.walk();
         else if (held.x !== 0 || held.y !== 0) this.comDir = held;
         break;
@@ -473,10 +495,7 @@ export class Clonk extends GameObject {
         if (c.pressedThrow) this.throwOrDrop(false, out);
         break;
       case 'dig': {
-        if (c.pressedUse && out.useItem()) {
-          this.walk();
-          break;
-        }
+        if (c.pressedUse && out.useItem()) break;
         // Left/right turn the dig direction one step at a time.
         const i = comIndex(cd);
         if (c.pressedLeft && i >= 1 && i <= 6) this.comDir = COMDIRS[i + 1];
@@ -597,6 +616,7 @@ export class Clonk extends GameObject {
         advance = 0;
         break;
       case 'build':
+      case 'chop':
         this.xdir = this.ydir = 0;
         break;
       case 'scale': {
@@ -922,6 +942,7 @@ function attachFor(a: ActionDef, dir: -1 | 1): number {
     case 'fight':
     case 'push':
     case 'build':
+    case 'chop':
       return CNAT.Bottom;
     case 'scale':
       return dir === -1 ? CNAT.Left : CNAT.Right;

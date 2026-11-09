@@ -3,11 +3,12 @@ import { generateMap } from '../landscape/generate';
 import { createMap, evaluate, mapColor, type LandscapeDef } from '../landscape/mapCreator';
 import { MATERIALS, Mat } from '../landscape/materials';
 import { crewCount, type ScenarioDef } from '../game/scenarios';
+import { FULL_CON, PLANTS } from '../objects/vegetation';
 
 const SKY_TOP = [0x6f, 0xa6, 0xe0];
 const SKY_BOTTOM = [0xc4, 0xdf, 0xf6];
 const TUNNEL = [0x5c, 0x42, 0x1e];
-const ITEM_COLORS: Record<string, number[]> = { flint: [0xc0, 0x20, 0x10], gold: [0xff, 0xe0, 0x30], rock: [0x50, 0x50, 0x50] };
+const ITEM_COLORS: Record<string, number[]> = { flint: [0xc0, 0x20, 0x10], tflint: [0xd0, 0x30, 0x20], superflint: [0xc0, 0x20, 0x10], wood: [0x8a, 0x5a, 0x2a], gold: [0xff, 0xe0, 0x30], rock: [0x50, 0x50, 0x50] };
 
 /** Recent previews, by everything that shapes the map, so edited scenarios get a fresh picture. */
 const cache = new Map<string, HTMLCanvasElement>();
@@ -80,6 +81,22 @@ export function scenarioPreview(s: ScenarioDef, width = 206, height = 156): HTML
     d[o + 2] = c[2];
   }
   ctx.putImageData(img, 0, 0);
+  // Trees as little crowns on trunks.
+  for (const t of map.plants) {
+    const k = t.con / FULL_CON;
+    const def = PLANTS[t.id];
+    const px = (t.x - x0) / scale;
+    const top = (t.bottom - def.height * k) / scale;
+    const bottom = t.bottom / scale;
+    const r = Math.max(0.6, (def.width * k) / scale / 3);
+    if (px < -r || px > width + r) continue;
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(px - 0.4, top + r, 0.8, Math.max(0, bottom - top - r));
+    ctx.fillStyle = t.id === 'tree2' ? '#2f6a2a' : '#3f8a2a';
+    ctx.beginPath();
+    ctx.arc(px, top + r, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
   cache.set(key, canvas);
   if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value!);
   return copyOf(canvas);

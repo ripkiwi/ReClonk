@@ -3,7 +3,7 @@ import type { ItemDef } from './defs';
 import { GameObject } from './gameObject';
 import { FLOAT_ACCEL, HIT_SPEED_1 } from './physics';
 
-/** A loose object: rock, gold nugget, flint, meteor. */
+/** A loose object: rock, gold nugget, flint, wood, meteor. */
 export class Item extends GameObject {
   /** Ticks during which a clonk that just threw or dropped this won't pick it straight back up. */
   noCollect = 0;
@@ -11,6 +11,8 @@ export class Item extends GameObject {
   thrownBy = -1;
   /** Gold only earns experience the first time someone picks it up. */
   found = false;
+  /** Ticks left on a lit T-flint's fuse; -1 while it isn't lit. */
+  fuse = -1;
 
   constructor(
     readonly def: ItemDef,
@@ -24,7 +26,18 @@ export class Item extends GameObject {
     return this.def.vertices;
   }
 
-  /** Advance one tick. Returns true if the item hit something hard (flints explode). */
+  get lit(): boolean {
+    return this.fuse >= 0;
+  }
+
+  /** Light a T-flint's fuse (TFlint.c4d Activate). Returns false if it can't be lit or already burns. */
+  light(): boolean {
+    if (!this.def.fuse || this.lit) return false;
+    this.fuse = this.def.fuse.ticks;
+    return true;
+  }
+
+  /** Advance one tick. Returns true if the item hit something hard (flints explode, T-flints light up). */
   tick(land: Landscape): boolean {
     if (this.noCollect > 0) this.noCollect--;
     const g = land.gravity;

@@ -27,33 +27,72 @@ export interface ItemDef {
   explodeOnHit?: number;
   /** Plus 0 to this many less one, picked at random for each explosion (meteors). */
   explodeRandom?: number;
+  /**
+   * T-flints: hitting something (or using it) lights the fuse instead, and it
+   * blows up with `explode` this many ticks later, wherever it is (the Activated action's Delay).
+   */
+  fuse?: { ticks: number; explode: number };
+  /** Frame shown while the fuse burns. */
+  litFacet?: Facet;
   /** Image in the content pack and the in-game frame inside it. */
   graphic: { file: string; facet: Facet };
+  /** Its picture in the same file, for menus and the scenario settings (DefCore Picture). */
+  picture: Facet;
 }
 
 const itemVertex: Vertex[] = [{ x: 0, y: 0, cnat: CNAT.None, friction: 50 }];
 const itemFacet: Facet = { x: 0, y: 0, w: 6, h: 6 };
+/** The 64x64 picture under the 6x6 in-game frame of most items. */
+const picture6: Facet = { x: 0, y: 6, w: 64, h: 64 };
 
 export const ITEMS: Record<ItemId, ItemDef> = {
-  rock: { id: 'rock', name: 'Rock', value: 1, rebuy: true, mass: 10, vertices: itemVertex, graphic: { file: 'items/Rock.png', facet: itemFacet } },
-  gold: { id: 'gold', name: 'Gold', value: 5, mass: 15, vertices: itemVertex, graphic: { file: 'items/Gold.png', facet: itemFacet } },
+  rock: { id: 'rock', name: 'Rock', value: 1, rebuy: true, mass: 10, vertices: itemVertex, graphic: { file: 'items/Rock.png', facet: itemFacet }, picture: picture6 },
+  gold: { id: 'gold', name: 'Gold', value: 5, mass: 15, vertices: itemVertex, graphic: { file: 'items/Gold.png', facet: itemFacet }, picture: picture6 },
+  // Flint.c4d: explodes when it hits something.
   flint: {
     id: 'flint', name: 'Flint', value: 5, rebuy: true, mass: 10, vertices: itemVertex, explodeOnHit: 18,
-    graphic: { file: 'items/Flint.png', facet: itemFacet },
+    graphic: { file: 'items/Flint.png', facet: itemFacet }, picture: picture6,
+  },
+  // TFlint.c4d: a hit (or using it) lights the fuse; it blows up 60 ticks later.
+  tflint: {
+    id: 'tflint', name: 'T-Flint', value: 4, rebuy: true, mass: 10, vertices: itemVertex, usable: true,
+    fuse: { ticks: 60, explode: 20 }, litFacet: { x: 0, y: 6, w: 6, h: 6 },
+    graphic: { file: 'items/TFlint.png', facet: itemFacet }, picture: { x: 0, y: 12, w: 64, h: 64 },
+  },
+  // SuperFlint.c4d: a bigger flint.
+  superflint: {
+    id: 'superflint', name: 'Super-Flint', value: 10, rebuy: true, mass: 15, vertices: itemVertex, explodeOnHit: 30,
+    graphic: { file: 'items/SuperFlint.png', facet: itemFacet }, picture: picture6,
+  },
+  // SuperTFlint.c4d: a bigger T-flint with a longer fuse.
+  supertflint: {
+    id: 'supertflint', name: 'Super-T-Flint', value: 8, rebuy: true, mass: 13, vertices: itemVertex, usable: true,
+    fuse: { ticks: 120, explode: 27 }, litFacet: { x: 0, y: 6, w: 6, h: 6 },
+    graphic: { file: 'items/SuperTFlint.png', facet: itemFacet }, picture: { x: 0, y: 12, w: 64, h: 64 },
+  },
+  // TeraFlint.c4d: the biggest flint of all.
+  teraflint: {
+    id: 'teraflint', name: 'Tera-Flint', value: 30, rebuy: true, mass: 20, vertices: itemVertex, explodeOnHit: 40,
+    graphic: { file: 'items/TeraFlint.png', facet: itemFacet }, picture: picture6,
+  },
+  // Wood.c4d: what trees are made of.
+  wood: {
+    id: 'wood', name: 'Wood', value: 2, rebuy: true, mass: 7, vertices: itemVertex,
+    graphic: { file: 'items/Wood.png', facet: { x: 0, y: 0, w: 8, h: 7 } }, picture: { x: 0, y: 7, w: 64, h: 64 },
   },
   // Construction kit (Conkit.c4d): use it to put up a construction site.
   conkit: {
     id: 'conkit', name: 'Construction kit', value: 15, rebuy: true, mass: 15, vertices: itemVertex, usable: true,
-    graphic: { file: 'items/Conkit.png', facet: { x: 0, y: 0, w: 8, h: 6 } },
+    graphic: { file: 'items/Conkit.png', facet: { x: 0, y: 0, w: 8, h: 6 } }, picture: { x: 8, y: 0, w: 80, h: 60 },
   },
   // Meteor (Meteor.c4d): falls out of the sky with a trail of smoke and sparks, and explodes where it hits.
   meteor: {
     id: 'meteor', name: 'Meteor', value: 10, mass: 10, vertices: itemVertex, explodeOnHit: 10, explodeRandom: 12,
-    graphic: { file: 'items/Meteor.png', facet: { x: 0, y: 0, w: 6, h: 5 } },
+    graphic: { file: 'items/Meteor.png', facet: { x: 0, y: 0, w: 6, h: 5 } }, picture: { x: 8, y: 0, w: 120, h: 120 },
   },
 };
 
-export type Procedure = 'walk' | 'flight' | 'scale' | 'hangle' | 'dig' | 'swim' | 'throw' | 'kneel' | 'fight' | 'push' | 'build' | 'dead';
+export type Procedure = 'walk' | 'flight' | 'scale' | 'hangle' | 'dig' | 'swim' | 'throw' | 'kneel' | 'fight' | 'push' | 'build' | 'chop' | 'dead';
 
 export interface ActionDef {
   name: string;
@@ -94,6 +133,8 @@ const actions: ActionDef[] = [
   // Holding on to an elevator case or a guard tower (Push), and working on a construction site (Build).
   { name: 'Push', procedure: 'push', length: 8, delay: 15, facetX: 128, facetY: 140, next: 'Push', inLiquid: 'Swim' },
   { name: 'Build', procedure: 'build', length: 8, delay: 2, facetX: 128, facetY: 220, next: 'Build', inLiquid: 'Swim' },
+  // Chopping a tree down, or a felled one into wood (the Chopping StartCall swings the axe).
+  { name: 'Chop', procedure: 'chop', length: 8, delay: 3, facetX: 128, facetY: 160, next: 'Chop', inLiquid: 'Swim' },
   { name: 'Dead', procedure: 'dead', length: 6, delay: 3, facetX: 0, facetY: 240, next: 'Hold', disabled: true },
 ];
 

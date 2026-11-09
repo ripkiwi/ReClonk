@@ -382,7 +382,8 @@ export class CrewAI implements Brain {
     let best: Item | null = null;
     let bestD = Infinity;
     for (const item of this.world.items) {
-      if (item.container || item.removed || item.noCollect > 0 || skip.has(item)) continue;
+      // A burning T-flint is best left alone.
+      if (item.container || item.removed || item.noCollect > 0 || item.lit || skip.has(item)) continue;
       if (Math.abs(item.xdir) + Math.abs(item.ydir) > 0.5) continue;
       const dx = Math.abs(item.x - c.x);
       const dy = item.y - c.y;
@@ -392,8 +393,8 @@ export class CrewAI implements Brain {
       if (dx > (buried ? DIG_RANGE : ITEM_RANGE) || dy < -60) continue;
       let d = dx + Math.abs(dy) * (buried ? 3 : 1.5);
       if (buried) d += 120;
-      if (item.def.id !== 'flint') d += 60;
-      if (item.def.id === 'gold') d += 60;
+      if (!item.def.explodeOnHit) d += 60;
+      if (item.def.id === 'gold' || item.def.id === 'wood') d += 60;
       if (enemy && Math.abs(enemy.x - item.x) < 30) d += 80;
       // Leave it to a crew mate who's already going for it.
       for (const [o, m] of this.minds) if (o !== c && o.alive && m.item === item) d += 150;
@@ -425,7 +426,8 @@ export class CrewAI implements Brain {
    */
   private throwHits(c: Clonk, t: Clonk): boolean {
     const { land } = this.world;
-    const flint = !!c.carrying?.def.explodeOnHit;
+    const blast = c.carrying?.def.explodeOnHit ?? 0;
+    const flint = blast > 0;
     let x = c.x;
     let y = c.y - 11;
     const vx = THROW_SPEED * c.dir;
@@ -445,7 +447,8 @@ export class CrewAI implements Brain {
       if (px < 0 || px >= land.width || py >= land.height) return false;
       if (land.isSolid(px, py)) {
         if (!flint) return hit;
-        const away = Math.abs(px - c.x) > 28 || Math.abs(py - c.y) > 28;
+        const safe = Math.max(28, blast + 10);
+        const away = Math.abs(px - c.x) > safe || Math.abs(py - c.y) > safe;
         const near = Math.abs(px - t.x) < 16 && Math.abs(py - t.y) < 18;
         return away && (hit || near);
       }

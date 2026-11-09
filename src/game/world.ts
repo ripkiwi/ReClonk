@@ -8,6 +8,7 @@ import type { GameObject } from '../objects/gameObject';
 import { Item } from '../objects/item';
 import { HIT_SPEED_2 } from '../objects/physics';
 import { Structure } from '../objects/structure';
+import { findPlantSpot, FULL_CON, grassRooted, Plant, plantRooted, PLANTS, TREE, type Grass } from '../objects/vegetation';
 import { buildStep, construct, grabOrBuild, grabTarget, pushControl, siteProblem, stepElevator, stepGate } from './buildings';
 import type { Weather } from './weather';
 
@@ -35,7 +36,17 @@ export type WorldEvent =
   /** A guard tower gate starts moving, an elevator case rides on, something was switched. */
   | { type: 'gate' | 'elevator' | 'click'; x: number; y: number; tick: number }
   /** A lightning bolt came down with a clap of thunder. */
-  | { type: 'thunder'; x: number; y: number; tick: number };
+  | { type: 'thunder'; x: number; y: number; tick: number }
+  /** A T-flint's fuse was lit. */
+  | { type: 'fuse'; x: number; y: number; tick: number }
+  /** Something landed hard: a rock, a nugget, wood. */
+  | { type: 'itemHit'; item: Item; tick: number }
+  /** A clonk's axe bit into a tree. */
+  | { type: 'chop'; clonk: Clonk; tick: number }
+  /** A tree was felled and tips over. */
+  | { type: 'treeDown'; plant: Plant; tick: number }
+  /** A blast blew a tuft of grass away. */
+  | { type: 'grassBlown'; grass: Grass; x: number; y: number; level: number; tick: number };
 
 /** Extra experience on top of the original's "1 per 5 commands", so promotions come at a fun pace. */
 export const EXPERIENCE = {
@@ -100,6 +111,10 @@ export class World {
   readonly clonks: Clonk[] = [];
   items: Item[] = [];
   readonly structures: Structure[] = [];
+  /** Trees and bushes, standing or felled. */
+  plants: Plant[] = [];
+  /** Tufts of grass, drawn only. */
+  grass: Grass[] = [];
   readonly players = new Map<number, PlayerState>();
   private readonly cursors = new Map<number, CrewCursor>();
   readonly messages: PlayerMessage[] = [];
@@ -131,7 +146,35 @@ export class World {
   static fromMap(map: GeneratedMap, seed: number): World {
     const world = new World(map.land, new Rng(seed ^ 0x5eed));
     for (const it of map.items) world.spawnItem(it.id, it.x, it.y);
+    for (const p of map.plants) world.addPlant(PLANTS[p.id].id, p.x, p.bottom, p.con, p.dir);
+    world.grass = map.grass.map((g) => ({ ...g }));
     return world;
+  }
+
+  addPlant(id: keyof typeof PLANTS, x: number, bottom: number, con = FULL_CON, dir: -1 | 1 = 1): Plant {
+    const p = new Plant(PLANTS[id], x, bottom, con, dir, this.rng);
+    this.plants.push(p);
+    return p;
+  }
+
+  /** Take away the trees and grass a building put up at the start would stand in. */
+  clearPlants(s: Structure): void {
+    const l = s.left - 4;
+    const r = s.left + s.def.width + 4;
+    const b = s.top + s.def.height + 10;
+    for (const p of this.plants) {
+      const sh = p.shape;
+      if (sh.x < r && sh.x + sh.w > l && sh.y < b && p.bottom > s.top) p.removed = true;
+    }
+    for (const g of this.grass) if (g.x > l && g.x < r && g.y > s.top && g.y < b) g.removed = true;
+    this.plants = this.plants.filter((p) => !p.removed);
+    this.grass = this.grass.filter((g) => !g.removed);
+  }
+
+  /** The tree or felled tree a clonk standing here could chop (Clonk.c4d FindTree, Find_AtPoint). */
+  choppableAt(c: Clonk): Plant | null {
+    for (const p of this.plants) if (!p.removed && p.isAt(c.x, c.y)) return p;
+    return null;
   }
 
   addClonk(x: number, y: number, owner: number): Clonk {
@@ -284,11 +327,13 @@ export class World {
         continue;
       }
       const carried = c.carrying;
+      // Whether a dig might be the first press of a double dig at a tree.
+      if (mine) c.atTree = c.action.procedure === 'walk' && !!this.choppableAt(c);
       if (mine && c.buildMenu !== null) this.buildMenuControl(c, mine);
       else if (mine && c.alive && c.action.procedure === 'push') pushControl(this, c, mine);
       else if (mine || c.goTo !== null) {
         // Moving on stops building.
-        if (mine && c.action.procedure === 'build' && stopsWork(mine)) c.letGo();
+        if (mine && (c.action.procedure === 'build' || c.action.procedure === 'chop') && stopsWork(mine)) c.letGo();
         c.control(mine ?? NO_CONTROL, {
           throwItem: (item, xdir, ydir) => throwItem(item, xdir, ydir, c),
           tryEnter: () => this.tryEnter(c),
@@ -301,6 +346,7 @@ export class World {
       c.tick(this.land);
       if (c.action.procedure === 'fight') this.fighting(c);
       if (c.action.procedure === 'build') buildStep(this, c);
+      if (c.action.procedure === 'chop') this.chopStep(c);
       if (c.buildMenu !== null && (c.action.procedure !== 'walk' || c.carrying?.def.id !== 'conkit')) c.buildMenu = null;
       const got = c.tryCollect(this.items, this.land);
       if (got) {
@@ -327,6 +373,11 @@ export class World {
       if (s?.def.exitTo && s.door === 0) this.exitTo(c, s.x + s.def.exitTo.x, s.y + s.def.exitTo.y);
     }
 
+    // Lit T-flints burn down wherever they are, in hands too.
+    for (const item of this.items) {
+      if (item.removed || !item.lit) continue;
+      if (--item.fuse <= 0) this.blowUp(item);
+    }
     for (const item of this.items) {
       if (item.container || item.removed) continue;
       if (this.fellOut(item)) {
@@ -334,6 +385,9 @@ export class World {
         continue;
       }
       const hit = item.tick(this.land);
+      if (hit && !item.def.explodeOnHit) this.events.push({ type: 'itemHit', item, tick: this.tick });
+      // A T-flint lights on impact (TFlint.c4d Hit).
+      if (hit && item.light()) this.events.push({ type: 'fuse', x: item.x, y: item.y, tick: this.tick });
       if (hit && item.def.explodeOnHit) {
         item.removed = true;
         const by = this.thrower(item);
@@ -345,6 +399,7 @@ export class World {
     if (this.items.some((i) => i.removed)) this.items = this.items.filter((i) => !i.removed);
     this.objectHits();
 
+    this.stepPlants();
     this.weather?.step(this);
     this.land.pxs.step(this.rng);
     this.land.step(this.tick, this.rng);
@@ -529,6 +584,7 @@ export class World {
       if (fling(item) > 0 && by) item.thrownBy = by.id;
     }
     for (const s of this.structures) this.blastBasement(s, x, y, radius);
+    this.blastPlants(x, y, radius);
 
     const counts = this.land.blast(x, y, radius, this.rng);
     let freed = 0;
@@ -680,16 +736,155 @@ export class World {
   }
 
   /**
-   * Use what the clonk carries (double dig): a construction kit opens the
-   * menu of buildings it can put up (Conkit.c4d Activate).
+   * Double dig (ObjectComDigDouble): first what the clonk carries gets used
+   * (a construction kit opens the menu of buildings it can put up, a T-flint
+   * lights), else it chops the tree it stands at.
    */
   private useItem(c: Clonk): boolean {
     // The first press of a double dig has already started digging.
-    if (c.carrying?.def.id !== 'conkit' || (c.action.procedure !== 'walk' && c.action.procedure !== 'dig')) return false;
-    if (c.action.procedure === 'dig') c.setAction('Walk', 0, 0);
-    c.buildMenu = 0;
-    c.comDir = { x: 0, y: 0 };
+    if (c.action.procedure !== 'walk' && c.action.procedure !== 'dig') return false;
+    const item = c.carrying;
+    if (item?.def.id === 'conkit') {
+      if (c.action.procedure === 'dig') c.setAction('Walk', 0, 0);
+      c.buildMenu = 0;
+      c.comDir = { x: 0, y: 0 };
+      return true;
+    }
+    if (item?.light()) {
+      if (c.action.procedure === 'dig') c.setAction('Walk', 0, 0);
+      item.thrownBy = c.id;
+      this.events.push({ type: 'fuse', x: c.x, y: c.y, tick: this.tick });
+      return true;
+    }
+    const plant = this.choppableAt(c);
+    if (!plant) return false;
+    c.startChop(plant);
     return true;
+  }
+
+  /**
+   * A clonk chopping (DFA_CHOP, C4Object::Chop): every 30 ticks the axe does
+   * 10 damage to a standing tree, until it falls; a felled tree gives a piece
+   * of wood each time, until there's none left.
+   */
+  private chopStep(c: Clonk): void {
+    const p = c.chopping;
+    if (!p || p.removed || p.state === 'falling' || !p.isAt(c.x, c.y)) return c.letGo();
+    c.face(p.state === 'standing' ? p.x : c.x);
+    if (this.tick % TREE.chopInterval !== 0) return;
+    this.events.push({ type: 'chop', clonk: c, tick: this.tick });
+    if (p.state === 'standing') {
+      p.damage += TREE.chopDamage;
+      if (p.damage > p.fellDamage) {
+        // It falls away from the clonk chopping it.
+        this.fell(p, c.x <= p.x ? 1 : -1);
+        c.letGo();
+      }
+      return;
+    }
+    if (p.wood > 0) {
+      p.wood--;
+      const wood = this.spawnItem('wood', c.x + c.dir * 6, c.y - 4, c.dir * (0.3 + this.rng.int(6) / 10), -1.2, this.rng.int(3) + 1);
+      // It mustn't knock over the clonk chopping, nor land straight back in its hands.
+      wood.thrownBy = c.id;
+      wood.noCollect = NO_COLLECT_TICKS;
+    }
+    if (p.wood <= 0) {
+      p.removed = true;
+      c.letGo();
+    }
+  }
+
+  private fell(p: Plant, side: -1 | 1): void {
+    if (p.state !== 'standing') return;
+    p.chopDown(side);
+    this.events.push({ type: 'treeDown', plant: p, tick: this.tick });
+  }
+
+  /**
+   * Trees grow every 35 ticks (C4Object::ExecLife), and every 350 ticks one
+   * in 500 seeds a new one nearby (Tree.c4d Seed, Reproduction). A tree whose
+   * ground is blasted or dug away falls over; so does grass.
+   */
+  private stepPlants(): void {
+    const land = this.land;
+    for (const p of this.plants) {
+      if (p.removed) continue;
+      if (p.state === 'falling') {
+        p.fall(land);
+        continue;
+      }
+      if (p.state !== 'standing') continue;
+      const t = this.tick + p.timerOffset;
+      if (t % TREE.growthInterval === 0) {
+        if (p.con < FULL_CON) p.con = Math.min(FULL_CON, p.con + p.def.growth * 100);
+        if (!plantRooted(land, p)) this.fell(p, this.rng.bool() ? 1 : -1);
+      }
+      // Sway in the wind (Tree.c4d Still and Breeze).
+      if (t % 10 === 0 && this.weather) {
+        const wind = Math.abs(this.weather.windAt(this, p.x, p.shape.y));
+        if (wind > 49 + p.threshold) p.breeze = true;
+        else if (wind < 50 + p.threshold) p.breeze = false;
+      }
+      if (t % TREE.seedInterval === 0 && this.rng.int(TREE.reproductionRate) === 0) this.reproduce(p);
+    }
+    if (this.tick % TREE.growthInterval === 0) for (const g of this.grass) if (!grassRooted(land, g)) g.removed = true;
+    if (this.plants.some((p) => p.removed)) this.plants = this.plants.filter((p) => !p.removed);
+    if (this.grass.some((g) => g.removed)) this.grass = this.grass.filter((g) => !g.removed);
+  }
+
+  /** A new tree of the same kind nearby, if there aren't too many already (Tree.c4d Reproduction). */
+  reproduce(p: Plant): Plant | null {
+    const half = TREE.reproductionArea / 2;
+    const cy = p.bottom - p.shape.h / 2;
+    const near = this.plants.filter((o) => o.state === 'standing' && Math.abs(o.x - p.x) <= half && Math.abs(o.bottom - o.shape.h / 2 - cy) <= half);
+    if (near.length >= TREE.maxTrees) return null;
+    const spot = findPlantSpot(this.land, this.rng, p.def, { x: Math.round(p.x - half), y: Math.round(cy - half), w: TREE.reproductionArea, h: TREE.reproductionArea });
+    if (!spot) return null;
+    return this.addPlant(p.def.id, spot.x, spot.bottom, TREE.seedlingCon, this.rng.bool() ? 1 : -1);
+  }
+
+  /**
+   * A blast hits trees it's right at (C4Game::BlastObjects, direct hit:
+   * within 5 pixels of the shape) for its level in damage, and fells them
+   * once it's too much (Tree.c4d Damage). Grass within its reach is blown away.
+   */
+  private blastPlants(x: number, y: number, level: number): void {
+    for (const p of this.plants) {
+      if (p.state !== 'standing') continue;
+      const s = p.shape;
+      if (y - s.y < -5 || y - s.y > s.h - 1 + 10 || x - s.x < -5 || x - s.x > s.w - 1 + 10) continue;
+      p.damage += level;
+      if (p.damage > p.fellDamage) this.fell(p, x <= p.x ? 1 : -1);
+    }
+    for (const g of this.grass) {
+      if (g.removed || Math.abs(g.y - y) > level || Math.abs(g.x - x) > level) continue;
+      g.removed = true;
+      this.events.push({ type: 'grassBlown', grass: g, x: g.x, y: g.y, level, tick: this.tick });
+    }
+  }
+
+  /**
+   * A lit T-flint's fuse burnt down (TFlint.c4d BlowUp). In a clonk's hands it
+   * goes off right there; inside a building the walls hold the blast and only
+   * the clonk gets hurt.
+   */
+  private blowUp(item: Item): void {
+    item.removed = true;
+    const holder = item.container instanceof Clonk ? item.container : null;
+    if (holder) holder.contents.splice(holder.contents.indexOf(item), 1);
+    item.container = null;
+    const level = item.def.fuse?.explode ?? 20;
+    const by = this.thrower(item) ?? holder;
+    if (holder?.contained) {
+      this.hurt(holder, Math.trunc(level / 3), by);
+      return;
+    }
+    const x = holder ? holder.x : item.x;
+    const y = holder ? holder.y : item.y;
+    if (holder) this.hurt(holder, Math.trunc(level / 3), by);
+    const freed = this.explode(x, y, level, by);
+    if (by && freed && by.doExperience(freed * EXPERIENCE.blastedLoose)) this.promoted(by);
   }
 
   /** The build menu: left/right choose, up or throw builds here, down or dig closes it. */
