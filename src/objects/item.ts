@@ -1,5 +1,6 @@
 import type { Landscape } from '../landscape/landscape';
 import type { ItemDef } from './defs';
+import type { FireState } from './fire';
 import { GameObject } from './gameObject';
 import { FLOAT_ACCEL, HIT_SPEED_1 } from './physics';
 
@@ -13,6 +14,13 @@ export class Item extends GameObject {
   found = false;
   /** Ticks left on a lit T-flint's fuse; -1 while it isn't lit. */
   fuse = -1;
+  /** How much of it is left, up to 100000: fire burns it away (wood is drawn smaller). */
+  con = 100000;
+  /** Blast damage taken; enough sets it alight (BlastIncinerate). */
+  damage = 0;
+  fire: FireState | null = null;
+  /** It has burned: wood stays charred (Wood.c4d Incineration). */
+  burned = false;
 
   constructor(
     readonly def: ItemDef,

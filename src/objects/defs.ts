@@ -34,6 +34,10 @@ export interface ItemDef {
   fuse?: { ticks: number; explode: number };
   /** Frame shown while the fuse burns. */
   litFacet?: Facet;
+  /** A burning object it touches sets it alight one time in this many (DefCore ContactIncinerate; 0 or missing: it doesn't burn). */
+  contactIncinerate?: number;
+  /** Blast damage that sets it alight (DefCore BlastIncinerate). */
+  blastIncinerate?: number;
   /** Image in the content pack and the in-game frame inside it. */
   graphic: { file: string; facet: Facet };
   /** Its picture in the same file, for menus and the scenario settings (DefCore Picture). */
@@ -77,7 +81,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   },
   // Wood.c4d: what trees are made of.
   wood: {
-    id: 'wood', name: 'Wood', value: 2, rebuy: true, mass: 7, vertices: itemVertex,
+    id: 'wood', name: 'Wood', value: 2, rebuy: true, mass: 7, vertices: itemVertex, contactIncinerate: 1, blastIncinerate: 5,
     graphic: { file: 'items/Wood.png', facet: { x: 0, y: 0, w: 8, h: 7 } }, picture: { x: 0, y: 7, w: 64, h: 64 },
   },
   // Construction kit (Conkit.c4d): use it to put up a construction site.
@@ -206,6 +210,15 @@ export interface StructureDef {
   elevator?: boolean;
   /** Gates that slide up and down (the guard tower's), relative to the centre. */
   gates?: readonly GateDef[];
+  /** Blast damage that sets it alight (DefCore BlastIncinerate). */
+  blastIncinerate: number;
+  /** A burning object it touches sets it alight one time in this many (DefCore ContactIncinerate; missing: never). */
+  contactIncinerate?: number;
+  /**
+   * What it turns into when it catches fire (DefCore BurnTo): the burned
+   * building (Burned.c4d), which a clonk can build back up into the real one (ConstructTo).
+   */
+  burned: { file: string; blastIncinerate: number; contactIncinerate?: number };
 }
 
 /** A guard tower gate (GateLeft.c4d / GateRight.c4d). */
@@ -276,6 +289,9 @@ export const STRUCTURES: Record<string, StructureDef> = {
       picture: { x: 0, y: 0, w: 60, h: 50 },
     },
     basement: { width: 60, height: 8, file: 'structures/Basement60.png' },
+    // Hut2.c4d BlastIncinerate=45, BurnTo=HTB2 (ContactIncinerate=3, BlastIncinerate=10).
+    blastIncinerate: 45,
+    burned: { file: 'structures/Hut2Burned.png', blastIncinerate: 10, contactIncinerate: 3 },
   },
   // Elevator.c4d: no basement, its case drills the shaft below it.
   elevator: {
@@ -291,6 +307,9 @@ export const STRUCTURES: Record<string, StructureDef> = {
     flagVertex: { x: -11, y: -28 },
     graphic: { file: 'structures/Elevator.png', facet: { x: 0, y: 0, w: 28, h: 56 }, picture: { x: 0, y: 0, w: 28, h: 56 } },
     elevator: true,
+    // Elevator.c4d BlastIncinerate=50, BurnTo=ELVB (ContactIncinerate=5, BlastIncinerate=50).
+    blastIncinerate: 50,
+    burned: { file: 'structures/ElevatorBurned.png', blastIncinerate: 50, contactIncinerate: 5 },
   },
   // Tower2.c4d (guard tower): a 48 wide basement (BAS3), walls and a roof
   // platform (SolidMask), a door that takes clonks up to the roof, and two gates.
@@ -340,6 +359,9 @@ export const STRUCTURES: Record<string, StructureDef> = {
       { side: -1, x: -14, y: 10, mask: { x: 0, w: 3 }, file: 'structures/GateLeft.png' },
       { side: 1, x: 15, y: 10, mask: { x: 8, w: 3 }, file: 'structures/GateRight.png' },
     ],
+    // Tower2.c4d BlastIncinerate=250, BurnTo=TWB2 (BlastIncinerate=250).
+    blastIncinerate: 250,
+    burned: { file: 'structures/Tower2Burned.png', blastIncinerate: 250 },
   },
 };
 

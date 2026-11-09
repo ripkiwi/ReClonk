@@ -31,6 +31,10 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `items/Wood.png` | `Objects.c4d/Items.c4d/Materials.c4d/Wood.c4d/Graphics.png` |
 | `vegetation/Tree1-4.png`, `vegetation/Bush1.png`, `vegetation/Grass.png` | `Objects.c4d/Vegetation.c4d/Tree1-4.c4d`, `Bush1.c4d`, `Grass.c4d` `/Graphics.png` |
 | `sound/Chop1-4.wav`, `Fuse.wav`, `Fusing.wav`, `TreeDown1-3.wav`, `WoodHit1-3.wav`, `RockHit1-3.wav` | `Sound.c4g/` (**renamed to lower-case `.wav`** where the original was `.WAV`) |
+| `vegetation/Tree1-4Burned.png`, `vegetation/Bush1Burned.png` | `Objects.c4d/Vegetation.c4d/Tree1-4.c4d`, `Bush1.c4d` `/Burned.c4d/Graphics.png` (burned trees and bush) |
+| `structures/Hut2Burned.png`, `structures/Tower2Burned.png`, `structures/ElevatorBurned.png` | `Objects.c4d/Structures.c4d/Hut2.c4d`, `Tower2.c4d`, `Elevator.c4d` `/Burned.c4d/Graphics.png` (burned buildings) |
+| `effects/Fire.png`, `effects/Fire2.png` | `Objects.c4d/Effects.c4d/Particles.c4d/Fire.c4d`, `Fire2.c4d` `/Graphics.png` (fire particles) |
+| `sound/Fire.wav`, `Inflame.wav`, `Pshshsh.wav` | `Sound.c4g/` (**renamed to lower-case `.wav`** where the original was `.WAV`) |
 | `goals/Melee.png` | `Objects.c4d/Goals.c4d/Melee.c4d/Graphics.png` (goal picture in the scenario properties) |
 | `materials/*.png` | `Material.c4g/` textures |
 | `sky/Clouds1.jpg` | `planet/Graphics.c4g/Clouds1.jpg` |

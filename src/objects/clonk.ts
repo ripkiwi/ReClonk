@@ -4,6 +4,7 @@
 
 import type { Landscape } from '../landscape/landscape';
 import { CLONK, ENERGY_UNIT, type ActionDef } from './defs';
+import type { FireState } from './fire';
 import { GameObject } from './gameObject';
 import { experienceForRank, rankForExperience } from '../game/ranks';
 import type { Item } from './item';
@@ -140,6 +141,8 @@ export class Clonk extends GameObject {
   comDir: ComDir = STOP;
   readonly contents: Item[] = [];
   /** Health, in 1/1000 points (see ENERGY_UNIT). Zero means dead. */
+  /** On fire: it loses energy until it gets into water or its home base. */
+  fire: FireState | null = null;
   energy = CLONK.energy;
   alive = true;
   /** The building the clonk is inside, if any. Contained clonks are hidden and don't move. */

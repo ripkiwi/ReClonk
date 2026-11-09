@@ -1,4 +1,5 @@
 import { CONSTRUCTION, ELEVATOR_CASE, GATE, type GateDef, type StructureDef } from './defs';
+import type { FireState } from './fire';
 import { maskRect, SolidMask } from './solidMask';
 
 /** A building's stone basement: solid landscape under it, and what was there before. */
@@ -122,6 +123,15 @@ export class Structure {
   liftCase: ElevatorCase | null = null;
   /** A guard tower's gates, once it's finished. */
   gates: Gate[] = [];
+  /** Blast and fire damage; enough blast damage sets it alight (BlastIncinerate). */
+  damage = 0;
+  fire: FireState | null = null;
+  /** Burned (BurnTo): a black ruin that burns away, or that clonks can build back up into the real thing. */
+  burned = false;
+  /** Burned away completely: only its basement is left. */
+  gone = false;
+  /** The home base flag that fell off when it caught fire; it goes back up when it's rebuilt. */
+  flagOwner = -1;
 
   constructor(
     readonly def: StructureDef,
@@ -130,13 +140,17 @@ export class Structure {
     readonly y: number,
   ) {}
 
+  get removed(): boolean {
+    return this.gone;
+  }
+
   get hasFlag(): boolean {
     return this.base >= 0;
   }
 
-  /** Finished building (not a construction site any more). */
+  /** Finished building (not a construction site, nor a burned ruin). */
   get complete(): boolean {
-    return this.con >= CONSTRUCTION.fullCon;
+    return this.con >= CONSTRUCTION.fullCon && !this.burned;
   }
 
   get left(): number {
@@ -149,6 +163,7 @@ export class Structure {
 
   /** True if a point is within the building's shape. */
   inside(px: number, py: number): boolean {
+    if (this.gone) return false;
     const d = this.def;
     return px >= this.left && px < this.left + d.width && py >= this.top && py < this.top + d.height;
   }

@@ -179,22 +179,24 @@ export class GameScreen {
       else if (e.type === 'chop') this.env.sounds.play(pick(CHOPS), volumeAt(e.clonk.x, e.clonk.y));
       // Only big trees crash down audibly (Tree.c4d ChopDown: con over 50).
       else if (e.type === 'treeDown' && e.plant.scale > 0.5) this.env.sounds.play(pick(TREE_DOWN), volumeAt(e.plant.x, e.plant.bottom));
+      // Big things catch fire with a whoosh (FnFxFireStart: shape over 500), and water hisses as it puts a fire out.
+      else if (e.type === 'inflame' && e.loud) this.env.sounds.play('Inflame', volumeAt(e.x, e.y));
+      else if (e.type === 'extinguish' && e.hiss) this.env.sounds.play('Pshshsh', volumeAt(e.x, e.y));
       else if (e.type === 'itemHit') {
         const id = e.item.def.id;
         const set = id === 'wood' ? WOOD_HITS : id === 'rock' || id === 'gold' || e.item.def.fuse ? ROCK_HITS : null;
         if (set) this.env.sounds.play(pick(set), volumeAt(e.item.x, e.item.y) * 0.5);
       }
     }
-    const w = this.round.world.weather;
-    if (!w || this.paused || this.stopped) {
+    if (this.paused || this.stopped) {
       this.env.sounds.stopLoops();
       return;
     }
-    // The wind howls once it's strong (SoundLevel Wind, |wind| - 30), and earthquakes rumble.
-    this.env.sounds.loop('Wind', (Math.max(Math.abs(w.wind) - 30, 0) * 2) / 100);
-    let quake = 0;
-    for (const q of w.quakes) quake = Math.max(quake, volumeAt(q.x, q.y));
-    this.env.sounds.loop('Earthquake', quake);
+    // Heavy things crackle while they burn (the Fire loop, mass 100 and up): trees and buildings.
+    let fire = 0;
+    for (const p of this.round.world.plants) if (p.fire) fire = Math.max(fire, volumeAt(p.x, p.bottom));
+    for (const st of this.round.world.structures) if (st.fire) fire = Math.max(fire, volumeAt(st.x, st.y));
+    this.env.sounds.loop('Fire', fire * 0.7);
     // A burning fuse hisses (the T-flint's Activated action sound).
     let fusing = 0;
     for (const item of this.round.world.items) {
@@ -203,6 +205,17 @@ export class GameScreen {
       fusing = Math.max(fusing, volumeAt(at.x, at.y) * 0.6);
     }
     this.env.sounds.loop('Fusing', fusing);
+    const w = this.round.world.weather;
+    if (!w) {
+      this.env.sounds.loop('Wind', 0);
+      this.env.sounds.loop('Earthquake', 0);
+      return;
+    }
+    // The wind howls once it's strong (SoundLevel Wind, |wind| - 30), and earthquakes rumble.
+    this.env.sounds.loop('Wind', (Math.max(Math.abs(w.wind) - 30, 0) * 2) / 100);
+    let quake = 0;
+    for (const q of w.quakes) quake = Math.max(quake, volumeAt(q.x, q.y));
+    this.env.sounds.loop('Earthquake', quake);
   }
 
   pause(): void {
