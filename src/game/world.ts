@@ -9,6 +9,8 @@ import { Item } from '../objects/item';
 import { HIT_SPEED_2 } from '../objects/physics';
 import { Structure } from '../objects/structure';
 import { findPlantSpot, FULL_CON, grassRooted, Plant, plantRooted, PLANTS, TREE, type Grass } from '../objects/vegetation';
+import { FIRE } from '../objects/fire';
+import { blastBurn, stepFire } from './fire';
 import { buildStep, construct, grabOrBuild, grabTarget, pushControl, siteProblem, stepElevator, stepGate } from './buildings';
 import type { Weather } from './weather';
 
@@ -46,7 +48,11 @@ export type WorldEvent =
   /** A tree was felled and tips over. */
   | { type: 'treeDown'; plant: Plant; tick: number }
   /** A blast blew a tuft of grass away. */
-  | { type: 'grassBlown'; grass: Grass; x: number; y: number; level: number; tick: number };
+  | { type: 'grassBlown'; grass: Grass; x: number; y: number; level: number; tick: number }
+  /** Something caught fire; big things with a whoosh (the Inflame sound). */
+  | { type: 'inflame'; x: number; y: number; loud: boolean; tick: number }
+  /** A fire went out; in water with a hiss (Pshshsh). */
+  | { type: 'extinguish'; x: number; y: number; hiss: boolean; tick: number };
 
 /** Extra experience on top of the original's "1 per 5 commands", so promotions come at a fun pace. */
 export const EXPERIENCE = {
@@ -363,6 +369,7 @@ export class World {
 
     if (this.tick % BASE.healInterval === 0) for (const c of this.clonks) this.healInBase(c);
     for (const s of this.structures) {
+      if (s.gone) continue;
       s.tick();
       if (s.liftCase) stepElevator(this, s);
       for (const g of s.gates) stepGate(this, g);
@@ -400,6 +407,9 @@ export class World {
     this.objectHits();
 
     this.stepPlants();
+    stepFire(this);
+    if (this.items.some((i) => i.removed)) this.items = this.items.filter((i) => !i.removed);
+    if (this.plants.some((p) => p.removed)) this.plants = this.plants.filter((p) => !p.removed);
     this.weather?.step(this);
     this.land.pxs.step(this.rng);
     this.land.step(this.tick, this.rng);
@@ -583,6 +593,7 @@ export class World {
       // Whatever the blast flings counts as thrown by whoever set it off.
       if (fling(item) > 0 && by) item.thrownBy = by.id;
     }
+    this.blastHits(x, y, radius, by);
     for (const s of this.structures) this.blastBasement(s, x, y, radius);
     this.blastPlants(x, y, radius);
 
@@ -605,6 +616,22 @@ export class World {
       }
     }
     return freed;
+  }
+
+  /**
+   * Direct hits (within 5 px of the shape, C4Game::BlastObjects) on loose
+   * items and buildings: blast damage, which sets wood and buildings alight
+   * once it's enough (C4Object::Blast, BlastIncinerate).
+   */
+  private blastHits(x: number, y: number, level: number, by: Clonk | null): void {
+    for (const item of this.items) {
+      if (item.container || item.removed || !item.def.blastIncinerate) continue;
+      const f = item.def.graphic.facet;
+      if (directHit(x, y, { x: item.x - Math.floor(f.w / 2), y: item.y - Math.floor(f.h / 2), w: f.w, h: f.h })) blastBurn(this, item, level, by);
+    }
+    for (const s of this.structures) {
+      if (!s.gone && directHit(x, y, { x: s.left, y: s.top, w: s.def.width, h: s.def.height })) blastBurn(this, s, level, by);
+    }
   }
 
   /**
@@ -673,6 +700,8 @@ export class World {
       item.xdir += v[0];
       item.ydir += v[1];
     }
+    this.blastHits(x, y, level, by);
+    this.blastPlants(x, y, level, by, false);
   }
 
   private dropAll(c: Clonk): void {
@@ -720,7 +749,7 @@ export class World {
     return true;
   }
 
-  private exit(c: Clonk): void {
+  exit(c: Clonk): void {
     const s = c.contained;
     if (!s) return;
     const p = s.exitPoint();
@@ -795,7 +824,7 @@ export class World {
     }
   }
 
-  private fell(p: Plant, side: -1 | 1): void {
+  fell(p: Plant, side: -1 | 1): void {
     if (p.state !== 'standing') return;
     p.chopDown(side);
     this.events.push({ type: 'treeDown', plant: p, tick: this.tick });
@@ -814,10 +843,19 @@ export class World {
         p.fall(land);
         continue;
       }
-      if (p.state !== 'standing') continue;
+      if (p.state !== 'standing') {
+        // A dead tree lying around rots away (Tree.c4d IntTreeDecay).
+        if (p.burned && !p.fire && p.con < FIRE.rotBelow && (this.tick + p.timerOffset) % FIRE.rotInterval === 0) {
+          p.con -= FIRE.rot;
+          p.wood = Math.min(p.wood, p.woodAtCon);
+          if (p.con <= 0) p.removed = true;
+        }
+        continue;
+      }
       const t = this.tick + p.timerOffset;
       if (t % TREE.growthInterval === 0) {
-        if (p.con < FULL_CON) p.con = Math.min(FULL_CON, p.con + p.def.growth * 100);
+        // Dead trees don't grow, nor do burning ones (C4Object::ExecLife).
+        if (p.con < FULL_CON && !p.burned && !p.fire) p.con = Math.min(FULL_CON, p.con + p.def.growth * 100);
         if (!plantRooted(land, p)) this.fell(p, this.rng.bool() ? 1 : -1);
       }
       // Sway in the wind (Tree.c4d Still and Breeze).
@@ -826,7 +864,7 @@ export class World {
         if (wind > 49 + p.threshold) p.breeze = true;
         else if (wind < 50 + p.threshold) p.breeze = false;
       }
-      if (t % TREE.seedInterval === 0 && this.rng.int(TREE.reproductionRate) === 0) this.reproduce(p);
+      if (t % TREE.seedInterval === 0 && !p.burned && this.rng.int(TREE.reproductionRate) === 0) this.reproduce(p);
     }
     if (this.tick % TREE.growthInterval === 0) for (const g of this.grass) if (!grassRooted(land, g)) g.removed = true;
     if (this.plants.some((p) => p.removed)) this.plants = this.plants.filter((p) => !p.removed);
@@ -849,14 +887,14 @@ export class World {
    * within 5 pixels of the shape) for its level in damage, and fells them
    * once it's too much (Tree.c4d Damage). Grass within its reach is blown away.
    */
-  private blastPlants(x: number, y: number, level: number): void {
+  private blastPlants(x: number, y: number, level: number, by: Clonk | null = null, grass = true): void {
     for (const p of this.plants) {
-      if (p.state !== 'standing') continue;
-      const s = p.shape;
-      if (y - s.y < -5 || y - s.y > s.h - 1 + 10 || x - s.x < -5 || x - s.x > s.w - 1 + 10) continue;
-      p.damage += level;
-      if (p.damage > p.fellDamage) this.fell(p, x <= p.x ? 1 : -1);
+      if (p.removed || !directHit(x, y, p.bounds)) continue;
+      // Ten damage sets a tree alight (BlastIncinerate).
+      blastBurn(this, p, level, by);
+      if (p.state === 'standing' && p.damage > p.fellDamage) this.fell(p, x <= p.x ? 1 : -1);
     }
+    if (!grass) return;
     for (const g of this.grass) {
       if (g.removed || Math.abs(g.y - y) > level || Math.abs(g.x - x) > level) continue;
       g.removed = true;
@@ -877,6 +915,8 @@ export class World {
     const level = item.def.fuse?.explode ?? 20;
     const by = this.thrower(item) ?? holder;
     if (holder?.contained) {
+      // The building takes the blast too, and may catch fire (C4Game::BlastObjects, contained blast).
+      blastBurn(this, holder.contained, level, by);
       this.hurt(holder, Math.trunc(level / 3), by);
       return;
     }
@@ -1032,4 +1072,11 @@ export class World {
 /** Keys that make a building clonk stop and do something else. */
 function stopsWork(c: ControlState): boolean {
   return c.left || c.right || c.pressedUp || c.pressedDown || c.pressedDig || c.pressedThrow || c.pressedUse;
+}
+
+/** Is (x, y) a direct hit on the box: within 5 pixels of it, a bit more below and right (C4Game::BlastObjects)? */
+function directHit(x: number, y: number, b: { x: number; y: number; w: number; h: number }): boolean {
+  const dx = x - b.x;
+  const dy = y - b.y;
+  return dy >= -5 && dy <= b.h - 1 + 10 && dx >= -5 && dx <= b.w - 1 + 10;
 }

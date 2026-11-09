@@ -10,6 +10,7 @@ import type { Item } from '../objects/item';
 import type { Structure } from '../objects/structure';
 import { GRASS, type Grass, type Plant } from '../objects/vegetation';
 import { frame, type GameAssets } from './assets';
+import { FireView } from './fireView';
 import { LandscapeView } from './landscapeView';
 
 interface Flash {
@@ -36,8 +37,9 @@ interface StructureSprites {
   rope: Graphics;
   liftCase: Sprite | null;
   gates: Sprite[];
-  /** Con the body was last drawn for. */
+  /** Con the body was last drawn for, and whether as the burned ruin. */
   con: number;
+  burned: boolean;
 }
 
 /** Smoke and sparks behind a meteor (Meteor.c4d SmokeTrail), drawn only. */
@@ -113,7 +115,7 @@ export class WorldView {
   private readonly itemSprites = new Map<Item, Sprite>();
   private readonly structureSprites = new Map<Structure, StructureSprites>();
   /** Trees and bushes: a holder at the root that tilts when it falls, and the picture in it. */
-  private readonly plantSprites = new Map<Plant, { holder: Container; body: Sprite }>();
+  private readonly plantSprites = new Map<Plant, { holder: Container; body: Sprite; burned: boolean | null }>();
   private readonly grassSprites = new Map<Grass, Sprite>();
   /** Grass sits behind trees, trees behind buildings (the original's object order). */
   private readonly grassLayer = new Container();
@@ -129,6 +131,8 @@ export class WorldView {
   /** Lightning bolts and meteor trails, over everything. */
   private readonly sparks = new Graphics();
   private readonly particles: Particle[] = [];
+  /** Flames and smoke. */
+  private readonly fire: FireView;
   /** Season colours and lightning flashes. */
   private readonly tint = new ColorMatrixFilter();
   private lastTick = -1;
@@ -146,7 +150,8 @@ export class WorldView {
     this.sky.alpha = 0.7;
     this.root.addChild(this.sky, this.layer);
     this.landscape = new LandscapeView(world.land, assets.materials);
-    this.layer.addChild(this.landscape.sprite, this.grassLayer, this.plantLayer, this.structureLayer, this.pxs);
+    this.fire = new FireView(world, assets.items);
+    this.layer.addChild(this.landscape.sprite, this.grassLayer, this.fire.back, this.plantLayer, this.structureLayer, this.pxs);
   }
 
   /**
@@ -213,6 +218,8 @@ export class WorldView {
     this.updateClonks();
     this.updateMarks(cursor);
     this.updatePxs(viewW, viewH);
+    this.fire.update();
+    this.layer.addChild(this.fire.front);
     this.updateSparks();
     this.updateTint();
     this.updateEffects(events);
@@ -379,6 +386,7 @@ export class WorldView {
   /** Remove everything from the screen and free the landscape texture. */
   destroy(): void {
     const tex = this.landscape.sprite.texture;
+    this.fire.destroy();
     this.root.destroy({ children: true });
     tex.destroy(true);
   }
@@ -445,6 +453,9 @@ export class WorldView {
       }
       s.position.set(item.x, item.y);
       s.angle = item.r;
+      // Burning wood gets smaller, and stays charred (Wood.c4d Incineration: RGB 48, 32, 32).
+      s.scale.set(item.con / 100000);
+      s.tint = item.burned ? 0x302020 : 0xffffff;
       const lit = item.def.litFacet;
       if (lit) {
         const f = item.lit ? lit : item.def.graphic.facet;
@@ -470,16 +481,24 @@ export class WorldView {
       if (!s) {
         const body = new Sprite();
         body.anchor.set(0.5);
-        body.position.set((d.offset.x + d.width / 2 - d.root.x) * p.dir, d.offset.y + d.height / 2 - d.root.y);
         body.scale.x = p.dir;
         const holder = new Container();
         holder.addChild(body);
         this.plantLayer.addChild(holder);
-        s = { holder, body };
+        s = { holder, body, burned: null };
         this.plantSprites.set(p, s);
       }
-      const f = p.state === 'standing' ? p.frame(this.world.tick) : 0;
-      s.body.texture = frame(tex[d.file], f * d.width, 0, d.width, d.height);
+      // A burned tree is one picture of a dead tree, its own size, on the same root.
+      const b = p.burned ? d.burned : d;
+      if (s.burned !== p.burned) {
+        s.burned = p.burned;
+        s.body.position.set((b.offset.x + b.width / 2 - d.root.x) * p.dir, b.offset.y + b.height / 2 - d.root.y);
+      }
+      if (p.burned) s.body.texture = frame(tex[d.burned.file], 0, 0, b.width, b.height);
+      else {
+        const f = p.state === 'standing' ? p.frame(this.world.tick) : 0;
+        s.body.texture = frame(tex[d.file], f * d.width, 0, d.width, d.height);
+      }
       const pv = p.pivot;
       s.holder.position.set(pv.x, pv.y);
       s.holder.scale.set(p.scale);
@@ -528,6 +547,7 @@ export class WorldView {
           liftCase: null,
           gates: [],
           con: -1,
+          burned: false,
         };
         const b = st.basement;
         if (b && st.def.basement) {
@@ -553,14 +573,27 @@ export class WorldView {
         s.basement.destroy();
         s.basement = null;
       }
+      // Burned away: only the basement is left.
+      if (st.gone) {
+        for (const sp of [s.site, s.body, s.door, s.pole, s.cloth, s.liftCase, ...s.gates]) if (sp) sp.visible = false;
+        s.rope.clear();
+        continue;
+      }
+      // Burned: the black ruin (its Burned.c4d graphics), which burns down from the top.
+      const file = st.burned ? st.def.burned.file : g.file;
+      if (st.burned !== s.burned) {
+        s.burned = st.burned;
+        s.con = -1;
+        s.site.texture = frame(tex[file], g.facet.x, g.facet.y, g.facet.w, g.facet.h);
+      }
       if (st.con !== s.con) {
         // The built part, from the bottom up.
         s.con = st.con;
-        const full = st.complete;
+        const full = st.con >= CONSTRUCTION.fullCon;
         const h = full ? g.facet.h : Math.max(1, Math.round((g.facet.h * st.con) / CONSTRUCTION.fullCon));
-        s.body.texture = frame(tex[g.file], g.facet.x, g.facet.y + g.facet.h - h, g.facet.w, h);
+        s.body.texture = frame(tex[file], g.facet.x, g.facet.y + g.facet.h - h, g.facet.w, h);
         s.body.position.set(st.left, st.top + g.facet.h - h);
-        s.site.visible = !full;
+        s.site.visible = !full && !st.burned;
       }
       const d = st.doorFrame;
       s.door.visible = !!g.door && st.door > 0;
@@ -581,6 +614,12 @@ export class WorldView {
 
       // Elevator: the case, hanging from its rope (LiftCase, stretched from the elevator's top).
       const k = st.liftCase;
+      if (!k && s.liftCase) {
+        s.liftCase.destroy();
+        s.liftCase = null;
+        s.rope.clear();
+      }
+      for (const sp of s.gates.splice(st.gates.length)) sp.destroy();
       if (k) {
         const c = ELEVATOR_CASE;
         if (!s.liftCase) {

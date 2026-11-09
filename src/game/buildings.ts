@@ -13,6 +13,7 @@ import type { Item } from '../objects/item';
 import { ElevatorCase, Gate, type Structure } from '../objects/structure';
 import { round, sign } from '../objects/physics';
 import { layBasement } from './homeBase';
+import { rebuilt } from './fire';
 import type { World } from './world';
 
 /** How many pixels in a rectangle are solid (C4Landscape::AreaSolidCount). */
@@ -78,6 +79,7 @@ export function siteProblem(world: World, id: string, x: number, bottom: number)
   if (areaSolidCount(land, left, bottom, w, 5) < w * 2) return 'The ground is not level enough';
   for (const s of world.structures) {
     const d = s.def;
+    if (s.gone) continue;
     if (left < s.left + d.width && left + w > s.left && top < s.top + d.height && bottom > s.top) return `Too close to the ${d.name}`;
   }
   return null;
@@ -120,6 +122,8 @@ export function buildStep(world: World, c: Clonk): void {
   }
   s.con = Math.min(CONSTRUCTION.fullCon, s.con + buildRate(d.id));
   if (world.tick % 36 === 0) world.events.push({ type: 'building', structure: s, tick: world.tick });
+  // A burned building built back up is the real one again (ConstructTo).
+  if (s.burned && s.con >= CONSTRUCTION.fullCon) rebuilt(s);
   if (s.complete) {
     completeStructure(world, s);
     c.letGo();

@@ -8,6 +8,7 @@ import type { Rng } from '../core/rng';
 import type { Landscape } from '../landscape/landscape';
 import { LIQUID, MATERIALS, Mat } from '../landscape/materials';
 import type { Facet } from './defs';
+import type { FireState } from './fire';
 
 export type PlantId = 'tree1' | 'tree2' | 'tree3' | 'tree4' | 'bush';
 
@@ -47,6 +48,15 @@ export interface PlantDef {
   /** Its picture for the scenario settings (DefCore Picture), and the size of the whole file. */
   picture: Facet;
   sheet: [number, number];
+  /** A burning object it touches sets it alight one time in this many (DefCore ContactIncinerate). */
+  contactIncinerate: number;
+  /** Blast damage that sets it alight (DefCore BlastIncinerate). */
+  blastIncinerate: number;
+  /**
+   * What it turns into when it catches fire (DefCore BurnTo, the Burned.c4d
+   * dead tree): one picture, a bit less wood, and it doesn't grow.
+   */
+  burned: { file: string; width: number; height: number; offset: { x: number; y: number }; wood: number; fireTop: number };
 }
 
 /** Con of a fully grown plant (FullCon). */
@@ -93,6 +103,8 @@ export const PLANTS: Record<PlantId, PlantDef> = {
     ],
     breeze: rows(40, 2),
     picture: { x: 0, y: 0, w: 73, h: 71 }, sheet: [2920, 71],
+    contactIncinerate: 2, blastIncinerate: 10,
+    burned: { file: 'vegetation/Tree1Burned.png', width: 73, height: 71, offset: { x: -36, y: -36 }, wood: 5, fireTop: 10 },
   },
   // Tree2.c4d: a conifer.
   tree2: {
@@ -100,6 +112,8 @@ export const PLANTS: Record<PlantId, PlantDef> = {
     growth: 2, value: 3, wood: 5, strength: 150, file: 'vegetation/Tree2.png',
     still: [rows(40, 10)], breeze: rows(40, 2),
     picture: { x: 0, y: 0, w: 40, h: 56 }, sheet: [1600, 56],
+    contactIncinerate: 2, blastIncinerate: 10,
+    burned: { file: 'vegetation/Tree2Burned.png', width: 40, height: 56, offset: { x: -20, y: -28 }, wood: 3, fireTop: 20 },
   },
   // Tree3.c4d: a tall leafy tree.
   tree3: {
@@ -107,6 +121,8 @@ export const PLANTS: Record<PlantId, PlantDef> = {
     growth: 2, value: 5, wood: 5, strength: 150, file: 'vegetation/Tree3.png',
     still: [rows(40, 10)], breeze: rows(40, 2),
     picture: { x: 0, y: 0, w: 52, h: 75 }, sheet: [2080, 75],
+    contactIncinerate: 2, blastIncinerate: 10,
+    burned: { file: 'vegetation/Tree3Burned.png', width: 52, height: 75, offset: { x: -26, y: -37 }, wood: 3, fireTop: 40 },
   },
   // Tree4.c4d: a young tree.
   tree4: {
@@ -114,6 +130,8 @@ export const PLANTS: Record<PlantId, PlantDef> = {
     growth: 2, value: 4, wood: 3, strength: 150, file: 'vegetation/Tree4.png',
     still: [rows(1, 50)], breeze: rows(20, 5),
     picture: { x: 0, y: 0, w: 40, h: 56 }, sheet: [800, 56],
+    contactIncinerate: 2, blastIncinerate: 10,
+    burned: { file: 'vegetation/Tree4Burned.png', width: 40, height: 56, offset: { x: -20, y: -28 }, wood: 2, fireTop: 5 },
   },
   // Bush1.c4d: "a little something for the practised clonk".
   bush: {
@@ -121,6 +139,8 @@ export const PLANTS: Record<PlantId, PlantDef> = {
     growth: 4, value: 2, wood: 1, strength: 40, file: 'vegetation/Bush1.png',
     still: [rows(1, 50)], breeze: null,
     picture: { x: 0, y: 0, w: 41, h: 39 }, sheet: [42, 39],
+    contactIncinerate: 1, blastIncinerate: 10,
+    burned: { file: 'vegetation/Bush1Burned.png', width: 48, height: 39, offset: { x: -24, y: -19 }, wood: 1, fireTop: 5 },
   },
 };
 
@@ -162,6 +182,9 @@ export class Plant {
   readonly timerOffset: number;
   /** Swaying in a strong wind. */
   breeze = false;
+  /** Burned (or burning): a dead tree that doesn't grow (BurnTo). */
+  burned = false;
+  fire: FireState | null = null;
 
   constructor(
     readonly def: PlantDef,
@@ -200,6 +223,49 @@ export class Plant {
     return { x: this.x + d.offset.x * k, y: this.bottom - h, w, h };
   }
 
+  /** The middle of its shape, tilted with it: the point that sets fire to what it's in. */
+  get center(): { x: number; y: number } {
+    const s = this.shape;
+    return this.rotate(s.x + s.w / 2, s.y + s.h / 2, this.r);
+  }
+
+  /** The box around its shape, tilted as it is. */
+  get bounds(): { x: number; y: number; w: number; h: number } {
+    const s = this.shape;
+    if (!this.r) return s;
+    const pts = [
+      this.rotate(s.x, s.y, this.r),
+      this.rotate(s.x + s.w, s.y, this.r),
+      this.rotate(s.x, s.y + s.h, this.r),
+      this.rotate(s.x + s.w, s.y + s.h, this.r),
+    ];
+    const x = Math.min(...pts.map((p) => p.x));
+    const y = Math.min(...pts.map((p) => p.y));
+    return { x, y, w: Math.max(...pts.map((p) => p.x)) - x, h: Math.max(...pts.map((p) => p.y)) - y };
+  }
+
+  /** Is the point inside its shape, tilted as it is? */
+  contains(px: number, py: number): boolean {
+    const p = this.rotate(px, py, -this.r);
+    const s = this.shape;
+    return p.x >= s.x && p.x < s.x + s.w && p.y >= s.y && p.y < s.y + s.h;
+  }
+
+  /** A point turned `r` degrees clockwise around the root. */
+  private rotate(px: number, py: number, r: number): { x: number; y: number } {
+    if (!r) return { x: px, y: py };
+    const p = this.pivot;
+    const a = (r * Math.PI) / 180;
+    const dx = px - p.x;
+    const dy = py - p.y;
+    return { x: p.x + dx * Math.cos(a) - dy * Math.sin(a), y: p.y + dx * Math.sin(a) + dy * Math.cos(a) };
+  }
+
+  /** Wood in it at its size: a burned one has less (DefCore Components, cut down with its con). */
+  get woodAtCon(): number {
+    return Math.trunc(((this.burned ? this.def.burned.wood : this.def.wood) * this.con) / FULL_CON);
+  }
+
   /** A point along the trunk, `t` from the root (0) to the top (1), tilted by `r`. */
   trunkPoint(t: number, r = this.r): { x: number; y: number } {
     const d = this.def;
@@ -235,7 +301,7 @@ export class Plant {
     if (this.state !== 'standing') return;
     this.state = 'falling';
     this.rdir = side * 0.6;
-    this.wood = Math.trunc((this.def.wood * this.con) / FULL_CON);
+    this.wood = this.woodAtCon;
   }
 
   /**

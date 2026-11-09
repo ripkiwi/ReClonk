@@ -13,6 +13,7 @@ import { TEXMAP, TUNNEL } from './landscape/materials';
 import { ELEVATOR_CASE, FLAG, ITEMS, STRUCTURES } from './objects/defs';
 import { GRASS, PLANTS } from './objects/vegetation';
 import { CONTENT_BASE, loadAssets } from './render/assets';
+import { FIRE_PARTICLES } from './render/fireView';
 import { fitStage, h, setCssImages } from './ui/dom';
 import { GameScreen } from './ui/gameScreen';
 import { Menu, type CrewOutcome } from './ui/menu';
@@ -82,14 +83,17 @@ async function start(): Promise<void> {
         ...Object.values(ITEMS).map((i) => i.graphic.file),
         ...Object.values(STRUCTURES).flatMap((s) => [
           s.graphic.file,
+          s.burned.file,
           ...(s.basement ? [s.basement.file] : []),
           ...(s.gates ?? []).map((g) => g.file),
           ...(s.elevator ? [ELEVATOR_CASE.file] : []),
         ]),
         FLAG.graphic.file,
         FLAG.graphic.overlay,
-        ...Object.values(PLANTS).map((p) => p.file),
+        ...Object.values(PLANTS).flatMap((p) => [p.file, p.burned.file]),
         GRASS.file,
+        FIRE_PARTICLES.fire.file,
+        FIRE_PARTICLES.fire2.file,
       ],
     ),
     loadNames(),

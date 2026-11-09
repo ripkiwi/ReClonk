@@ -75,6 +75,15 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
   damage every 30 ticks, so a grown tree falls after about 13 seconds; flints damage and fell trees too, and a
   tree whose ground is blasted away falls over. Double dig at a felled tree to chop it into wood (7 for the big
   one), which sells for 2 gold. Grass grows along the earth and blows away in blasts.
+- **Fire, like the original:** a flint that hits a tree sets it alight (10 blast damage; lightning does it too),
+  and it turns into a black dead tree that burns away in about 28 seconds, falling over on the way. Burning
+  things set fire to whatever their middle is in, every 35 ticks: a burning tree lights the trees it reaches
+  into, a burning clonk the tree it runs through, and burning wood or a burning felled tree the clonk standing
+  on it. A burning clonk loses an energy point every 5 ticks (about 7 seconds to live): jump into water or get
+  into your home base to put it out. Blasts set wood (5 damage) and buildings alight: three flints for a wooden
+  hut, a lot more for a guard tower. A burning building turns into its burned ruin, everyone inside comes out,
+  the flag falls off, lifts and gates are gone, and it burns down in about 28 seconds; put out (in water) it can
+  be built back up into the real thing, flag and all. Flames and smoke drift with the wind.
 - In Gold Mine you start next to your own wooden hut. The flag on its roof makes it your **home base**; a hut without
   a flag is just a building you can shelter in. Jump in a doorway to go in, press down to come out.
 - In your base: carried gold sells automatically (5 gold), you heal 2 energy every 3 ticks, and the base
@@ -195,7 +204,7 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
 3. **Economy and bases** (started): huts and flags, healing, buying and selling, buying clonks, fights,
    thrown-object hits, computer crews, the original's Scenario Properties and map creator, basements under
    buildings, construction kits, elevators, guard towers, weather, T-flints, super- and tera-flints, trees,
-   chopping, wood and grass are in.
+   chopping, wood, grass and fire are in.
 4. **Modding and content:** a public modding API in TypeScript + JSON (the base game itself is a mod), boats, scenarios, a Classic content pack.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
 
