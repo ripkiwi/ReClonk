@@ -11,6 +11,7 @@ import type { ScenarioDef } from './game/scenarios';
 import { loadSettings, setKeyLabels } from './input/bindings';
 import { TEXMAP, TUNNEL } from './landscape/materials';
 import { ELEVATOR_CASE, FLAG, ITEMS, STRUCTURES } from './objects/defs';
+import { GRASS, PLANTS } from './objects/vegetation';
 import { CONTENT_BASE, loadAssets } from './render/assets';
 import { fitStage, h, setCssImages } from './ui/dom';
 import { GameScreen } from './ui/gameScreen';
@@ -87,6 +88,8 @@ async function start(): Promise<void> {
         ]),
         FLAG.graphic.file,
         FLAG.graphic.overlay,
+        ...Object.values(PLANTS).map((p) => p.file),
+        GRASS.file,
       ],
     ),
     loadNames(),

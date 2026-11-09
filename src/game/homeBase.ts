@@ -105,6 +105,8 @@ export function buildOnSurface(world: World, id: string, x: number, base = -1): 
   }
   // Bottom edge of the building sits on the floor row.
   const s = world.addStructure(id, x, floor - (def.offset.y + def.height), base);
+  // Buildings the round starts with stand in a clearing.
+  world.clearPlants(s);
   layBasement(world, s, floor);
   return s;
 }

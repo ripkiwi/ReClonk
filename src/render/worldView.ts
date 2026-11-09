@@ -8,6 +8,7 @@ import { CLONK, CONSTRUCTION, ELEVATOR_CASE, FLAG, GATE } from '../objects/defs'
 import type { Clonk } from '../objects/clonk';
 import type { Item } from '../objects/item';
 import type { Structure } from '../objects/structure';
+import { GRASS, type Grass, type Plant } from '../objects/vegetation';
 import { frame, type GameAssets } from './assets';
 import { LandscapeView } from './landscapeView';
 
@@ -50,6 +51,8 @@ interface Particle {
   alpha: number;
   life: number;
   age: number;
+  /** Falls by this much more each tick (grass blades, dust). */
+  gravity?: number;
 }
 
 /** How long a message above a clonk stays up, in ticks. */
@@ -109,6 +112,12 @@ export class WorldView {
   private readonly clonkSprites = new Map<Clonk, { body: Sprite; shirt: Sprite }>();
   private readonly itemSprites = new Map<Item, Sprite>();
   private readonly structureSprites = new Map<Structure, StructureSprites>();
+  /** Trees and bushes: a holder at the root that tilts when it falls, and the picture in it. */
+  private readonly plantSprites = new Map<Plant, { holder: Container; body: Sprite }>();
+  private readonly grassSprites = new Map<Grass, Sprite>();
+  /** Grass sits behind trees, trees behind buildings (the original's object order). */
+  private readonly grassLayer = new Container();
+  private readonly plantLayer = new Container();
   /** Buildings sit behind loose items and clonks. */
   private readonly structureLayer = new Container();
   /** Marks over the selected clonks. */
@@ -137,7 +146,7 @@ export class WorldView {
     this.sky.alpha = 0.7;
     this.root.addChild(this.sky, this.layer);
     this.landscape = new LandscapeView(world.land, assets.materials);
-    this.layer.addChild(this.landscape.sprite, this.structureLayer, this.pxs);
+    this.layer.addChild(this.landscape.sprite, this.grassLayer, this.plantLayer, this.structureLayer, this.pxs);
   }
 
   /**
@@ -198,6 +207,7 @@ export class WorldView {
     this.sky.tilePosition.set((-(this.camX + sx) * 0.4 + skyX) * this.zoom, -(this.camY + sy) * 0.4 * this.zoom);
 
     this.landscape.update();
+    this.updatePlants();
     this.updateStructures();
     this.updateItems();
     this.updateClonks();
@@ -309,8 +319,23 @@ export class WorldView {
         }
         add({ size: 1.2, color: 0xff9b00, life: 6, alpha: 0.8 });
       }
+      // Sparks from burning fuses, in hands too.
+      for (const item of this.world.items) {
+        if (!item.lit || item.removed) continue;
+        const holder = item.container as Clonk | null;
+        if (holder?.contained) continue;
+        const x = holder ? holder.x + holder.dir * 4 : item.x;
+        const y = holder ? holder.y - 2 : item.y - 2;
+        for (let n = 1 + Math.floor(Math.random() * 2); n > 0; n--) {
+          this.particles.push({
+            x, y, vx: Math.random() * 1.2 - 0.6, vy: -Math.random() * 1.2, size: 0.6 + Math.random() * 0.5,
+            color: Math.random() < 0.5 ? 0xffd040 : 0xff8020, alpha: 1, life: 6 + Math.floor(Math.random() * 6), age: 0, gravity: 0.08,
+          });
+        }
+      }
       for (const p of this.particles) {
         p.age++;
+        if (p.gravity) p.vy += p.gravity;
         p.x += p.vx;
         p.y += p.vy;
       }
@@ -420,11 +445,68 @@ export class WorldView {
       }
       s.position.set(item.x, item.y);
       s.angle = item.r;
+      const lit = item.def.litFacet;
+      if (lit) {
+        const f = item.lit ? lit : item.def.graphic.facet;
+        s.texture = frame(this.assets.items[item.def.graphic.file], f.x, f.y, f.w, f.h);
+      }
     }
     for (const [item, s] of this.itemSprites) {
       if (!seen.has(item)) {
         s.destroy();
         this.itemSprites.delete(item);
+      }
+    }
+  }
+
+  /** Trees sway in their animation strips and grow stretched from the bottom; felled ones lie tilted over their root. */
+  private updatePlants(): void {
+    const tex = this.assets.items;
+    const seen = new Set<Plant>();
+    for (const p of this.world.plants) {
+      seen.add(p);
+      const d = p.def;
+      let s = this.plantSprites.get(p);
+      if (!s) {
+        const body = new Sprite();
+        body.anchor.set(0.5);
+        body.position.set((d.offset.x + d.width / 2 - d.root.x) * p.dir, d.offset.y + d.height / 2 - d.root.y);
+        body.scale.x = p.dir;
+        const holder = new Container();
+        holder.addChild(body);
+        this.plantLayer.addChild(holder);
+        s = { holder, body };
+        this.plantSprites.set(p, s);
+      }
+      const f = p.state === 'standing' ? p.frame(this.world.tick) : 0;
+      s.body.texture = frame(tex[d.file], f * d.width, 0, d.width, d.height);
+      const pv = p.pivot;
+      s.holder.position.set(pv.x, pv.y);
+      s.holder.scale.set(p.scale);
+      s.holder.angle = p.r;
+    }
+    for (const [p, s] of this.plantSprites) {
+      if (!seen.has(p)) {
+        s.holder.destroy({ children: true });
+        this.plantSprites.delete(p);
+      }
+    }
+    const gseen = new Set<Grass>();
+    for (const g of this.world.grass) {
+      gseen.add(g);
+      if (this.grassSprites.has(g)) continue;
+      const sp = new Sprite(frame(tex[GRASS.file], g.frame * GRASS.width, 0, GRASS.width, GRASS.height));
+      sp.anchor.set(0.5);
+      sp.position.set(g.x, g.y);
+      sp.scale.set(g.scale * g.dir, g.scale);
+      sp.angle = g.r;
+      this.grassLayer.addChild(sp);
+      this.grassSprites.set(g, sp);
+    }
+    for (const [g, sp] of this.grassSprites) {
+      if (!gseen.has(g)) {
+        sp.destroy();
+        this.grassSprites.delete(g);
       }
     }
   }
@@ -527,6 +609,29 @@ export class WorldView {
     for (const e of events) {
       if (e.type === 'promotion' && e.clonk.info) {
         this.say(e.clonk, `${e.clonk.info.name} is promoted\nto ${rankName(e.rank)}!`);
+        continue;
+      }
+      if (e.type === 'grassBlown') {
+        // Blades fly out (Grass.c4d OnShockwaveHit).
+        const lvl = 40 + e.level / 2;
+        const w = 20 * e.grass.scale;
+        for (let n = 15 + Math.floor(Math.random() * 10); n > 0; n--) {
+          this.particles.push({
+            x: e.x + (Math.random() - 0.5) * w, y: e.y - 1, vx: ((Math.random() - 0.5) * 2 * lvl) / 3 / 10, vy: -(lvl / 3 + (Math.random() * lvl) / 3) / 10,
+            size: 0.7, color: Math.random() < 0.5 ? 0x3c8c28 : 0x5aa83a, alpha: 1, life: 30 + Math.floor(Math.random() * 30), age: 0, gravity: 0.1,
+          });
+        }
+        continue;
+      }
+      if (e.type === 'chop') {
+        // Wood chips off the trunk (Clonk.c4d Chopping: CastParticles Dust).
+        const c = e.clonk;
+        for (let n = 1 + Math.floor(Math.random() * 3); n > 0; n--) {
+          this.particles.push({
+            x: c.x + c.dir * 8, y: c.y + 1, vx: c.dir * Math.random() * 0.8, vy: -Math.random() * 1.2, size: 0.8,
+            color: 0x9a7040, alpha: 0.9, life: 14, age: 0, gravity: 0.08,
+          });
+        }
         continue;
       }
       if (e.type !== 'explosion') continue;

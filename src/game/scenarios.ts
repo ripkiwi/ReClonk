@@ -1,5 +1,6 @@
 import { texIndex, type ItemId } from '../landscape/materials';
 import { DEFAULT_LANDSCAPE, MAX_MAP_PLAYER_EXTEND, sval, type LandscapeDef, type SVal } from '../landscape/mapCreator';
+import { PLANT_IDS } from '../objects/vegetation';
 import { DEFAULT_WEATHER, type WeatherDef } from './weather';
 import type { Goal, ShopId } from './world';
 
@@ -45,7 +46,14 @@ export interface ScenarioDef {
 /** The home base start of the original Gold Mine: 50 gold, flints, construction kits and clonks to buy. */
 export const DEFAULT_BASE: BaseSettings = {
   wealth: 50,
-  stock: { flint: 5, conkit: 5, clonk: 3 },
+  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, clonk: 3 },
+};
+
+/** The trees of the original Gold Mine and Minor Melee (Vegetation=TRE1=1;TRE2=2;TRE3=1;TRE4=1, VegetationLevel=100). */
+const TREES: Pick<LandscapeDef, 'vegetation' | 'vegetationLevel' | 'grass'> = {
+  vegetation: { tree1: 1, tree2: 2, tree3: 1, tree4: 1 },
+  vegetationLevel: sval(100),
+  grass: true,
 };
 
 /** The material layers of the original Gold Mine and Minor Melee (without the ore, coal and sulphur we don't have yet). */
@@ -80,6 +88,7 @@ export const SCENARIOS: readonly ScenarioDef[] = [
       layers: LAYERS(8, 5),
       inEarth: { rock: 1, gold: 1, flint: 1 },
       inEarthLevel: sval(65),
+      ...TREES,
     },
     seed: 1337,
     newMapEachRound: true,
@@ -108,6 +117,7 @@ export const SCENARIOS: readonly ScenarioDef[] = [
       layers: LAYERS(7, 7),
       inEarth: { rock: 1, flint: 1 },
       onSurface: { flint: 30 },
+      ...TREES,
     },
     seed: 4242,
     newMapEachRound: true,
@@ -171,8 +181,10 @@ export const LIMITS = {
   stock: { min: 0, max: 99, step: 1 },
 };
 
-const ITEM_IDS: ItemId[] = ['flint', 'rock', 'gold'];
-const SHOP_IDS: ShopId[] = ['flint', 'rock', 'conkit', 'clonk'];
+/** Objects a scenario can hand out, bury or scatter, in the settings' order. */
+export const ITEM_IDS: ItemId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'gold', 'wood'];
+/** What a home base can sell, in the settings' and the shop's order. */
+export const SHOP_IDS: ShopId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'wood', 'conkit', 'clonk'];
 
 function clamp(v: unknown, lim: { min: number; max: number }, fallback: number): number {
   const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback;
@@ -236,6 +248,9 @@ function landscapeIn(raw: unknown, f: LandscapeDef): LandscapeDef {
     inEarthLevel: svalIn(r.inEarthLevel, f.inEarthLevel, P),
     onSurface: r.onSurface ? counts(ITEM_IDS, r.onSurface, LIMITS.objects, false) : { ...f.onSurface },
     gravity: svalIn(r.gravity, f.gravity, LIMITS.gravity),
+    vegetation: r.vegetation ? counts(PLANT_IDS, r.vegetation, LIMITS.share) : { ...f.vegetation },
+    vegetationLevel: svalIn(r.vegetationLevel, f.vegetationLevel, P),
+    grass: bool(r.grass, f.grass),
   };
 }
 

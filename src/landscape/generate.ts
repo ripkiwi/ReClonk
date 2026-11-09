@@ -1,6 +1,7 @@
 import { Rng } from '../core/rng';
 import type { Landscape } from './landscape';
 import { createMap, DEFAULT_LANDSCAPE, evaluate, mapToLandscape, type LandscapeDef, type MapData } from './mapCreator';
+import { placeGrass, placeVegetation, type Grass, type PlantId } from '../objects/vegetation';
 import { LIQUID, MATERIALS, Mat, type ItemId } from './materials';
 
 export interface GeneratedMap {
@@ -14,6 +15,9 @@ export interface GeneratedMap {
   spawn: { x: number; y: number };
   /** Height of the ground (first non-sky pixel) per column. */
   surface: Int32Array;
+  /** Trees and bushes: centre x, bottom, how grown (con) and which way they face. */
+  plants: { id: PlantId; x: number; bottom: number; con: number; dir: -1 | 1 }[];
+  grass: Grass[];
 }
 
 /** How many crews take part, for maps that grow with the number of players. */
@@ -87,5 +91,9 @@ export function generateMap(l: LandscapeDef = DEFAULT_LANDSCAPE, seed = 0, ctx: 
       break;
     }
   }
-  return { land, map, zoom, items, spawn: { x: sx, y: surface[sx] - 10 }, surface };
+  // Trees and grass get random numbers of their own, so they don't change the rest of the map.
+  const vegRng = new Rng(seed ^ 0x7ee5);
+  const plants = placeVegetation(land, vegRng, l.vegetation, evaluate(l.vegetationLevel, vegRng));
+  const grass = l.grass ? placeGrass(land, vegRng, surface) : [];
+  return { land, map, zoom, items, spawn: { x: sx, y: surface[sx] - 10 }, surface, plants, grass };
 }

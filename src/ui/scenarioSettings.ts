@@ -1,7 +1,9 @@
-import { crewCount, LIMITS, type ScenarioDef } from '../game/scenarios';
+import { crewCount, ITEM_IDS, LIMITS, SHOP_IDS, type ScenarioDef } from '../game/scenarios';
 import type { ShopId } from '../game/world';
 import { MAX_MAP_PLAYER_EXTEND, type SVal } from '../landscape/mapCreator';
 import { MATERIALS, Mat, TEXMAP, texIndex, TUNNEL, type ItemId, type TexEntry } from '../landscape/materials';
+import { ITEMS } from '../objects/defs';
+import { PLANT_IDS, PLANTS, type PlantId } from '../objects/vegetation';
 import { CONTENT_BASE } from '../render/assets';
 import { bigButton, h } from './dom';
 import { mapPreview } from './preview';
@@ -41,15 +43,28 @@ interface Picture {
   h: number;
 }
 
-const PICTURES: Record<ItemId | 'clonk' | 'hut' | 'melee', Picture> = {
-  flint: { file: 'items/Flint.png', sheet: [64, 70], x: 0, y: 6, w: 64, h: 64 },
-  rock: { file: 'items/Rock.png', sheet: [64, 70], x: 0, y: 6, w: 64, h: 64 },
-  gold: { file: 'items/Gold.png', sheet: [64, 70], x: 0, y: 6, w: 64, h: 64 },
-  conkit: { file: 'items/Conkit.png', sheet: [88, 60], x: 8, y: 0, w: 80, h: 60 },
+/** Item pictures come from their definitions; the file sizes are needed to scale the sheet. */
+const ITEM_SHEETS: Record<ItemId, [number, number]> = {
+  flint: [64, 70],
+  tflint: [64, 140],
+  superflint: [64, 70],
+  supertflint: [64, 140],
+  teraflint: [64, 70],
+  rock: [64, 70],
+  gold: [64, 70],
+  wood: [64, 71],
+  conkit: [88, 60],
+  meteor: [128, 128],
+};
+const itemPicture = (id: ItemId): Picture => ({ file: ITEMS[id].graphic.file, sheet: ITEM_SHEETS[id], ...ITEMS[id].picture });
+const plantPicture = (id: PlantId): Picture => ({ file: PLANTS[id].file, sheet: PLANTS[id].sheet, ...PLANTS[id].picture });
+
+const PICTURES: Record<ItemId | 'clonk' | 'hut' | 'melee' | 'grass', Picture> = {
+  ...(Object.fromEntries((Object.keys(ITEM_SHEETS) as ItemId[]).map((id) => [id, itemPicture(id)])) as Record<ItemId, Picture>),
   clonk: { file: 'clonk/Graphics.png', sheet: [256, 280], x: 192, y: 100, w: 32, h: 40 },
   hut: { file: 'structures/Hut2.png', sheet: [100, 66], x: 0, y: 0, w: 60, h: 50 },
   melee: { file: 'goals/Melee.png', sheet: [64, 64], x: 0, y: 0, w: 64, h: 64 },
-  meteor: { file: 'items/Meteor.png', sheet: [128, 128], x: 8, y: 0, w: 120, h: 120 },
+  grass: { file: 'vegetation/Grass.png', sheet: [120, 30], x: 40, y: 0, w: 40, h: 30 },
 };
 
 function picture(p: Picture, size: number): HTMLElement {
@@ -295,17 +310,8 @@ function spin(x: number, y: number, w: number, lim: { min: number; max: number; 
   return input;
 }
 
-const ITEM_NAMES: [ItemId, string][] = [
-  ['flint', 'Flint'],
-  ['rock', 'Rock'],
-  ['gold', 'Gold'],
-];
-const FOR_SALE: [ShopId, string, Picture][] = [
-  ['flint', 'Flint', PICTURES.flint],
-  ['rock', 'Rock', PICTURES.rock],
-  ['conkit', 'Construction kit', PICTURES.conkit],
-  ['clonk', 'Clonk', PICTURES.clonk],
-];
+const ITEM_NAMES: [ItemId, string][] = ITEM_IDS.map((id) => [id, ITEMS[id].name]);
+const FOR_SALE: [ShopId, string, Picture][] = SHOP_IDS.map((id) => [id, id === 'clonk' ? 'Clonk' : ITEMS[id].name, PICTURES[id]]);
 /** Textures a material layer can use: everything but sky and basements. */
 const LAYER_TEXTURES = TEXMAP.filter((t) => t.mat !== Mat.Basement && t.name !== 'Sky' && t.name !== 'Water-Liquid');
 const GROUNDS = ['Earth', 'Earth-Rough', 'Earth-Smooth2', 'Earth-Ridge', 'Sand', 'Sand-Smooth3'];
@@ -373,13 +379,13 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     spin(6, 35, 35, LIMITS.wealth, () => d.base.wealth, (v) => (d.base.wealth = v), 'Gold in the home base at the start'),
     ...idList(
       FOR_SALE.map(([id, name, pic]) => ({
-        name: `${name}s for sale in the home base`,
+        name: `${name} for sale in the home base`,
         icon: () => picture(pic, id === 'clonk' ? 26 : 22),
         get: () => d.base.stock[id] ?? 0,
         set: (v: number) => (d.base.stock[id] = v),
         max: LIMITS.stock.max,
       })),
-      { x: 206, y: 116, w: 170, hgt: 30, label: 'Home base material:', onChange: () => {} },
+      { x: 206, y: 116, w: 170, hgt: 58, label: 'Home base material:', onChange: () => {} },
     ),
   ];
   const showBase = (): void => baseOnly.forEach((e) => e.classList.toggle('off', !d.homeBase));
@@ -407,13 +413,13 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     ),
     ...idList(
       ITEM_NAMES.map(([id, name]) => ({
-        name: `Each clonk carries a ${name.toLowerCase()}`,
+        name: `Each clonk carries: ${name}`,
         icon: () => picture(PICTURES[id], 22),
         get: () => (d.startItems.includes(id) ? 1 : 0),
         set: (v: number) => (d.startItems = v ? [id] : []),
         max: 1,
       })),
-      { x: 6, y: 116, w: 170, hgt: 30, label: 'Material:', title: 'What each clonk carries at the start (one object)', onChange: () => {} },
+      { x: 6, y: 116, w: 170, hgt: 58, label: 'Material:', title: 'What each clonk carries at the start (one object)', onChange: () => {} },
     ),
     ...baseOnly,
   );
@@ -521,14 +527,15 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
   };
   const ground = h(
     'select',
-    { class: 'pp-select', style: at(5, 172, 80), onchange: () => {
+    { class: 'pp-select', style: at(205, 186, 80), onchange: () => {
       l.material = ground.value;
       changed();
     } },
     ...GROUNDS.map((g) => h('option', { value: g }, g.replace('-', ' '))),
   );
   ground.value = GROUNDS.includes(l.material) ? l.material : 'Earth';
-  const inEarthLevel = slider({ x: 205, y: 120, w: 170, color: 'rgb(130,90,40)', label: 'Objects in earth amount:', value: l.inEarthLevel, random: true, show: plain, onChange: changed });
+  const inEarthLevel = slider({ x: 205, y: 84, w: 170, color: 'rgb(130,90,40)', label: 'Objects in earth amount:', value: l.inEarthLevel, random: true, show: plain, onChange: changed });
+  const vegetationLevel = slider({ x: 5, y: 166, w: 170, color: 'rgb(40,140,40)', label: 'Vegetation amount:', value: l.vegetationLevel, random: true, show: plain, onChange: changed });
   const environmentPage = h(
     'div',
     { class: 'pp-page' },
@@ -540,9 +547,9 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         set: (v: number) => setLayer(t.name, v),
         max: LIMITS.layer.max,
       })),
-      { x: 5, y: 15, w: 170, hgt: 140, label: 'Material layers:', title: 'Veins of other materials drawn into the ground: how many per 15000 map pixels', format: String, onChange: changed },
+      { x: 5, y: 15, w: 170, hgt: 92, label: 'Material layers:', title: 'Veins of other materials drawn into the ground: how many per 15000 map pixels', format: String, onChange: changed },
     ),
-    h('div', { class: 'pp-label', style: at(5, 162, 80) }, 'Ground:'),
+    h('div', { class: 'pp-label', style: at(205, 176, 80) }, 'Ground:'),
     ground,
     ...idList(
       ITEM_NAMES.map(([id, name]) => ({
@@ -552,20 +559,39 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         set: (v: number) => (l.inEarth[id] = v),
         max: LIMITS.share.max,
       })),
-      { x: 205, y: 15, w: 170, hgt: 30, label: 'Objects in earth types:', onChange: changed },
+      { x: 205, y: 15, w: 170, hgt: 58, label: 'Objects in earth types:', onChange: changed },
     ),
     ...inEarthLevel,
     ...idList(
       ITEM_NAMES.map(([id, name]) => ({
-        name: `${name}s lying on the ground, per 1000 pixels of map width`,
+        name: `${name} lying on the ground, per 1000 pixels of map width`,
         icon: () => picture(PICTURES[id], 22),
         get: () => l.onSurface[id] ?? 0,
         set: (v: number) => (l.onSurface[id] = v),
         max: LIMITS.objects.max,
       })),
-      { x: 205, y: 66, w: 170, hgt: 30, label: 'Objects on the surface:', title: 'Per 1000 pixels of map width', format: String, onChange: changed },
+      { x: 205, y: 104, w: 170, hgt: 58, label: 'Objects on the surface:', title: 'Per 1000 pixels of map width', format: String, onChange: changed },
     ),
-    h('div', { class: 'pp-hint', style: at(205, 100, 186, 10) }, 'per 1000 pixels of map width'),
+    ...idList(
+      [
+        ...PLANT_IDS.map((id) => ({
+          name: `${PLANTS[id].name}: share of the trees and bushes`,
+          icon: () => picture(plantPicture(id), 24),
+          get: () => l.vegetation[id] ?? 0,
+          set: (v: number) => (l.vegetation[id] = v),
+          max: LIMITS.share.max,
+        })),
+        {
+          name: 'Grass along the earth surface',
+          icon: () => picture(PICTURES.grass, 24),
+          get: () => (l.grass ? 1 : 0),
+          set: (v: number) => (l.grass = v > 0),
+          max: 1,
+        },
+      ],
+      { x: 5, y: 122, w: 170, hgt: 30, label: 'Vegetation types:', title: 'Trees and bushes by share, and grass on or off', onChange: changed },
+    ),
+    ...vegetationLevel,
   );
 
   // ---- Weather: the original's sliders and colours (C4PageWeather), with its words at both ends.
