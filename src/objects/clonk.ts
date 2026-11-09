@@ -11,7 +11,6 @@ import type { Structure } from './structure';
 import {
   CNAT,
   CORNER_RANGE,
-  GRAVITY,
   HIT_SPEED_2,
   HIT_SPEED_3,
   HIT_SPEED_4,
@@ -620,7 +619,7 @@ export class Clonk extends GameObject {
         this.ydir = 0;
         break;
       case 'flight':
-        this.ydir += GRAVITY;
+        this.ydir += land.gravity;
         break;
       case 'fight': {
         // Square up to the opponent: face it and keep a step away (DFA_FIGHT).
@@ -641,7 +640,7 @@ export class Clonk extends GameObject {
         break;
       }
       case 'dead':
-        this.ydir += GRAVITY;
+        this.ydir += land.gravity;
         if (land.isSolid(this.x, this.y + 10)) this.xdir = decel(this.xdir, WALK_ACCEL);
         break;
       case 'dig': {

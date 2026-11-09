@@ -1,9 +1,9 @@
 import type { Landscape } from '../landscape/landscape';
 import type { ItemDef } from './defs';
 import { GameObject } from './gameObject';
-import { FLOAT_ACCEL, GRAVITY, HIT_SPEED_1 } from './physics';
+import { FLOAT_ACCEL, HIT_SPEED_1 } from './physics';
 
-/** A loose object: rock, gold nugget, flint. */
+/** A loose object: rock, gold nugget, flint, meteor. */
 export class Item extends GameObject {
   /** Ticks during which a clonk that just threw or dropped this won't pick it straight back up. */
   noCollect = 0;
@@ -27,13 +27,14 @@ export class Item extends GameObject {
   /** Advance one tick. Returns true if the item hit something hard (flints explode). */
   tick(land: Landscape): boolean {
     if (this.noCollect > 0) this.noCollect--;
+    const g = land.gravity;
     if (this.inLiquid(land)) {
       // Sink slowly through liquids.
-      this.ydir = Math.min(this.ydir + GRAVITY, 1);
+      this.ydir = Math.min(this.ydir + g, 1);
       this.xdir *= 0.9;
-    } else this.ydir += GRAVITY;
+    } else this.ydir += g;
     // Resting objects with ground right below don't need to simulate.
-    if (this.xdir === 0 && this.ydir === GRAVITY && land.isSolid(this.x, this.y + 1)) {
+    if (this.xdir === 0 && this.ydir === g && land.isSolid(this.x, this.y + 1)) {
       this.ydir = 0;
       return false;
     }

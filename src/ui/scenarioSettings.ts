@@ -49,6 +49,7 @@ const PICTURES: Record<ItemId | 'clonk' | 'hut' | 'melee', Picture> = {
   clonk: { file: 'clonk/Graphics.png', sheet: [256, 280], x: 192, y: 100, w: 32, h: 40 },
   hut: { file: 'structures/Hut2.png', sheet: [100, 66], x: 0, y: 0, w: 60, h: 50 },
   melee: { file: 'goals/Melee.png', sheet: [64, 64], x: 0, y: 0, w: 64, h: 64 },
+  meteor: { file: 'items/Meteor.png', sheet: [128, 128], x: 8, y: 0, w: 120, h: 120 },
 };
 
 function picture(p: Picture, size: number): HTMLElement {
@@ -315,7 +316,7 @@ let lastTab: Tab = 'landscape';
 
 /**
  * The settings of a scenario, laid out like the original's Scenario
- * Properties: Game, Equipment, Landscape and Environment tabs, the landscape
+ * Properties: Game, Equipment, Landscape, Environment and Weather tabs, the landscape
  * with its coloured sliders and a live map preview.
  */
 export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
@@ -567,13 +568,56 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     h('div', { class: 'pp-hint', style: at(205, 100, 186, 10) }, 'per 1000 pixels of map width'),
   );
 
+  // ---- Weather: the original's sliders and colours (C4PageWeather), with its words at both ends.
+  const w = d.weather;
+  const weatherItems: HTMLElement[] = [];
+  const ws = (label: string, x: number, y: number, color: string, value: SVal, ends: [string, string], show: (v: SVal) => string, off = ''): void => {
+    const els = [
+      ...slider({ x, y, w: 126, color, label, value, random: true, show, onChange: () => {} }),
+      h('div', { class: 'pp-end', style: at(x, y + 6, 60) }, ends[0]),
+      h('div', { class: 'pp-end right', style: at(x + 66, y + 6, 60) }, ends[1]),
+    ];
+    if (off) {
+      for (const e of els) {
+        e.classList.add('off');
+        e.title = off;
+      }
+    }
+    weatherItems.push(...els);
+  };
+  const pm = (v: SVal, unit = ''): string => (v.rnd ? `${v.std}${unit} ±${v.rnd}` : `${v.std}${unit}`);
+  const seasonName = (n: number): string => ['winter', 'spring', 'summer', 'autumn', 'winter'][Math.min(4, Math.trunc((n + 12) / 25))];
+  const yearLength = (n: number): string => {
+    if (n <= 0) return 'stands still';
+    const minutes = (100 * Math.ceil(200 / n) * 35) / 36 / 60;
+    return minutes >= 10 ? `a year in ${Math.round(minutes)} min` : `a year in ${minutes.toFixed(1)} min`;
+  };
+  ws('Climate:', 18, 17, 'rgb(200,160,80)', w.climate, ['hot', 'cold'], (v) => `around ${50 - v.std}°${v.rnd ? ` ±${v.rnd}` : ''}`);
+  ws('Season:', 18, 46, 'rgb(160,120,40)', w.startSeason, ['spring', 'winter'], (v) => (v.rnd >= 50 ? 'any' : v.rnd ? `${seasonName(v.std)} ±${v.rnd}` : seasonName(v.std)));
+  ws('Time advance:', 18, 76, 'rgb(120,80,0)', w.yearSpeed, ['slow', 'fast'], (v) => yearLength(v.std) + (v.rnd ? ` (±${v.rnd})` : ''));
+  ws('Rain:', 18, 113, 'rgb(40,40,130)', w.rain, ['none', 'plenty'], (v) => pm(v));
+  ws('Thunderstorms:', 18, 142, 'rgb(90,90,200)', w.lightning, ['none', 'plenty'], (v) => pm(v));
+  ws('Wind:', 18, 171, 'rgb(140,140,250)', w.wind, ['left', 'right'], (v) => pm(v));
+  ws('Earthquakes:', 205, 17, 'rgb(255,80,50)', w.earthquake, ['none', 'plenty'], (v) => pm(v));
+  ws('Volcanoes:', 205, 46, 'rgb(220,60,30)', w.volcano, ['none', 'plenty'], () => 'need lava, which comes later', 'Volcanoes need lava, which comes later');
+  ws('Meteorites:', 205, 76, 'rgb(200,30,0)', w.meteorite, ['none', 'plenty'], (v) => pm(v));
+  ws('Gravity:', 205, 113, 'rgb(80,80,80)', l.gravity, ['weak', 'strong'], (v) => pm(v, '%'));
+  const weatherPage = h(
+    'div',
+    { class: 'pp-page' },
+    ...weatherItems,
+    h('div', { class: 'pp-hint', style: at(18, 190, 160, 10) }, 'Rain falls from one cloud per 500 pixels of map width.'),
+    checkbox('Season colours', 205, 142, 160, () => w.seasonColors, (v) => (w.seasonColors = v), 'Tint the world with the season: green in spring, brown in autumn, blue when it freezes'),
+    checkbox('Sky moves with the wind', 205, 152, 160, () => w.skyWind, (v) => (w.skyWind = v), 'The clouds in the sky drift along with the wind'),
+  );
+
   // ---- Tabs
   const pages: Record<Tab, HTMLElement | null> = {
     game: gamePage,
     equipment: equipPage,
     landscape: landscapePage,
     environment: environmentPage,
-    weather: null,
+    weather: weatherPage,
   };
   const names: Record<Tab, string> = { game: 'Game', equipment: 'Equipment', landscape: 'Landscape', environment: 'Environment', weather: 'Weather' };
   const pageBox = h('div', { class: 'pp-pages' });
@@ -581,7 +625,6 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     h('button', {
       class: 'pp-tab',
       disabled: !pages[t],
-      title: pages[t] ? '' : 'No weather yet',
       onclick: () => show(t),
     }, names[t]),
   );

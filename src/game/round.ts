@@ -4,7 +4,9 @@ import type { Clonk, CrewInfo } from '../objects/clonk';
 import { CrewAI } from './ai';
 import { dryGround, groundAt, setupDefaultBases } from './homeBase';
 import { hireClonk, idleMember, PLAYER_COLORS, type CrewMember, type CrewResult, type Profile } from './profiles';
+import { evaluate } from '../landscape/mapCreator';
 import { crewCount, type ScenarioDef } from './scenarios';
+import { Weather } from './weather';
 import { World } from './world';
 
 /** The local player's number in the world. Multiplayer will hand out more. */
@@ -68,6 +70,10 @@ export function newSeed(): number {
 export function startRound(scenario: ScenarioDef, profile: Profile, names: readonly string[] = [], seed = scenario.seed): Round {
   const map = generateMap(scenario.landscape, seed, { players: crewCount(scenario) });
   const world = World.fromMap(map, seed);
+  // The weather and gravity get their own random numbers, so they don't change the map or the crews.
+  const weatherRng = new Rng(seed ^ 0x3ea7);
+  world.land.gravity = evaluate(scenario.landscape.gravity, weatherRng) / 500;
+  world.weather = new Weather(scenario.weather, weatherRng, world.land.width);
   const recruited = new Set<string>();
   const recruit = (): CrewInfo => {
     const busy = new Set(world.crewOf(LOCAL_PLAYER).flatMap((c) => (c.info ? [c.info.memberId] : [])));

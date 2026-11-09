@@ -69,6 +69,8 @@ export interface LandscapeDef {
   inEarthLevel: SVal;
   /** Not in the original: objects lying on the surface, per 1000 pixels of map width. */
   onSurface: Partial<Record<ItemId, number>>;
+  /** Gravity in percent of normal, 10 to 200 (shown on the Weather page, like the original's). */
+  gravity: SVal;
 }
 
 /** The original's defaults (C4SLandscape::Default). */
@@ -90,6 +92,7 @@ export const DEFAULT_LANDSCAPE: LandscapeDef = {
   inEarth: {},
   inEarthLevel: sval(50),
   onSurface: {},
+  gravity: sval(100, 0, 10, 200),
 };
 
 /** C4S_MaxMapPlayerExtend. */

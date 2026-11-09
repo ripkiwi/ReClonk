@@ -28,6 +28,7 @@ const BLASTS = ['Blast1', 'Blast2', 'Blast3'] as const;
 const HURTS = ['Hurt1', 'Hurt2', 'Hurt3'] as const;
 const KIMES = ['Kime1', 'Kime2', 'Kime3'] as const;
 const PUNCHES = ['Punch1', 'Punch2', 'Punch3'] as const;
+const THUNDER = ['Thunder1', 'Thunder2', 'Thunder3'] as const;
 /** The original's DeathAnnounce messages. */
 const DEATH_MESSAGES = ['%s is dead.', '%s has\ndeceased.', '%s\nrests in peace.'];
 /** How long the round goes on after it's decided before the results show: 3.5 seconds. */
@@ -168,7 +169,19 @@ export class GameScreen {
       else if (e.type === 'gate') this.env.sounds.play('SteelGate1', volumeAt(e.x, e.y));
       else if (e.type === 'elevator') this.env.sounds.play('Elevator', volumeAt(e.x, e.y) * 0.6);
       else if (e.type === 'click') this.env.sounds.play('Click', volumeAt(e.x, e.y) * 0.7);
+      // Thunder comes from the sky above the bolt, so only the distance across counts.
+      else if (e.type === 'thunder') this.env.sounds.play(pick(THUNDER), near ? Math.max(0.3, 1 - Math.abs(e.x - near.x) / 800) : 1);
     }
+    const w = this.round.world.weather;
+    if (!w || this.paused || this.stopped) {
+      this.env.sounds.stopLoops();
+      return;
+    }
+    // The wind howls once it's strong (SoundLevel Wind, |wind| - 30), and earthquakes rumble.
+    this.env.sounds.loop('Wind', (Math.max(Math.abs(w.wind) - 30, 0) * 2) / 100);
+    let quake = 0;
+    for (const q of w.quakes) quake = Math.max(quake, volumeAt(q.x, q.y));
+    this.env.sounds.loop('Earthquake', quake);
   }
 
   pause(): void {
@@ -219,6 +232,7 @@ export class GameScreen {
   end(): void {
     if (this.stopped) return;
     this.stopped = true;
+    this.env.sounds.stopLoops();
     this.pauseEl?.remove();
     this.pauseEl = null;
     this.announce.remove();
@@ -233,6 +247,7 @@ export class GameScreen {
   dispose(): void {
     if (!this.stopped) {
       this.stopped = true;
+      this.env.sounds.stopLoops();
       this.env.app.ticker.remove(this.onTick);
       this.keyboard.dispose();
       removeEventListener('keydown', this.onKey);

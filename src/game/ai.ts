@@ -2,7 +2,6 @@ import { NO_CONTROL, THROW_SPEED, type Clonk, type ControlState } from '../objec
 import { MATERIALS } from '../landscape/materials';
 import { CLONK } from '../objects/defs';
 import type { Item } from '../objects/item';
-import { GRAVITY } from '../objects/physics';
 import type { Brain, World } from './world';
 
 /** What a computer clonk is up to. */
@@ -438,7 +437,7 @@ export class CrewAI implements Brain {
       return dx >= 0 && dx < CLONK.width && dy >= 0 && dy < CLONK.height;
     };
     for (let i = 1; i <= THROW_TICKS; i++) {
-      vy += GRAVITY;
+      vy += land.gravity;
       x += vx;
       y += vy;
       const px = Math.round(x);

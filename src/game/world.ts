@@ -9,6 +9,7 @@ import { Item } from '../objects/item';
 import { HIT_SPEED_2 } from '../objects/physics';
 import { Structure } from '../objects/structure';
 import { buildStep, construct, grabOrBuild, grabTarget, pushControl, siteProblem, stepElevator, stepGate } from './buildings';
+import type { Weather } from './weather';
 
 export type WorldEvent =
   | { type: 'explosion'; x: number; y: number; radius: number; tick: number }
@@ -32,7 +33,9 @@ export type WorldEvent =
   /** A construction site went up, is being worked on (every second), or is finished. */
   | { type: 'construct' | 'building' | 'built'; structure: Structure; tick: number }
   /** A guard tower gate starts moving, an elevator case rides on, something was switched. */
-  | { type: 'gate' | 'elevator' | 'click'; x: number; y: number; tick: number };
+  | { type: 'gate' | 'elevator' | 'click'; x: number; y: number; tick: number }
+  /** A lightning bolt came down with a clap of thunder. */
+  | { type: 'thunder'; x: number; y: number; tick: number };
 
 /** Extra experience on top of the original's "1 per 5 commands", so promotions come at a fun pace. */
 export const EXPERIENCE = {
@@ -115,6 +118,8 @@ export class World {
   winner: number | null = null;
   private readonly deaths = new Set<Clonk>();
   tick = 0;
+  /** Seasons, wind, rain and disasters; null plays without weather (tests). */
+  weather: Weather | null = null;
   /** Things that happened this tick, for effects and sound. The renderer drains it. */
   readonly events: WorldEvent[] = [];
 
@@ -332,13 +337,16 @@ export class World {
       if (hit && item.def.explodeOnHit) {
         item.removed = true;
         const by = this.thrower(item);
-        const freed = this.explode(item.x, item.y, item.def.explodeOnHit, by);
+        const level = item.def.explodeOnHit + (item.def.explodeRandom ? this.rng.int(item.def.explodeRandom) : 0);
+        const freed = this.explode(item.x, item.y, level, by);
         if (by && freed && by.doExperience(freed * EXPERIENCE.blastedLoose)) this.promoted(by);
       }
     }
     if (this.items.some((i) => i.removed)) this.items = this.items.filter((i) => !i.removed);
     this.objectHits();
 
+    this.weather?.step(this);
+    this.land.pxs.step(this.rng);
     this.land.step(this.tick, this.rng);
     this.afterDeaths();
     this.tick++;
@@ -582,6 +590,33 @@ export class World {
     }
     if (Math.abs(y - c.y) <= level && Math.abs(x - c.x) <= level) points += Math.trunc(level / 2);
     if (points) this.hurt(c, points, by);
+  }
+
+  /**
+   * A blast that only hits objects, not the landscape (C4Game::BlastObjects;
+   * lightning strikes with level 5): blast damage, and a shove away from it
+   * for whatever is within `level` pixels.
+   */
+  blastObjects(x: number, y: number, level: number, by: Clonk | null = null): void {
+    const shove = (o: GameObject, mass: number, living: boolean): [number, number] | null => {
+      if (Math.abs(y - o.y) > level || Math.abs(x - o.x) > level) return null;
+      const k = Math.max(4, Math.min(living ? 8 : 20, Math.trunc(mass / 10)));
+      const side = Math.sign(o.x - x + this.rng.int(3) - 1);
+      return [(side * (level - Math.abs(x - o.x))) / k, (-level + Math.abs(y - o.y)) / k];
+    };
+    for (const c of this.clonks) {
+      if (c.contained || !c.alive) continue;
+      this.blastDamage(c, x, y, level, by);
+      const v = shove(c, CLONK.mass, true);
+      if (v && c.alive) c.fling(c.xdir + v[0], c.ydir + v[1]);
+    }
+    for (const item of this.items) {
+      if (item.container || item.removed) continue;
+      const v = shove(item, item.def.mass, false);
+      if (!v) continue;
+      item.xdir += v[0];
+      item.ydir += v[1];
+    }
   }
 
   private dropAll(c: Clonk): void {

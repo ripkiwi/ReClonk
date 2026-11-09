@@ -19,6 +19,10 @@ export const enum Mat {
    * draws it), can't be dug or blasted.
    */
   Basement = 7,
+  /** Frozen water. Lakes freeze below -10 degrees and thaw above 10. */
+  Ice = 8,
+  /** Falls instead of rain below 0 degrees, melts above 5. */
+  Snow = 9,
 }
 
 /** Density at or above which a material blocks movement (C4M_Solid in the original). */
@@ -26,7 +30,7 @@ export const SOLID = 50;
 /** Density of liquids (C4M_Liquid). */
 export const LIQUID = 25;
 
-export type ItemId = 'rock' | 'gold' | 'flint' | 'conkit';
+export type ItemId = 'rock' | 'gold' | 'flint' | 'conkit' | 'meteor';
 
 export interface Material {
   name: string;
@@ -47,7 +51,25 @@ export interface Material {
   texture: string;
   /** Chunk shape when a map is zoomed into a landscape (the .c4m Shape): 0 flat, 1 top flat, 2 smooth, 3 rough. */
   shape: 0 | 1 | 2 | 3;
+  /** Solid but falls and slides down when nothing holds it (snow; liquids always do). */
+  instable?: boolean;
+  /** How far a loose pixel of it slides sideways to find somewhere lower (MaxSlide). */
+  maxSlide?: number;
+  /** How much the wind blows its loose pixels around, 0 to 100 (WindDrift). */
+  windDrift?: number;
+  /**
+   * Turns into another material when it gets too cold or too warm (Below/AboveTempConvert):
+   * `dir` 0 works from the top of a patch down, 1 from the bottom up. Up to
+   * TempConvStrength + 1 pixels change each time the landscape scan passes.
+   */
+  belowTemp?: { temp: number; to: Mat; dir: 0 | 1 };
+  aboveTemp?: { temp: number; to: Mat; dir: 0 | 1 };
+  /** Loose pixels that land in this material turn into it (InMatConvert: snow in water). */
+  inMatConvert?: { mat: Mat; to: Mat };
 }
+
+/** Pixels converted at once by a temperature change (TempConvStrength). */
+export const TEMP_CONV_STRENGTH = 3;
 
 export const MATERIALS: readonly Material[] = [
   { name: 'Sky', density: 0, digFree: false, blastFree: false, colors: [0, 0, 0], texture: 'SMOOTH', shape: 0 },
@@ -74,10 +96,21 @@ export const MATERIALS: readonly Material[] = [
   {
     name: 'Water', density: LIQUID, digFree: false, blastFree: false,
     colors: [0x07238c, 0x07238c, 0x07238c], texture: 'LIQUID', shape: 0,
+    windDrift: 30, belowTemp: { temp: -10, to: Mat.Ice, dir: 0 },
   },
   {
     name: 'Basement', density: SOLID, digFree: false, blastFree: false,
     colors: [0x5a5a5a, 0x6e6e6e, 0x828282], texture: 'Rock', shape: 0,
+  },
+  {
+    name: 'Ice', density: SOLID, digFree: true, blastFree: true, maxSlide: 1,
+    colors: [0x006ebe, 0x007cfc, 0x0096fa], texture: 'Sponge', shape: 1,
+    aboveTemp: { temp: 10, to: Mat.Water, dir: 1 },
+  },
+  {
+    name: 'Snow', density: SOLID, digFree: true, blastFree: true, instable: true, maxSlide: 1, windDrift: 70,
+    colors: [0xe6e6e6, 0xf0f0f0, 0xfafafa], texture: 'Spots', shape: 2,
+    aboveTemp: { temp: 5, to: Mat.Water, dir: 0 }, inMatConvert: { mat: Mat.Water, to: Mat.Water },
   },
 ];
 
@@ -124,6 +157,10 @@ export const TEXMAP: readonly TexEntry[] = [
   entry('Sand-Smooth', Mat.Sand, 'SMOOTH'),
   entry('Sand-Smooth2', Mat.Sand, 'SMOOTH2'),
   entry('Sand-Smooth3', Mat.Sand, 'SMOOTH3'),
+  entry('Ice-Sponge', Mat.Ice, 'Sponge'),
+  entry('Ice-Structure', Mat.Ice, 'Structure'),
+  entry('Snow-Spots', Mat.Snow, 'Spots'),
+  entry('Snow-Smooth', Mat.Snow, 'SMOOTH'),
   entry('Basement', Mat.Basement, 'Rock'),
 ];
 

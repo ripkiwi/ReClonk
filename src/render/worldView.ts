@@ -1,7 +1,9 @@
-import { Container, Graphics, Sprite, Text, TilingSprite } from 'pixi.js';
+import { ColorMatrixFilter, Container, Graphics, Sprite, Text, TilingSprite } from 'pixi.js';
 import { PLAYER_COLORS } from '../game/profiles';
 import { rankName } from '../game/ranks';
+import { Weather } from '../game/weather';
 import type { CrewCursor, World, WorldEvent } from '../game/world';
+import { MATERIALS, Mat } from '../landscape/materials';
 import { CLONK, CONSTRUCTION, ELEVATOR_CASE, FLAG, GATE } from '../objects/defs';
 import type { Clonk } from '../objects/clonk';
 import type { Item } from '../objects/item';
@@ -37,8 +39,66 @@ interface StructureSprites {
   con: number;
 }
 
+/** Smoke and sparks behind a meteor (Meteor.c4d SmokeTrail), drawn only. */
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  color: number;
+  alpha: number;
+  life: number;
+  age: number;
+}
+
 /** How long a message above a clonk stays up, in ticks. */
 const MESSAGE_TICKS = 36 * 4;
+
+/** The original's season colour ramps (C4Weather SeasonColors): dark, middle and light for winter, spring, summer, autumn. */
+const SEASON_COLORS = [
+  [0x000000, 0x7f7f90, 0xefefff],
+  [0x070f00, 0x90a07f, 0xffffdf],
+  [0x000000, 0x808080, 0xffffff],
+  [0x0f0700, 0xa08067, 0xffffdf],
+];
+
+/**
+ * C4Weather::SetSeasonGamma: the season's colour ramp, blended between
+ * seasons and turned bluer when it's freezing. Returns [dark, middle, light]
+ * for red, green and blue.
+ */
+export function seasonRamp(season: number, temperature: number): number[][] {
+  const s1 = Math.trunc(season / 25) % 4;
+  const s2 = (s1 + 1) % 4;
+  const off1 = Math.max(5, Math.min(19, season % 25)) - 5;
+  const off2 = 15 - off1;
+  return [16, 8, 0].map((shift) =>
+    [0, 1, 2].map((i) => {
+      const c1 = (SEASON_COLORS[s1][i] >> shift) & 255;
+      const c2 = (SEASON_COLORS[s2][i] >> shift) & 255;
+      let v = Math.trunc((c1 * off2 + c2 * off1) / 15);
+      // Red and green fade in the cold, blue comes out.
+      if (temperature < 0) v += shift ? Math.trunc(temperature / 2) : -Math.trunc(temperature / 2);
+      return Math.max(0, Math.min(255, v));
+    }),
+  );
+}
+
+/** The straight line through a ramp's three points (at 0, 128 and 255), as scale and offset. */
+function fitRamp(p: number[]): [number, number] {
+  const xs = [0, 128, 255];
+  const mx = (0 + 128 + 255) / 3;
+  const my = (p[0] + p[1] + p[2]) / 3;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < 3; i++) {
+    num += (xs[i] - mx) * (p[i] - my);
+    den += (xs[i] - mx) ** 2;
+  }
+  const a = num / den;
+  return [a, (my - a * mx) / 255];
+}
 
 /** Draws one player's view of the world: sky, landscape, objects and effects, following a clonk. */
 export class WorldView {
@@ -55,6 +115,14 @@ export class WorldView {
   private readonly marks = new Graphics();
   private readonly flashes: Flash[] = [];
   private readonly messages: Message[] = [];
+  /** Rain, snow and loose earth in flight. */
+  private readonly pxs = new Graphics();
+  /** Lightning bolts and meteor trails, over everything. */
+  private readonly sparks = new Graphics();
+  private readonly particles: Particle[] = [];
+  /** Season colours and lightning flashes. */
+  private readonly tint = new ColorMatrixFilter();
+  private lastTick = -1;
   zoom = 2;
   camX = 0;
   camY = 0;
@@ -69,7 +137,7 @@ export class WorldView {
     this.sky.alpha = 0.7;
     this.root.addChild(this.sky, this.layer);
     this.landscape = new LandscapeView(world.land, assets.materials);
-    this.layer.addChild(this.landscape.sprite, this.structureLayer);
+    this.layer.addChild(this.landscape.sprite, this.structureLayer, this.pxs);
   }
 
   /**
@@ -120,19 +188,167 @@ export class WorldView {
     this.camY = Math.max(0, Math.min(land.height - viewH, this.camY));
     if (viewW > land.width) this.camX = (land.width - viewW) / 2;
 
+    const [sx, sy] = this.quakeShake(follow);
     this.layer.scale.set(this.zoom);
-    this.layer.position.set(-Math.round(this.camX * this.zoom), -Math.round(this.camY * this.zoom));
+    this.layer.position.set(-Math.round((this.camX + sx) * this.zoom), -Math.round((this.camY + sy) * this.zoom));
     this.sky.width = screenW;
     this.sky.height = screenH;
     this.sky.tileScale.set(this.zoom * 1.5);
-    this.sky.tilePosition.set(-this.camX * 0.4 * this.zoom, -this.camY * 0.4 * this.zoom);
+    const skyX = this.world.weather?.skyX ?? 0;
+    this.sky.tilePosition.set((-(this.camX + sx) * 0.4 + skyX) * this.zoom, -(this.camY + sy) * 0.4 * this.zoom);
 
     this.landscape.update();
     this.updateStructures();
     this.updateItems();
     this.updateClonks();
     this.updateMarks(cursor);
+    this.updatePxs(viewW, viewH);
+    this.updateSparks();
+    this.updateTint();
     this.updateEffects(events);
+  }
+
+  /**
+   * Earthquakes shake the view (Earthquake.c4d FxQuakeEffectTimer): weak at
+   * first, hardest halfway, weak again at the end, and less the further away.
+   */
+  private quakeShake(follow: Clonk | undefined): [number, number] {
+    const w = this.world.weather;
+    if (!w?.quakes.length) return [0, 0];
+    let x = 0;
+    let y = 0;
+    for (const q of w.quakes) {
+      let level = Weather.shake(q);
+      if (level <= 0) continue;
+      if (follow) level = (300 * level) / Math.max(300, Math.hypot(follow.x - q.x, follow.y - q.y));
+      const a = (q.time * 100 * Math.PI) / 180;
+      x += Math.sin(a) * level;
+      y += Math.cos(a) * level;
+    }
+    return [x, y];
+  }
+
+  /**
+   * Loose pixels like the original draws them: a streak for the fast ones
+   * (rain), a dot for the slow ones; snow as soft white flakes.
+   */
+  private updatePxs(viewW: number, viewH: number): void {
+    const g = this.pxs;
+    g.clear();
+    const list = this.world.land.pxs.list;
+    if (!list.length) return;
+    const x0 = this.camX - 20;
+    const y0 = this.camY - 20;
+    const x1 = this.camX + viewW + 20;
+    const y1 = this.camY + viewH + 20;
+    let snow = false;
+    let rain = false;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
+      if (p.mat === Mat.Snow) snow = true;
+      else if (Math.abs(p.xdir) + Math.abs(p.ydir) >= 1) {
+        g.moveTo(p.x - p.xdir, p.y - p.ydir).lineTo(p.x, p.y);
+        rain = true;
+      }
+    }
+    if (rain) g.stroke({ color: 0x5c7cff, width: 1, alpha: 0.7 });
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      if (p.mat === Mat.Snow || p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
+      if (Math.abs(p.xdir) + Math.abs(p.ydir) < 1) g.rect(Math.floor(p.x), Math.floor(p.y), 1, 1).fill(MATERIALS[p.mat].colors[2]);
+    }
+    if (!snow) return;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      if (p.mat !== Mat.Snow || p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
+      // Flakes of a few sizes, the bigger ones fainter (C4PXSSystem::Draw).
+      const z = 1 + ((i ^ 341) % 3);
+      g.circle(p.x, p.y, z * 0.6).fill({ color: 0xffffff, alpha: 1 - z * 0.15 });
+    }
+  }
+
+  /** Lightning bolts, and smoke and sparks behind meteors. */
+  private updateSparks(): void {
+    const g = this.sparks;
+    g.clear();
+    this.layer.addChild(g);
+    const w = this.world.weather;
+    for (const b of w?.bolts ?? []) {
+      const pts = b.points;
+      if (pts.length < 2) continue;
+      // C4FacetEx::DrawBolt: each segment a thin, jittery white sliver.
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1];
+        const c = pts[i];
+        const jx = Math.random() * 2 - 1;
+        const jy = Math.random() * 2 - 1;
+        g.poly([a.x, a.y, c.x, c.y, c.x + jx, c.y + jy, a.x + jx, a.y + jy]).fill({ color: 0xffffff, alpha: 0.95 });
+        g.moveTo(a.x, a.y).lineTo(c.x, c.y);
+      }
+      g.stroke({ color: 0xc8d8ff, width: 2.5, alpha: 0.35 });
+      g.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+      g.stroke({ color: 0xffffff, width: 1, alpha: 0.95 });
+    }
+    // New smoke and sparks once per tick for every meteor.
+    const tick = this.world.tick;
+    if (tick !== this.lastTick) {
+      this.lastTick = tick;
+      for (const item of this.world.items) {
+        if (item.def.id !== 'meteor' || item.container) continue;
+        const add = (p: Partial<Particle> & { size: number; color: number; life: number }): void => {
+          this.particles.push({ x: item.x, y: item.y, vx: 0, vy: 0, alpha: 0.5, age: 0, ...p });
+        };
+        add({ size: 3, color: 0x404040, life: 30, vy: -0.3 });
+        add({ y: item.y - 5, size: 1 + Math.random() * 3, color: 0x505050, life: 24, vy: -0.4 });
+        for (let n = Math.floor(Math.random() * 6); n > 0; n--) {
+          const c = 20 + Math.random() * 41;
+          const color = (255 << 16) | (Math.floor(Math.random() * 100) << 8) | Math.min(255, Math.floor(c * 4));
+          add({ x: item.x + Math.random() * 11 - 5, y: item.y + Math.random() * 11 - 5, size: c / 40, color, life: 8 });
+        }
+        add({ size: 1.2, color: 0xff9b00, life: 6, alpha: 0.8 });
+      }
+      for (const p of this.particles) {
+        p.age++;
+        p.x += p.vx;
+        p.y += p.vy;
+      }
+      for (let i = this.particles.length - 1; i >= 0; i--) if (this.particles[i].age >= this.particles[i].life) this.particles.splice(i, 1);
+    }
+    for (const p of this.particles) {
+      const t = p.age / p.life;
+      g.circle(p.x, p.y, p.size * (1 + t)).fill({ color: p.color, alpha: p.alpha * (1 - t) });
+    }
+    this.layer.addChild(this.marks);
+  }
+
+  /**
+   * The original's gamma ramps, as a colour matrix over the whole view: the
+   * season's colours (if the scenario wants them), and the white flash of lightning.
+   */
+  private updateTint(): void {
+    const w = this.world.weather;
+    const season = w?.def.seasonColors ? seasonRamp(w.season, w.temperature) : null;
+    const flash = w?.flash ?? 0;
+    if (!season && !flash) {
+      if (this.root.filters) this.root.filters = null;
+      return;
+    }
+    const m = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0];
+    for (let ch = 0; ch < 3; ch++) {
+      let [a, b] = season ? fitRamp(season[ch]) : [1, 0];
+      if (flash) {
+        // Lightning: dark brightened to the flash, middle half way (ramp 5).
+        const [la, lb] = fitRamp([flash, 128 + flash / 2, 255]);
+        a = la * a;
+        b = la * b + lb;
+      }
+      m[ch * 5 + ch] = a;
+      m[ch * 5 + 4] = b;
+    }
+    this.tint.matrix = m as typeof this.tint.matrix;
+    if (!this.root.filters) this.root.filters = [this.tint];
   }
 
   /** Remove everything from the screen and free the landscape texture. */
@@ -272,7 +488,10 @@ export class WorldView {
       if (st.hasFlag) {
         const f = FLAG.fly;
         const phase = Math.floor(this.world.tick / f.delay) % f.length;
-        const y = f.y + f.dir * FLAG.height;
+        // The flag flies the way the wind blows (Flag.c4d Flying).
+        const weather = this.world.weather;
+        const dir = weather ? Math.max(0, Math.min(8, Math.trunc(weather.windAt(this.world, st.x, st.top) / 10) + 4)) : f.dir;
+        const y = f.y + dir * FLAG.height;
         s.pole.texture = frame(tex[FLAG.graphic.file], phase * FLAG.width, y, FLAG.width, FLAG.height);
         s.cloth.texture = frame(tex[FLAG.graphic.overlay], phase * FLAG.width, y, FLAG.width, FLAG.height);
         s.cloth.tint = this.colorOf(st.base);
