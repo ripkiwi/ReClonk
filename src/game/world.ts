@@ -13,7 +13,7 @@ import { FIRE } from '../objects/fire';
 import { blastBurn, stepFire } from './fire';
 import { buildStep, construct, grabOrBuild, grabTarget, pushControl, siteProblem, stepElevator, stepGate } from './buildings';
 import { MagicState, openSpellMenu, spellList, startSpell, stepMagic, stepSorcerer, type SpellId } from './magic';
-import { stepRules, type RuleId } from './rules';
+import { stepRules, takeFlag, type RuleId } from './rules';
 import type { Weather } from './weather';
 
 export type WorldEvent =
@@ -382,7 +382,7 @@ export class World {
       if (c.buildMenu !== null && (c.action.procedure !== 'walk' || c.carrying?.def.id !== 'conkit')) c.buildMenu = null;
       if (c.spellMenu !== null && !c.readyToMagic) c.spellMenu = null;
       stepSorcerer(this, c);
-      const got = c.tryCollect(this.items, this.land);
+      const got = c.tryCollect(this.items, this.land) ?? takeFlag(this, c);
       if (got) {
         this.events.push({ type: 'collect', clonk: c, item: got, tick: this.tick });
         if (got.def.id === 'gold' && !got.found) {

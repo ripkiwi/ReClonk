@@ -18,6 +18,9 @@ const style = (size: number, fill = '#ffffff'): TextStyleOptions => ({
 /** Messages stay on screen this long. */
 const MESSAGE_TICKS = TICKS_PER_SECOND * 3;
 
+/** Where the clonk's own panel (name, energy, wealth) ends on the left of the screen. */
+const HUD_PANEL = 316;
+
 /**
  * HUD for one player's crew: energy bar, gold, and while inside a building
  * what you can do there (leave, buy, sell), plus short messages.
@@ -154,7 +157,8 @@ export class BaseHud {
       this.hint.text = `No flag: not your base · ${k.down} leave`;
     }
     const width = Math.max(360, this.menuRow.width + 24);
-    const x = Math.round(screenW / 2 - width / 2);
+    // A long shop list moves over rather than cover the clonk's panel.
+    const x = width > screenW - 2 * HUD_PANEL ? Math.max(Math.min(HUD_PANEL, screenW - width - 8), 8) : Math.round(screenW / 2 - width / 2);
     this.panel.clear().roundRect(x, 10, width, height, 8).fill({ color: 0x000000, alpha: 0.55 }).stroke({ color: 0xffffff, alpha: 0.5, width: 2 });
     this.title.position.set(x + 12, 16);
     this.menuRow.position.set(x + 12, 42);
@@ -166,7 +170,8 @@ export class BaseHud {
     const list = spellList(this.world);
     const mana = Math.floor(clonk.magicEnergy / MAGIC_UNIT);
     const key = `spell:${clonk.spellMenu}:${mana}:${list.join()}`;
-    const per = Math.max(1, Math.min(list.length, Math.floor((screenW - 60) / 84)));
+    // Stays clear of the clonk's panel in the top left corner.
+    const per = Math.max(3, Math.min(list.length, Math.floor((screenW - HUD_PANEL - 40) / 84)));
     if (key !== this.menuKey) {
       this.menuKey = key;
       this.menuRow.removeChildren().forEach((c) => c.destroy({ children: true }));
@@ -192,13 +197,13 @@ export class BaseHud {
     const sel = SPELLS[list[Math.min(clonk.spellMenu ?? 0, list.length - 1)]];
     this.title.text = `Magic (${mana} magic energy): ${sel.description}`;
     this.title.style.wordWrap = true;
-    this.title.style.wordWrapWidth = Math.max(336, per * 84);
+    this.title.style.wordWrapWidth = Math.max(336, per * 84 - 6);
     this.hint.text = `${k.choose} choose · ${k.buy} cast · ${k.down} close`;
     const rows = Math.ceil(list.length / per);
     const titleH = this.title.height;
     const width = Math.max(360, per * 84 + 18);
     const height = titleH + rows * 80 + 44;
-    const x = Math.round(screenW / 2 - width / 2);
+    const x = Math.max(HUD_PANEL, Math.round(screenW / 2 - width / 2));
     this.panel.clear().roundRect(x, 10, width, height, 8).fill({ color: 0x000000, alpha: 0.55 }).stroke({ color: 0xffffff, alpha: 0.5, width: 2 });
     this.title.position.set(x + 12, 16);
     this.menuRow.position.set(x + 12, 22 + titleH);

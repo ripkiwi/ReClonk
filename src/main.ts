@@ -122,6 +122,8 @@ async function start(): Promise<void> {
   }
   void keyboardLabels();
   let game: GameScreen | null = null;
+  // For poking at a running game from the browser console while developing.
+  if (import.meta.env.DEV) Object.assign(window, { reclonk: { game: () => game } });
 
   const play = (scenario: ScenarioDef, profile: Profile): void => {
     music.game();

@@ -365,7 +365,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     goalNote.textContent = d.goal === 'melee' && d.opponents === 0 ? 'Melee needs computer crews to fight.' : d.goal === 'melee' ? 'The last crew standing wins.' : '';
   };
   showGoal();
-  const ruleNote = h('div', { class: 'pp-hint', style: at(199, 106, 186, 60) });
+  const ruleNote = h('div', { class: 'pp-hint', style: at(199, 124, 186, 76) });
   function showRules(): void {
     const on = RULE_IDS.filter((id) => d.rules.includes(id));
     const needsBase = on.some((id) => id === 'captureTheFlag' || id === 'lossOfBase') && !d.homeBase;
@@ -404,7 +404,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
           later: true,
         })),
       ],
-      { x: 199, y: 19, w: 171, hgt: 84, label: 'Rules:', format: (n) => (n ? 'on' : 'off'), onChange: showRules },
+      { x: 199, y: 19, w: 171, hgt: 102, label: 'Rules:', format: (n) => (n ? 'on' : 'off'), onChange: showRules },
     ),
     ruleNote,
     h('div', { class: 'pp-label', style: at(6, 86, 120) }, 'Computer crews:'),
