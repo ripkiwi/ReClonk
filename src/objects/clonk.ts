@@ -108,6 +108,13 @@ const P = CLONK.physical;
 const WALK_SPEED = physical(280, P.walk);
 const JUMP_SPEED = physical(1000, P.jump);
 const DIG_SPEED = physical(125, P.dig);
+/**
+ * Backjump (ReClonk's own, not in the original engine): jump the other way
+ * while the clonk is still braking from a run, before it has turned round.
+ * It keeps facing forward and the jump is a bit higher and a bit less far.
+ */
+export const BACKJUMP_UP = 1.07; // about 14% higher
+export const BACKJUMP_SIDE = 0.85; // 15% less sideways speed
 
 /** Higher ranks train climbing, hangling and swimming towards the maximum at rank 20 (original rule). */
 function trained(base: number, rank: number): number {
@@ -273,6 +280,13 @@ export class Clonk extends GameObject {
     this.setAction('Jump', xdir, ydir);
   }
 
+  /** Jump off the ground towards d: a backjump while still braking the other way. */
+  private jumpFromWalk(d: -1 | 1): void {
+    if (this.xdir !== 0 && Math.sign(this.xdir) === -d) {
+      this.jump(d * WALK_SPEED * BACKJUMP_SIDE, -JUMP_SPEED * BACKJUMP_UP);
+    } else this.jump(d * WALK_SPEED, -JUMP_SPEED);
+  }
+
   private scale(d: -1 | 1): void {
     this.setDir(d);
     this.setAction('Scale', 0, 0);
@@ -394,9 +408,8 @@ export class Clonk extends GameObject {
         if (c.pressedUse && out.useItem()) break;
         if (c.pressedDown && out.grabOrBuild()) break;
         if (c.pressedUp) {
-          // Clonks always jump forward.
-          const tx = held.x !== 0 ? held.x * WALK_SPEED : this.dir * WALK_SPEED;
-          this.jump(tx, -JUMP_SPEED);
+          // Clonks jump the way they're pointed, else the way they face.
+          this.jumpFromWalk(held.x !== 0 ? held.x : this.dir);
         } else if (c.pressedDig) {
           // Dig the way the player is pointing, straight down if nowhere.
           this.startDig();
@@ -461,8 +474,7 @@ export class Clonk extends GameObject {
         if (c.pressedUse && out.useItem()) break;
         if (c.doubleDown && out.grabOrBuild()) break;
         if (c.pressedUp) {
-          const tx = this.comDir.x !== 0 ? this.comDir.x * WALK_SPEED : this.dir * WALK_SPEED;
-          this.jump(tx, -JUMP_SPEED);
+          this.jumpFromWalk(this.comDir.x !== 0 ? this.comDir.x : this.dir);
         } else if (c.pressedDig) {
           this.startDig();
           this.comDir = { x: this.dir, y: 1 };
