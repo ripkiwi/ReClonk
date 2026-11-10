@@ -9,7 +9,8 @@ import type { Clonk } from '../objects/clonk';
 import type { Item } from '../objects/item';
 import type { Structure } from '../objects/structure';
 import { GRASS, type Grass, type Plant } from '../objects/vegetation';
-import { frame, type GameAssets } from './assets';
+import { BALLOON_FLAG, BLIMP, SAIL, isSailing, type Vehicle } from '../objects/vehicle';
+import { colorByOwner, frame, type GameAssets } from './assets';
 import { FireView } from './fireView';
 import { LandscapeView } from './landscapeView';
 
@@ -23,6 +24,14 @@ interface Message {
   text: Text;
   born: number;
   follow: Clonk;
+}
+
+/** A vehicle: its picture behind the clonks, its top face (the front of the basket or hull) in front of them. */
+interface VehicleSprites {
+  body: Sprite;
+  /** The balloon's flag in its owner's colour. */
+  flag: Sprite | null;
+  front: Sprite;
 }
 
 interface StructureSprites {
@@ -114,6 +123,11 @@ export class WorldView {
   private readonly clonkSprites = new Map<Clonk, { body: Sprite; shirt: Sprite }>();
   private readonly itemSprites = new Map<Item, Sprite>();
   private readonly structureSprites = new Map<Structure, StructureSprites>();
+  private readonly vehicleSprites = new Map<Vehicle, VehicleSprites>();
+  /** Vehicles sit in front of buildings and behind clonks... */
+  private readonly vehicleLayer = new Container();
+  /** ...except the front of their baskets and hulls, which is in front of the clonks in them. */
+  private readonly vehicleFront = new Container();
   /** Trees and bushes: a holder at the root that tilts when it falls, and the picture in it. */
   private readonly plantSprites = new Map<Plant, { holder: Container; body: Sprite; burned: boolean | null }>();
   private readonly grassSprites = new Map<Grass, Sprite>();
@@ -151,7 +165,7 @@ export class WorldView {
     this.root.addChild(this.sky, this.layer);
     this.landscape = new LandscapeView(world.land, assets.materials);
     this.fire = new FireView(world, assets.items);
-    this.layer.addChild(this.landscape.sprite, this.grassLayer, this.fire.back, this.plantLayer, this.structureLayer, this.pxs);
+    this.layer.addChild(this.landscape.sprite, this.grassLayer, this.fire.back, this.plantLayer, this.structureLayer, this.vehicleLayer, this.pxs);
   }
 
   /**
@@ -215,7 +229,9 @@ export class WorldView {
     this.updatePlants();
     this.updateStructures();
     this.updateItems();
+    this.updateVehicles();
     this.updateClonks();
+    this.layer.addChild(this.vehicleFront, this.marks);
     this.updateMarks(cursor);
     this.updatePxs(viewW, viewH);
     this.fire.update();
@@ -435,6 +451,80 @@ export class WorldView {
         // The sheet is drawn facing left; mirror it when facing right.
         sprite.scale.x = -c.dir;
       }
+    }
+  }
+
+  private updateVehicles(): void {
+    const tex = this.assets.items;
+    const seen = new Set<Vehicle>();
+    for (const v of this.world.vehicles) {
+      if (v.removed) continue;
+      seen.add(v);
+      const d = v.def;
+      let s = this.vehicleSprites.get(v);
+      if (!s) {
+        s = { body: new Sprite(), flag: null, front: new Sprite() };
+        s.body.anchor.set(0.5);
+        s.front.anchor.set(0.5);
+        this.vehicleLayer.addChild(s.body);
+        this.vehicleFront.addChild(s.front);
+        if (d.id === 'balloon') {
+          s.flag = new Sprite();
+          s.flag.tint = v.owner >= 0 ? this.colorOf(v.owner) : 0xffffff;
+          this.vehicleLayer.addChild(s.flag);
+        }
+        this.vehicleSprites.set(v, s);
+      }
+      // What to draw: the burned wreck, the boat's sail going up or down, the blimp's propeller turning or the blimp turning round.
+      let sheet = tex[d.graphic.file];
+      let fx = 0;
+      let fy = 0;
+      let front = !v.burned && !!d.topFace;
+      if (v.burned) sheet = tex[d.burned.file];
+      else if (d.id === 'boat') {
+        front = isSailing(v.action);
+        if (front) {
+          sheet = tex[SAIL.file];
+          const last = SAIL.frames - 1;
+          const f = v.action === 'LowerSail' ? last - Math.min(last, v.actTime) : v.action === 'RaiseSail' ? Math.min(last, v.actTime) : 0;
+          fx = f * d.width;
+        }
+      } else if (d.id === 'blimp') {
+        if (v.action === 'FloatPropel') fx = (v.actTime % BLIMP.propel) * d.width;
+        else if (v.action === 'Turn') {
+          fx = Math.min(BLIMP.turnFrames - 1, Math.floor(v.actTime / BLIMP.turnDelay)) * d.width;
+          fy = d.height;
+        }
+      } else if (d.id === 'balloon') sheet = colorByOwner(sheet).body;
+      s.body.texture = frame(sheet, fx, fy, d.width, d.height);
+      s.body.position.set(v.left + d.width / 2, v.top + d.height / 2);
+      // The blimp is drawn facing left; mirrored when it faces right (FlipDir).
+      const flip = d.id === 'blimp' && v.dir > 0 && !v.burned ? -1 : 1;
+      s.body.scale.x = flip;
+      s.body.angle = v.r;
+      s.front.visible = front;
+      if (front && d.topFace) {
+        const t = d.topFace;
+        // The blimp's and the sailing boat's come from the frame shown (FacetTopFace), the balloon's from its sheet.
+        s.front.texture = d.id === 'balloon' ? frame(sheet, t.x, t.y, t.w, t.h) : frame(sheet, fx + t.x, fy + t.y, t.w, t.h);
+        const cx = flip < 0 ? d.width - t.at.x - t.w / 2 : t.at.x + t.w / 2;
+        s.front.position.set(v.left + cx, v.top + t.at.y + t.h / 2);
+        s.front.scale.x = flip;
+      }
+      if (s.flag) {
+        s.flag.visible = !v.burned;
+        const f = BALLOON_FLAG;
+        const phase = Math.floor(this.world.tick / f.delay) % f.length;
+        s.flag.texture = frame(colorByOwner(tex[d.graphic.file]).overlay, f.x + phase * f.w, v.flagDir * f.h, f.w, f.h);
+        s.flag.position.set(v.left + f.at.x, v.top + f.at.y);
+      }
+    }
+    for (const [v, s] of this.vehicleSprites) {
+      if (seen.has(v)) continue;
+      s.body.destroy();
+      s.front.destroy();
+      s.flag?.destroy();
+      this.vehicleSprites.delete(v);
     }
   }
 

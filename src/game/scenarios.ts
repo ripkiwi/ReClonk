@@ -43,10 +43,14 @@ export interface ScenarioDef {
   basedOn?: string;
 }
 
-/** The home base start of the original Gold Mine: 50 gold, flints, construction kits and clonks to buy. */
+/**
+ * The home base start of the original Gold Mine: 50 gold, flints, construction
+ * kits and clonks to buy. The original sells a catapult and lorries instead of
+ * a boat, a balloon and a blimp; those come once there are lorries and catapults.
+ */
 export const DEFAULT_BASE: BaseSettings = {
   wealth: 50,
-  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, clonk: 3 },
+  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, boat: 2, balloon: 1, blimp: 1, clonk: 3 },
 };
 
 /** The trees of the original Gold Mine and Minor Melee (Vegetation=TRE1=1;TRE2=2;TRE3=1;TRE4=1, VegetationLevel=100). */
@@ -184,7 +188,7 @@ export const LIMITS = {
 /** Objects a scenario can hand out, bury or scatter, in the settings' order. */
 export const ITEM_IDS: ItemId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'gold', 'wood'];
 /** What a home base can sell, in the settings' and the shop's order. */
-export const SHOP_IDS: ShopId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'wood', 'conkit', 'clonk'];
+export const SHOP_IDS: ShopId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'wood', 'conkit', 'boat', 'balloon', 'blimp', 'clonk'];
 
 function clamp(v: unknown, lim: { min: number; max: number }, fallback: number): number {
   const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback;

@@ -29,6 +29,11 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `items/Meteor.png` | `Objects.c4d/Effects.c4d/Meteor.c4d/Graphics.png` (meteorite) |
 | `items/TFlint.png`, `items/SuperFlint.png`, `items/SuperTFlint.png`, `items/TeraFlint.png` | `Objects.c4d/Items.c4d/Weapons.c4d/TFlint.c4d`, `SuperFlint.c4d`, `SuperTFlint.c4d`, `TeraFlint.c4d` `/Graphics.png` |
 | `items/Wood.png` | `Objects.c4d/Items.c4d/Materials.c4d/Wood.c4d/Graphics.png` |
+| `vehicles/Sailboat.png`, `vehicles/SailboatSailing.png`, `vehicles/SailboatBurned.png` | `Objects.c4d/Vehicles.c4d/Sailboat.c4d/Graphics.png`, `Sailing.c4d/Graphics.png`, `Burned.c4d/Graphics.png` |
+| `vehicles/Balloon.png`, `vehicles/BalloonBurned.png` | `Objects.c4d/Vehicles.c4d/Balloon.c4d/Graphics.png`, `Burned.c4d/Graphics.png` |
+| `vehicles/Blimp.png`, `vehicles/BlimpBurned.png` | `Objects.c4d/Vehicles.c4d/Blimp.c4d/Graphics.png`, `Burned.c4d/Graphics.png` |
+| `sound/SailUp.wav`, `sound/SailDown.wav` | `Objects.c4d/Vehicles.c4d/Sailboat.c4d/SailUp.wav`, `SailDown.wav` |
+| `sound/Propel.wav` | `Sound.c4g/Propel.WAV` (**renamed to lower-case `.wav`**) |
 | `vegetation/Tree1-4.png`, `vegetation/Bush1.png`, `vegetation/Grass.png` | `Objects.c4d/Vegetation.c4d/Tree1-4.c4d`, `Bush1.c4d`, `Grass.c4d` `/Graphics.png` |
 | `sound/Chop1-4.wav`, `Fuse.wav`, `Fusing.wav`, `TreeDown1-3.wav`, `WoodHit1-3.wav`, `RockHit1-3.wav` | `Sound.c4g/` (**renamed to lower-case `.wav`** where the original was `.WAV`) |
 | `vegetation/Tree1-4Burned.png`, `vegetation/Bush1Burned.png` | `Objects.c4d/Vegetation.c4d/Tree1-4.c4d`, `Bush1.c4d` `/Burned.c4d/Graphics.png` (burned trees and bush) |

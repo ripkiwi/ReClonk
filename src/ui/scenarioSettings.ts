@@ -1,8 +1,9 @@
 import { crewCount, ITEM_IDS, LIMITS, SHOP_IDS, type ScenarioDef } from '../game/scenarios';
-import type { ShopId } from '../game/world';
+import { shopEntry, type ShopId } from '../game/world';
 import { MAX_MAP_PLAYER_EXTEND, type SVal } from '../landscape/mapCreator';
 import { MATERIALS, Mat, TEXMAP, texIndex, TUNNEL, type ItemId, type TexEntry } from '../landscape/materials';
 import { ITEMS } from '../objects/defs';
+import { VEHICLES, type VehicleId } from '../objects/vehicle';
 import { PLANT_IDS, PLANTS, type PlantId } from '../objects/vegetation';
 import { CONTENT_BASE } from '../render/assets';
 import { bigButton, h } from './dom';
@@ -59,8 +60,11 @@ const ITEM_SHEETS: Record<ItemId, [number, number]> = {
 const itemPicture = (id: ItemId): Picture => ({ file: ITEMS[id].graphic.file, sheet: ITEM_SHEETS[id], ...ITEMS[id].picture });
 const plantPicture = (id: PlantId): Picture => ({ file: PLANTS[id].file, sheet: PLANTS[id].sheet, ...PLANTS[id].picture });
 
-const PICTURES: Record<ItemId | 'clonk' | 'hut' | 'melee' | 'grass', Picture> = {
+const vehiclePicture = (id: VehicleId): Picture => ({ file: VEHICLES[id].graphic.file, sheet: VEHICLES[id].graphic.sheet, ...VEHICLES[id].picture });
+
+const PICTURES: Record<ItemId | VehicleId | 'clonk' | 'hut' | 'melee' | 'grass', Picture> = {
   ...(Object.fromEntries((Object.keys(ITEM_SHEETS) as ItemId[]).map((id) => [id, itemPicture(id)])) as Record<ItemId, Picture>),
+  ...(Object.fromEntries((Object.keys(VEHICLES) as VehicleId[]).map((id) => [id, vehiclePicture(id)])) as Record<VehicleId, Picture>),
   clonk: { file: 'clonk/Graphics.png', sheet: [256, 280], x: 192, y: 100, w: 32, h: 40 },
   hut: { file: 'structures/Hut2.png', sheet: [100, 66], x: 0, y: 0, w: 60, h: 50 },
   melee: { file: 'goals/Melee.png', sheet: [64, 64], x: 0, y: 0, w: 64, h: 64 },
@@ -311,7 +315,7 @@ function spin(x: number, y: number, w: number, lim: { min: number; max: number; 
 }
 
 const ITEM_NAMES: [ItemId, string][] = ITEM_IDS.map((id) => [id, ITEMS[id].name]);
-const FOR_SALE: [ShopId, string, Picture][] = SHOP_IDS.map((id) => [id, id === 'clonk' ? 'Clonk' : ITEMS[id].name, PICTURES[id]]);
+const FOR_SALE: [ShopId, string, Picture][] = SHOP_IDS.map((id) => [id, shopEntry(id).name, PICTURES[id]]);
 /** Textures a material layer can use: everything but sky and basements. */
 const LAYER_TEXTURES = TEXMAP.filter((t) => t.mat !== Mat.Basement && t.name !== 'Sky' && t.name !== 'Water-Liquid');
 const GROUNDS = ['Earth', 'Earth-Rough', 'Earth-Smooth2', 'Earth-Ridge', 'Sand', 'Sand-Smooth3'];

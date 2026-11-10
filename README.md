@@ -84,6 +84,15 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
   hut, a lot more for a guard tower. A burning building turns into its burned ruin, everyone inside comes out,
   the flag falls off, lifts and gates are gone, and it burns down in about 28 seconds; put out (in water) it can
   be built back up into the real thing, flag and all. Flames and smoke drift with the wind.
+- **Vehicles, like the original:** the **sailboat** (15 gold), **balloon** (50) and **blimp** (100) come out of
+  your base's door when you buy them. Press down at one to hold on to it, down twice to let go; throw lets go
+  and throws. Push the boat along the ground into a lake: it floats and sets its sail. Swim to it, climb onto
+  its deck and hold on to steer left or right (0.7 pixels a tick, a little more in a strong right wind, like the original);
+  without anyone at the helm it drifts with the wind. Up twice raises the sail so you can push it back onto
+  land. The balloon goes up and down as you say (1 pixel a tick) and drifts with the wind; let go and it
+  sinks. The blimp flies wherever you steer it and turns round, pilot and all, to go the other way. Whoever
+  stands on a deck or in a basket rides along. Vehicles float on water, burn (a blast of 35 sets one alight),
+  and a burning balloon or blimp falls out of the sky.
 - In Gold Mine you start next to your own wooden hut. The flag on its roof makes it your **home base**; a hut without
   a flag is just a building you can shelter in. Jump in a doorway to go in, press down to come out.
 - In your base: carried gold sells automatically (5 gold), you heal 2 energy every 3 ticks, and the base
@@ -125,7 +134,8 @@ Each player picks a control style in the player screen.
 |---|---|
 | `A` / `D` or `←` / `→` | Walk (hold) |
 | `W`, `↑` or `Space` | Jump; climb up while on a wall; in a doorway, go in |
-| `S` / `↓` | Climb down, let go of a ceiling, leave a building. At a construction site: build. In an elevator case or guard tower: hold on to work it. With the whole crew selected: gather everyone at the leader |
+| `S` / `↓` | Climb down, let go of a ceiling, leave a building. At a construction site: build. In an elevator case, guard tower or vehicle: hold on to work it (`↓` `↓` lets go of a vehicle). With the whole crew selected: gather everyone at the leader |
+| Holding a vehicle | Boat on land: `←`/`→` push it. Sailing: `←`/`→` steer, `↑` `↑` raise the sail. Balloon: hold `↑`/`↓` to rise or sink. Blimp: hold any direction |
 | `Q` | Dig the way you hold (straight down if you hold nothing). The clonk keeps digging on its own, so you can switch to another clonk; hold `A`/`D`/`W`/`S` to steer, `Q` again stops |
 | `Q` `Q` (quickly) | Use what you carry (a construction kit opens the build menu: `←`/`→` choose, `↑`/`E` build, `↓` close) |
 | `E` | Throw the carried item (drop it while climbing or swimming) |
@@ -143,7 +153,8 @@ Each player picks a control style in the player screen.
 | `S` or `↑` | Jump; in a doorway, go in |
 | `D` or `Enter` | Dig. While digging, `←` / `→` turn the direction one step; `X` stops |
 | `D` `D` (quickly) | Use what you carry (a construction kit opens the build menu) |
-| `X` `X` (quickly) | At a construction site: build. In an elevator case or guard tower: hold on to work it |
+| `X` `X` (quickly) | At a construction site: build. In an elevator case, guard tower or vehicle: hold on to work it; at a vehicle again: let go |
+| Holding a vehicle | Boat on land: `Z`/`C` push it, `X` stop. Sailing: `Z`/`C` steer, `X` stop, `S` `S` raise the sail. Balloon: `S` up, `X` down (each press the other way stops). Blimp: each press turns its course one step that way |
 | `A` or `Space` | Throw |
 | `Q` / `E` (or `Tab`), `1` to `9` | Previous / next clonk, pick a clonk (the original's crew cursor) |
 | `W` | Select the whole crew; `X` `X` gathers everyone at the leader |

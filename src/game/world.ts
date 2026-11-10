@@ -12,6 +12,8 @@ import { findPlantSpot, FULL_CON, grassRooted, Plant, plantRooted, PLANTS, TREE,
 import { FIRE } from '../objects/fire';
 import { blastBurn, stepFire } from './fire';
 import { buildStep, construct, grabOrBuild, grabTarget, pushControl, siteProblem, stepElevator, stepGate } from './buildings';
+import { Vehicle, VEHICLES, type VehicleId } from '../objects/vehicle';
+import { grabVehicle, stepVehicle, vehicleAt, vehicleControl } from './vehicles';
 import type { Weather } from './weather';
 
 export type WorldEvent =
@@ -37,6 +39,10 @@ export type WorldEvent =
   | { type: 'construct' | 'building' | 'built'; structure: Structure; tick: number }
   /** A guard tower gate starts moving, an elevator case rides on, something was switched. */
   | { type: 'gate' | 'elevator' | 'click'; x: number; y: number; tick: number }
+  /** A clonk took hold of a vehicle or let go of it. */
+  | { type: 'grab'; x: number; y: number; tick: number }
+  /** A vehicle made a sound: the sail going up or down, the blimp's propeller. */
+  | { type: 'vehicle'; sound: 'SailUp' | 'SailDown' | 'Propel'; x: number; y: number; tick: number }
   /** A lightning bolt came down with a clap of thunder. */
   | { type: 'thunder'; x: number; y: number; tick: number }
   /** A T-flint's fuse was lit. */
@@ -69,12 +75,16 @@ export interface PlayerMessage {
   tick: number;
 }
 
-/** What a home base can sell: items, and clonks for the crew. */
-export type ShopId = ItemId | 'clonk';
+/** What a home base can sell: items, vehicles, and clonks for the crew. */
+export type ShopId = ItemId | VehicleId | 'clonk';
+
+export function isVehicleId(id: string): id is VehicleId {
+  return id in VEHICLES;
+}
 
 /** Name and price of something in the shop. */
 export function shopEntry(id: ShopId): { name: string; value: number } {
-  return id === 'clonk' ? CLONK : ITEMS[id];
+  return id === 'clonk' ? CLONK : isVehicleId(id) ? VEHICLES[id] : ITEMS[id];
 }
 
 /** A player's money and what their home base has in stock to buy. */
@@ -117,6 +127,8 @@ export class World {
   readonly clonks: Clonk[] = [];
   items: Item[] = [];
   readonly structures: Structure[] = [];
+  /** Boats, balloons and blimps. */
+  vehicles: Vehicle[] = [];
   /** Trees and bushes, standing or felled. */
   plants: Plant[] = [];
   /** Tufts of grass, drawn only. */
@@ -273,6 +285,14 @@ export class World {
     return s;
   }
 
+  /** Put a vehicle in the world, centred on (x, y). */
+  addVehicle(id: VehicleId, x: number, y: number, owner = -1): Vehicle {
+    const v = new Vehicle(VEHICLES[id], x, y);
+    v.owner = owner;
+    this.vehicles.push(v);
+    return v;
+  }
+
   spawnItem(id: ItemId, x: number, y: number, xdir = 0, ydir = 0, rdir = 0): Item {
     const item = new Item(ITEMS[id], x, y);
     item.xdir = xdir;
@@ -312,7 +332,7 @@ export class World {
       // With a group selected, down (or stop twice in classic) gathers it at the leader.
       const gather = leader?.controlStyle === 'classic' ? ctrl.doubleDown : ctrl.pressedDown;
       // Down at a building means working it, not gathering.
-      if (leader && gather && cur.selected.size > 1 && leader.action.procedure === 'walk' && !grabTarget(this, leader)) {
+      if (leader && gather && cur.selected.size > 1 && leader.action.procedure === 'walk' && !grabTarget(this, leader) && !vehicleAt(this, leader)) {
         for (const c of cur.selected) {
           if (c === leader || c.contained) continue;
           if (c.action.procedure === 'push' || c.action.procedure === 'build') c.letGo();
@@ -336,7 +356,11 @@ export class World {
       // Whether a dig might be the first press of a double dig at a tree.
       if (mine) c.atTree = c.action.procedure === 'walk' && !!this.choppableAt(c);
       if (mine && c.buildMenu !== null) this.buildMenuControl(c, mine);
-      else if (mine && c.alive && c.action.procedure === 'push') pushControl(this, c, mine);
+      else if (mine && c.alive && c.action.procedure === 'push' && c.vehicle) {
+        vehicleControl(this, c, mine, () =>
+          c.control({ ...NO_CONTROL, pressedThrow: true }, { throwItem: (item, xdir, ydir) => throwItem(item, xdir, ydir, c), tryEnter: () => false, useItem: () => false, grabOrBuild: () => false }),
+        );
+      } else if (mine && c.alive && c.action.procedure === 'push') pushControl(this, c, mine);
       else if (mine || c.goTo !== null) {
         // Moving on stops building.
         if (mine && (c.action.procedure === 'build' || c.action.procedure === 'chop') && stopsWork(mine)) c.letGo();
@@ -344,7 +368,7 @@ export class World {
           throwItem: (item, xdir, ydir) => throwItem(item, xdir, ydir, c),
           tryEnter: () => this.tryEnter(c),
           useItem: () => this.useItem(c),
-          grabOrBuild: () => grabOrBuild(this, c),
+          grabOrBuild: () => grabVehicle(this, c) || grabOrBuild(this, c),
         });
       }
       if (c.contained || this.fellOut(c)) continue;
@@ -362,6 +386,15 @@ export class World {
           if (c.doExperience(EXPERIENCE.goldFound)) this.promoted(c);
         }
       }
+    }
+
+    for (const v of this.vehicles) {
+      if (v.removed) continue;
+      if (this.fellOut(v)) {
+        this.removeVehicle(v);
+        continue;
+      }
+      stepVehicle(this, v);
     }
 
     // Hostile clonks that run into each other start a fist fight (checked every 5 ticks, like the original).
@@ -409,6 +442,8 @@ export class World {
     this.stepPlants();
     stepFire(this);
     if (this.items.some((i) => i.removed)) this.items = this.items.filter((i) => !i.removed);
+    for (const v of this.vehicles) if (v.removed) this.removeVehicle(v);
+    if (this.vehicles.some((v) => v.removed)) this.vehicles = this.vehicles.filter((v) => !v.removed);
     if (this.plants.some((p) => p.removed)) this.plants = this.plants.filter((p) => !p.removed);
     this.weather?.step(this);
     this.land.pxs.step(this.rng);
@@ -421,10 +456,18 @@ export class World {
    * With an open bottom, whatever falls out of the map is gone, like in the
    * original: a clonk dies (the last enemy who hurt it gets the kill).
    */
-  private fellOut(o: Clonk | Item): boolean {
+  private fellOut(o: Clonk | Item | Vehicle): boolean {
     if (!this.land.bottomOpen || o.y < this.land.height + 20) return false;
     if (o instanceof Clonk && o.alive) this.hurt(o, 1e6, null);
     return true;
+  }
+
+  /** Take a vehicle out of the world: its floor goes, and whoever held on lets go. */
+  removeVehicle(v: Vehicle): void {
+    v.removed = true;
+    v.mask?.remove(this.land);
+    v.mask = null;
+    for (const c of this.clonks) if (c.vehicle === v) c.letGo();
   }
 
   /** The clonk that threw an item last, if it's still around. */
@@ -594,6 +637,7 @@ export class World {
       if (fling(item) > 0 && by) item.thrownBy = by.id;
     }
     this.blastHits(x, y, radius, by);
+    this.shoveVehicles(x, y, radius);
     for (const s of this.structures) this.blastBasement(s, x, y, radius);
     this.blastPlants(x, y, radius);
 
@@ -631,6 +675,25 @@ export class World {
     }
     for (const s of this.structures) {
       if (!s.gone && directHit(x, y, { x: s.left, y: s.top, w: s.def.width, h: s.def.height })) blastBurn(this, s, level, by);
+    }
+    for (const v of this.vehicles) {
+      if (!v.removed && directHit(x, y, { x: v.left, y: v.top, w: v.def.width, h: v.def.height })) blastBurn(this, v, level, by);
+    }
+  }
+
+  /**
+   * A blast shoves vehicles within `level` pixels away, less the heavier
+   * they are (C4Game::BlastObjects: Fling by level minus distance, divided by
+   * mass/10 between 4 and 20). Only ones that can be pushed (Grab=1): not a
+   * balloon or blimp in flight.
+   */
+  private shoveVehicles(x: number, y: number, level: number): void {
+    for (const v of this.vehicles) {
+      if (v.removed || v.grab !== 1 || Math.abs(y - v.y) > level || Math.abs(x - v.x) > level) continue;
+      const k = Math.max(4, Math.min(20, Math.trunc(v.mass / 10)));
+      const side = Math.sign(v.x - x + this.rng.int(3) - 1);
+      v.xdir += (side * (level - Math.abs(x - v.x))) / k;
+      v.ydir += (-level + Math.abs(y - v.y)) / k;
     }
   }
 
@@ -701,6 +764,7 @@ export class World {
       item.ydir += v[1];
     }
     this.blastHits(x, y, level, by);
+    this.shoveVehicles(x, y, level);
     this.blastPlants(x, y, level, by, false);
   }
 
@@ -1018,6 +1082,7 @@ export class World {
     if ((p.stock[id] ?? 0) <= 0) return this.say(c.owner, `No ${def.name} left`);
     if (p.wealth < def.value) return this.say(c.owner, `Not enough gold for ${def.name}`);
     if (id === 'clonk') return this.buyClonk(c, p);
+    if (isVehicleId(id)) return this.buyVehicle(c, p, id);
     if (c.contents.length >= CLONK.maxContents) return this.say(c.owner, 'Hands full: sell or drop it first');
     p.wealth -= def.value;
     p.stock[id]! -= 1;
@@ -1045,6 +1110,24 @@ export class World {
     base.openDoor();
     this.events.push({ type: 'recruit', clonk: n, tick: this.tick });
     this.say(c.owner, n.info ? `${n.info.name} joins you for ${CLONK.value} gold` : `Bought a clonk for ${CLONK.value} gold`);
+  }
+
+  /**
+   * Buy a vehicle. The original puts it into the base, to be pushed out; here
+   * it comes out of the door at once, standing on the ground.
+   */
+  private buyVehicle(c: Clonk, p: PlayerState, id: VehicleId): void {
+    const base = c.contained;
+    if (!base) return;
+    const def = VEHICLES[id];
+    p.wealth -= def.value;
+    p.stock[id]! -= 1;
+    const at = base.exitPoint();
+    // Its lowest vertex one pixel above the ground the clonk stands on.
+    const bottom = Math.max(...def.vertices.map((v) => v.y));
+    this.addVehicle(id, at.x, at.y + 9 - bottom, c.owner);
+    base.openDoor();
+    this.say(c.owner, `Bought ${def.name} for ${def.value} gold`);
   }
 
   /**
