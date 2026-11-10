@@ -203,7 +203,7 @@ export const LIMITS = {
 /** Objects a scenario can hand out, bury or scatter, in the settings' order. */
 export const ITEM_IDS: ItemId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'gold', 'wood', 'crystal'];
 /** What a home base can sell, in the settings' and the shop's order. */
-export const SHOP_IDS: ShopId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'wood', 'conkit', 'crystal', 'clonk', 'sorcerer'];
+export const SHOP_IDS: ShopId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'wood', 'conkit', 'flag', 'crystal', 'clonk', 'sorcerer'];
 
 function clamp(v: unknown, lim: { min: number; max: number }, fallback: number): number {
   const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback;

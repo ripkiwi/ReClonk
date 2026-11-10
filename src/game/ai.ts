@@ -383,7 +383,8 @@ export class CrewAI implements Brain {
     let bestD = Infinity;
     for (const item of this.world.items) {
       // A burning T-flint is best left alone.
-      if (item.container || item.removed || item.noCollect > 0 || item.lit || skip.has(item)) continue;
+      // Flags are for players to steal and sell; the computer leaves them be.
+      if (item.container || item.removed || item.noCollect > 0 || item.lit || item.def.id === 'flag' || skip.has(item)) continue;
       if (Math.abs(item.xdir) + Math.abs(item.ydir) > 0.5) continue;
       const dx = Math.abs(item.x - c.x);
       const dy = item.y - c.y;

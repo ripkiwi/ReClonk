@@ -30,7 +30,7 @@ export const SOLID = 50;
 /** Density of liquids (C4M_Liquid). */
 export const LIQUID = 25;
 
-export type ItemId = 'rock' | 'gold' | 'flint' | 'tflint' | 'superflint' | 'supertflint' | 'teraflint' | 'wood' | 'conkit' | 'meteor' | 'crystal';
+export type ItemId = 'rock' | 'gold' | 'flint' | 'tflint' | 'superflint' | 'supertflint' | 'teraflint' | 'wood' | 'conkit' | 'meteor' | 'crystal' | 'flag';
 
 export interface Material {
   name: string;

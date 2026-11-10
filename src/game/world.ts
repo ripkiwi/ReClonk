@@ -60,7 +60,9 @@ export type WorldEvent =
   /** A sorcerer took in magic energy, from a crystal or a bolt of lightning. */
   | { type: 'charge'; clonk: Clonk; points: number; tick: number }
   /** A fireball left a flame behind. */
-  | { type: 'flame'; x: number; y: number; tick: number };
+  | { type: 'flame'; x: number; y: number; tick: number }
+  /** A flag went up on a building: it's now `player`'s home base (the Trumpet). */
+  | { type: 'newBase'; structure: Structure; player: number; tick: number };
 
 /** Extra experience on top of the original's "1 per 5 commands", so promotions come at a fun pace. */
 export const EXPERIENCE = {
@@ -1052,8 +1054,32 @@ export class World {
       const item = c.carrying;
       if (!item) return;
       if (own) this.sell(c, item);
+      else if (item.def.id === 'flag') this.plantFlag(c, item);
       else this.say(c.owner, 'Sell things in a building with your flag');
     }
+  }
+
+  /**
+   * Put a flag into a building without one (C4Object::ExecBase): it goes up on
+   * the roof and the building becomes the home base of the flag's owner. That's
+   * whoever bought it, not whoever carries it: a stolen flag is for selling.
+   */
+  private plantFlag(c: Clonk, flag: Item): void {
+    const s = c.contained!;
+    if (!s.def.canBeBase || !s.complete) return this.say(c.owner, 'No flag can go on this building');
+    if (s.hasFlag) return this.say(c.owner, 'There is a flag here already');
+    if (!this.players.has(flag.owner)) return this.say(c.owner, 'Nobody owns this flag: sell it');
+    const i = c.contents.indexOf(flag);
+    if (i >= 0) c.contents.splice(i, 1);
+    flag.removed = true;
+    s.base = flag.owner;
+    s.owner = flag.owner;
+    s.energy = 0;
+    this.events.push({ type: 'newBase', structure: s, player: flag.owner, tick: this.tick });
+    if (flag.owner === c.owner) this.say(c.owner, `Your flag flies on the ${s.def.name.toLowerCase()}: a new home base`);
+    else this.say(c.owner, `That flag isn't yours: the ${s.def.name.toLowerCase()} is now their base`);
+    // The owner's clonks inside are home now; anyone else has to leave (BASEFUNC_RejectEntrance).
+    for (const o of this.clonks) if (o.contained === s && this.hostile(s.base, o.owner)) this.exit(o);
   }
 
   /** What the player's home base can sell, in a fixed order. */
@@ -1084,6 +1110,7 @@ export class World {
     p.wealth -= def.value;
     p.stock[id]! -= 1;
     const item = this.spawnItem(id, c.x, c.y);
+    item.owner = c.owner;
     item.container = c;
     c.contents.push(item);
     this.say(c.owner, `Bought ${def.name} for ${def.value} gold`);

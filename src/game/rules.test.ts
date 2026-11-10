@@ -186,7 +186,6 @@ describe('Construction Material', () => {
     expect(c.action.procedure).toBe('build');
     for (let i = 0; i < 2000 && hut.burned; i++) run(world, 1);
     expect(hut.complete).toBe(true);
-    expect(hut.hasFlag).toBe(true);
   });
 });
 

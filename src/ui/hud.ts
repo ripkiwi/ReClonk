@@ -63,6 +63,8 @@ export class Hud {
     /** Key hints to show along the bottom, or null to leave them out (the default, see Settings). */
     keyHelp: readonly [keys: string, action: string][] | null,
     private readonly actions: HudActions,
+    /** A player's colour, for owner-coloured things in hand (flags). */
+    private readonly colorOf: (owner: number) => number = () => 0xffffff,
   ) {
     this.portrait = portrait(1);
     this.name = h('div', { class: 'crew-name' });
@@ -155,10 +157,12 @@ export class Hud {
       this.wealth.style.display = player ? '' : 'none';
       this.wealthText.textContent = String(wealth);
     }
-    const item = c?.carrying?.def.id;
+    const carried = c?.carrying;
+    // A flag shows its owner's colour, so a stolen one looks different.
+    const item = carried ? `${carried.def.id}:${carried.owner}` : undefined;
     if (item !== s.item) {
       s.item = item;
-      drawItem(this.slot, c?.carrying?.def, this.assets);
+      drawItem(this.slot, carried?.def, this.assets, carried ? this.colorOf(carried.owner) : undefined);
       this.slot.parentElement!.title = c?.carrying ? `Carrying ${c.carrying.def.name}` : 'Empty hands';
     }
   }

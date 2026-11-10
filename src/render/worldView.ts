@@ -117,6 +117,8 @@ export class WorldView {
   private readonly landscape: LandscapeView;
   private readonly clonkSprites = new Map<Clonk, { body: Sprite; shirt: Sprite }>();
   private readonly itemSprites = new Map<Item, Sprite>();
+  /** The owner-coloured cloth of loose flags, drawn over their item sprite. */
+  private readonly itemOverlays = new Map<Item, Sprite>();
   private readonly structureSprites = new Map<Structure, StructureSprites>();
   /** Trees and bushes: a holder at the root that tilts when it falls, and the picture in it. */
   private readonly plantSprites = new Map<Plant, { holder: Container; body: Sprite; burned: boolean | null }>();
@@ -532,11 +534,28 @@ export class WorldView {
         const f = item.lit ? lit : item.def.graphic.facet;
         s.texture = frame(this.assets.items[item.def.graphic.file], f.x, f.y, f.w, f.h);
       }
+      const over = item.def.graphic.overlay;
+      if (over) {
+        let o = this.itemOverlays.get(item);
+        if (!o) {
+          const f = item.def.graphic.facet;
+          o = new Sprite(frame(this.assets.items[over], f.x, f.y, f.w, f.h));
+          o.anchor.set(0.5);
+          this.layer.addChildAt(o, this.layer.getChildIndex(s) + 1);
+          this.itemOverlays.set(item, o);
+        }
+        o.position.copyFrom(s.position);
+        o.angle = s.angle;
+        o.scale.copyFrom(s.scale);
+        o.tint = item.owner >= 0 ? this.colorOf(item.owner) : 0xffffff;
+      }
     }
     for (const [item, s] of this.itemSprites) {
       if (!seen.has(item)) {
         s.destroy();
         this.itemSprites.delete(item);
+        this.itemOverlays.get(item)?.destroy();
+        this.itemOverlays.delete(item);
       }
     }
   }
