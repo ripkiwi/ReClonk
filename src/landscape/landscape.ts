@@ -70,6 +70,14 @@ export class Landscape {
   bottomOpen = false;
   /** 1 where an empty pixel shows tunnel background instead of sky. */
   readonly tunnel: Uint8Array;
+  /**
+   * The step each pixel last changed in (paint() for a new map doesn't count).
+   * Liquids only react where something just changed, like the original's mass
+   * movers, which only exist where the landscape moved: a lake of acid left
+   * alone stays put, one that's disturbed eats on.
+   */
+  private readonly changedAt: Int32Array;
+  private stepNo = 1;
   /** Pixels changed since the renderer last looked. */
   readonly dirty = new Rect();
   /** Where liquids may still move; the simulation only scans this area. */
@@ -101,6 +109,7 @@ export class Landscape {
     this.cells = new Uint8Array(width * height);
     this.tex = new Uint8Array(width * height);
     this.tunnel = new Uint8Array(width * height);
+    this.changedAt = new Int32Array(width * height);
     this.dirty.addRect(0, 0, width - 1, height - 1);
     this.active.addRect(0, 0, width - 1, height - 1);
     this.scanSpeed = Math.max(2, Math.min(15, Math.trunc(width / 500)));
@@ -138,6 +147,7 @@ export class Landscape {
     if (this.cells[i] === m) return;
     this.cells[i] = m;
     this.tex[i] = DEFAULT_TEX[m];
+    this.changedAt[i] = this.stepNo;
     this.dirty.add(x, y);
     this.active.add(x, y, LIQUID_SLIDE + 1);
   }
@@ -211,6 +221,7 @@ export class Landscape {
    * Scans bottom-up; horizontal direction alternates by tick so flows stay symmetric.
    */
   step(tick: number, rng: Rng): void {
+    this.stepNo++;
     const area = this.active;
     area.clamp(this.width, this.height);
     if (area.empty) return;
@@ -246,12 +257,14 @@ export class Landscape {
         }
         const target = this.findFlow(x, y, rng);
         if (target < 0) {
+          if (!mat.reactive || !this.recentlyChanged(x, y)) continue;
           // Stuck: react with what's below or beside it (C4MassMover::Corrosion), and get used up.
           if (this.react(x, y, 0, 1, m, rng) || this.react(x, y, -1, 0, m, rng) || this.react(x, y, 1, 0, m, rng)) this.extractMaterial(x, y);
           continue;
         }
         cells[idx] = Mat.Sky;
         cells[target] = m;
+        this.changedAt[idx] = this.changedAt[target] = this.stepNo;
         this.tex[target] = this.tex[idx];
         this.tex[idx] = 0;
         moved.add(target);
@@ -375,6 +388,20 @@ export class Landscape {
           p.y++;
           return true;
         }
+      }
+    }
+    return false;
+  }
+
+  /** Did this pixel or one next to it change in this step or the last one? */
+  private recentlyChanged(x: number, y: number): boolean {
+    const since = this.stepNo - 1;
+    const w = this.width;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < w && ny < this.height && this.changedAt[ny * w + nx] >= since) return true;
       }
     }
     return false;

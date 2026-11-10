@@ -90,6 +90,8 @@ export interface Material {
   corrode?: number;
   /** Turns into this when it touches an incindiary material (Snow's Reaction: Convert to Water). */
   incindiaryConvert?: Mat;
+  /** Filled in below: it reacts with something when it can't flow on. */
+  reactive?: boolean;
 }
 
 /** Pixels converted at once by a temperature change (TempConvStrength) of water, ice and snow. */
@@ -161,7 +163,7 @@ export const MATERIALS: readonly Material[] = [
   },
   {
     name: 'Ashes', density: SOLID, digFree: true, blastFree: true, maxSlide: 1, windDrift: 60, corrode: 75,
-    colors: [0x5a4e28, 0x52504e, 0x64605a], texture: 'Spots', shape: 2,
+    colors: [0x5a4e28, 0x52504e, 0x64605a], texture: 'SMOOTH3', shape: 2,
   },
 ];
 
@@ -175,14 +177,16 @@ export type Reaction = 'poof' | 'incinerate' | 'corrode' | 'convert' | null;
 export function reaction(a: Mat, b: Mat): Reaction {
   const ma = MATERIALS[a];
   const mb = MATERIALS[b];
-  if (!mb.density || ma.density > mb.density) return null;
-  // Snow touching lava melts (Snow.c4m's own Reaction).
+  // Snow touching lava melts (Snow.c4m's own Reaction, which ignores density).
   if (ma.incindiaryConvert !== undefined && mb.incindiary) return 'convert';
+  if (!mb.density || ma.density > mb.density) return null;
   if ((ma.incindiary && mb.extinguisher) || (ma.extinguisher && mb.incindiary)) return 'poof';
   if ((ma.incindiary && mb.inflammable) || (ma.inflammable && mb.incindiary)) return 'incinerate';
   if (ma.corrosive && mb.corrode) return 'corrode';
   return null;
 }
+
+for (const m of MATERIALS as Material[]) m.reactive = !!(m.corrosive || m.incindiary || m.extinguisher || m.inflammable);
 
 /** Background shown where the landscape is empty underground (dug tunnels). */
 export const TUNNEL = { colors: [0x523212, 0x5c421e, 0x6a4824] as [number, number, number], texture: 'SMOOTH2' };

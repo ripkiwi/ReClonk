@@ -81,6 +81,14 @@ export class PxsSystem {
     while (ix !== tx || iy !== ty) {
       const sx = ix + Math.sign(tx - ix);
       const sy = iy + Math.sign(ty - iy);
+      // Snow falling into lava melts (it's lighter, so it would sink through otherwise).
+      if (mat.incindiaryConvert !== undefined && sy >= 0 && MATERIALS[land.get(sx, sy)].incindiary) {
+        p.mat = mat.incindiaryConvert;
+        p.x = ix;
+        p.y = iy;
+        p.xdir = p.ydir = 0;
+        return true;
+      }
       if (sy >= 0 && land.density(sx, sy) >= d) {
         const r = reaction(p.mat, land.get(sx, sy));
         // Snow falling on lava turns to water, and goes on falling.
