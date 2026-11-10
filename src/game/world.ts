@@ -11,6 +11,7 @@ import { Structure } from '../objects/structure';
 import { findPlantSpot, FULL_CON, grassRooted, Plant, plantRooted, PLANTS, TREE, type Grass } from '../objects/vegetation';
 import { FIRE } from '../objects/fire';
 import { blastBurn, stepFire } from './fire';
+import { blastIgnite, igniteOil, stepLiquids, type OilFlame } from './liquids';
 import { buildStep, construct, grabOrBuild, grabTarget, pushControl, siteProblem, stepElevator, stepGate } from './buildings';
 import type { Weather } from './weather';
 
@@ -52,7 +53,13 @@ export type WorldEvent =
   /** Something caught fire; big things with a whoosh (the Inflame sound). */
   | { type: 'inflame'; x: number; y: number; loud: boolean; tick: number }
   /** A fire went out; in water with a hiss (Pshshsh). */
-  | { type: 'extinguish'; x: number; y: number; hiss: boolean; tick: number };
+  | { type: 'extinguish'; x: number; y: number; hiss: boolean; tick: number }
+  /** Lava and water boiled each other away (Pshshsh, smoke). */
+  | { type: 'poof'; x: number; y: number; tick: number }
+  /** Acid ate a pixel (smoke, now and then the Corrode sound). */
+  | { type: 'corrode'; x: number; y: number; tick: number }
+  /** A volcano broke out of the ground, or threw out lava. */
+  | { type: 'volcano'; x: number; y: number; tick: number };
 
 /** Extra experience on top of the original's "1 per 5 commands", so promotions come at a fun pace. */
 export const EXPERIENCE = {
@@ -121,6 +128,8 @@ export class World {
   plants: Plant[] = [];
   /** Tufts of grass, drawn only. */
   grass: Grass[] = [];
+  /** Flames on burning oil. */
+  flames: OilFlame[] = [];
   readonly players = new Map<number, PlayerState>();
   private readonly cursors = new Map<number, CrewCursor>();
   readonly messages: PlayerMessage[] = [];
@@ -147,7 +156,9 @@ export class World {
   constructor(
     readonly land: Landscape,
     readonly rng: Rng,
-  ) {}
+  ) {
+    land.ignite = (x, y) => igniteOil(this, x, y);
+  }
 
   static fromMap(map: GeneratedMap, seed: number): World {
     const world = new World(map.land, new Rng(seed ^ 0x5eed));
@@ -408,11 +419,14 @@ export class World {
 
     this.stepPlants();
     stepFire(this);
+    stepLiquids(this);
     if (this.items.some((i) => i.removed)) this.items = this.items.filter((i) => !i.removed);
     if (this.plants.some((p) => p.removed)) this.plants = this.plants.filter((p) => !p.removed);
     this.weather?.step(this);
     this.land.pxs.step(this.rng);
     this.land.step(this.tick, this.rng);
+    for (const fx of this.land.fx) this.events.push({ type: fx.type, x: fx.x, y: fx.y, tick: this.tick });
+    this.land.fx.length = 0;
     this.afterDeaths();
     this.tick++;
   }
@@ -568,6 +582,8 @@ export class World {
    */
   explode(x: number, y: number, radius: number, by: Clonk | null = null): number {
     this.events.push({ type: 'explosion', x, y, radius, tick: this.tick });
+    // A blast sets oil alight.
+    blastIgnite(this, x, y);
 
     // Fling everything nearby away from the blast.
     const reach = radius + 8;

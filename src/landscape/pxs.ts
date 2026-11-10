@@ -3,7 +3,7 @@
 
 import type { Rng } from '../core/rng';
 import type { Landscape } from './landscape';
-import { MATERIALS, Mat } from './materials';
+import { MATERIALS, Mat, reaction } from './materials';
 
 /** At most this many loose pixels at once (the original's 20 chunks of 500). */
 export const MAX_PXS = 10000;
@@ -82,6 +82,17 @@ export class PxsSystem {
       const sx = ix + Math.sign(tx - ix);
       const sy = iy + Math.sign(ty - iy);
       if (sy >= 0 && land.density(sx, sy) >= d) {
+        const r = reaction(p.mat, land.get(sx, sy));
+        // Snow falling on lava turns to water, and goes on falling.
+        if (r === 'convert') {
+          p.mat = mat.incindiaryConvert!;
+          p.x = ix;
+          p.y = iy;
+          p.xdir = p.ydir = 0;
+          return true;
+        }
+        // Lava and water boil each other away; acid eats what it lands on.
+        if ((r === 'poof' || r === 'corrode') && land.landReaction(p.mat, sx, sy, rng)) return false;
         land.insertMaterial(p.mat, ix, Math.max(iy, 0));
         return false;
       }

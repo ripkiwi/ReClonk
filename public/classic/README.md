@@ -35,6 +35,8 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `structures/Hut2Burned.png`, `structures/Tower2Burned.png`, `structures/ElevatorBurned.png` | `Objects.c4d/Structures.c4d/Hut2.c4d`, `Tower2.c4d`, `Elevator.c4d` `/Burned.c4d/Graphics.png` (burned buildings) |
 | `effects/Fire.png`, `effects/Fire2.png` | `Objects.c4d/Effects.c4d/Particles.c4d/Fire.c4d`, `Fire2.c4d` `/Graphics.png` (fire particles) |
 | `sound/Fire.wav`, `Inflame.wav`, `Pshshsh.wav` | `Sound.c4g/` (**renamed to lower-case `.wav`** where the original was `.WAV`) |
+| `sound/Corrode.wav`, `Lava1-3.wav` | `Sound.c4g/` (**renamed to lower-case `.wav`** where the original was `.WAV`) |
+| `sound/VolcanoCast.wav` | `Objects.c4d/Effects.c4d/Volcano.c4d/VolcanoCast.wav` |
 | `goals/Melee.png` | `Objects.c4d/Goals.c4d/Melee.c4d/Graphics.png` (goal picture in the scenario properties) |
 | `materials/*.png` | `Material.c4g/` textures |
 | `sky/Clouds1.jpg` | `planet/Graphics.c4g/Clouds1.jpg` |
