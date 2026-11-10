@@ -21,6 +21,12 @@ export class Item extends GameObject {
   fire: FireState | null = null;
   /** It has burned: wood stays charred (Wood.c4d Incineration). */
   burned = false;
+  /**
+   * Player it belongs to, or -1. Only flags care: a flag shows its owner's
+   * colour and makes a building that owner's base, whoever carries it there.
+   * Picking a thing up doesn't change its owner (the original's Collect).
+   */
+  owner = -1;
 
   constructor(
     readonly def: ItemDef,
@@ -50,8 +56,8 @@ export class Item extends GameObject {
     if (this.noCollect > 0) this.noCollect--;
     const g = land.gravity;
     if (this.inLiquid(land)) {
-      // Sink slowly through liquids.
-      this.ydir = Math.min(this.ydir + g, 1);
+      // Sink slowly through liquids; light things like flags bob up instead (Float).
+      this.ydir = this.def.float ? Math.max(this.ydir - g, -1) : Math.min(this.ydir + g, 1);
       this.xdir *= 0.9;
     } else this.ydir += g;
     // Resting objects with ground right below don't need to simulate.

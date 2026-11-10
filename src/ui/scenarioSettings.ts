@@ -55,6 +55,7 @@ const ITEM_SHEETS: Record<ItemId, [number, number]> = {
   wood: [64, 71],
   conkit: [88, 60],
   meteor: [128, 128],
+  flag: [208, 128],
 };
 const itemPicture = (id: ItemId): Picture => ({ file: ITEMS[id].graphic.file, sheet: ITEM_SHEETS[id], ...ITEMS[id].picture });
 const plantPicture = (id: PlantId): Picture => ({ file: PLANTS[id].file, sheet: PLANTS[id].sheet, ...PLANTS[id].picture });
@@ -65,6 +66,8 @@ const PICTURES: Record<ItemId | 'clonk' | 'hut' | 'melee' | 'grass', Picture> = 
   hut: { file: 'structures/Hut2.png', sheet: [100, 66], x: 0, y: 0, w: 60, h: 50 },
   melee: { file: 'goals/Melee.png', sheet: [64, 64], x: 0, y: 0, w: 64, h: 64 },
   grass: { file: 'vegetation/Grass.png', sheet: [120, 30], x: 40, y: 0, w: 40, h: 30 },
+  // The flag's front-end picture (PictureFE): its cloth is already coloured in.
+  flag: { ...itemPicture('flag'), y: 64 },
 };
 
 function picture(p: Picture, size: number): HTMLElement {

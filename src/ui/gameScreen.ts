@@ -87,7 +87,7 @@ export class GameScreen {
       onMenu: () => this.pause(),
       // Click picks a clonk, Shift-click adds it to the group or takes it out.
       onCrew: (index, add) => this.keyboard.command(add ? { type: 'toggle', index } : { type: 'pick', index }),
-    });
+    }, (owner) => colors.get(owner) ?? color);
     this.baseHud = new BaseHud(round.world, assets, LOCAL_PLAYER, style, false, color, layout);
     app.stage.addChild(this.baseHud.root);
     this.announce = h('div', { class: 'announce' });
@@ -153,7 +153,7 @@ export class GameScreen {
     for (const e of events) {
       if (e.type === 'explosion') this.env.sounds.play(BLASTS[Math.floor(Math.random() * BLASTS.length)], volumeAt(e.x, e.y));
       else if (e.type === 'collect' && e.clonk === near) this.env.sounds.play('Grab', 0.8);
-      else if (e.type === 'promotion') this.env.sounds.play('Trumpet');
+      else if (e.type === 'promotion' || e.type === 'newBase') this.env.sounds.play('Trumpet');
       else if (e.type === 'recruit') this.env.sounds.play('Click', 0.9);
       // Like the original clonk script: a swing sometimes grunts and whooshes,
       // a clonk who takes a blow sometimes cries out, and dying always makes a sound.

@@ -130,8 +130,6 @@ export class Structure {
   burned = false;
   /** Burned away completely: only its basement is left. */
   gone = false;
-  /** The home base flag that fell off when it caught fire; it goes back up when it's rebuilt. */
-  flagOwner = -1;
 
   constructor(
     readonly def: StructureDef,

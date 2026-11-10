@@ -80,7 +80,7 @@ export function expBar(exp: number): { bar: HTMLElement; fill: HTMLElement; text
 }
 
 /** Draw an item's sprite into a small canvas, for HUD slots. */
-export function drawItem(canvas: HTMLCanvasElement, def: ItemDef | undefined, assets: GameAssets): void {
+export function drawItem(canvas: HTMLCanvasElement, def: ItemDef | undefined, assets: GameAssets, tint?: number): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -89,11 +89,31 @@ export function drawItem(canvas: HTMLCanvasElement, def: ItemDef | undefined, as
   const source = assets.items[g.file]?.source.resource as CanvasImageSource | undefined;
   if (!source) return;
   ctx.imageSmoothingEnabled = false;
-  const s = Math.floor(Math.min(canvas.width / g.facet.w, canvas.height / g.facet.h));
-  const w = g.facet.w * s;
-  const hgt = g.facet.h * s;
+  // Things with an owner-coloured overlay (the flag) show their picture: the lying-down frame is too small to see.
+  const f = g.overlay ? def.picture : g.facet;
+  const s = g.overlay ? Math.min(canvas.width / f.w, canvas.height / f.h) : Math.floor(Math.min(canvas.width / f.w, canvas.height / f.h));
+  const w = f.w * s;
+  const hgt = f.h * s;
+  const x = (canvas.width - w) / 2;
+  const y = (canvas.height - hgt) / 2;
   try {
-    ctx.drawImage(source, g.facet.x, g.facet.y, g.facet.w, g.facet.h, (canvas.width - w) / 2, (canvas.height - hgt) / 2, w, hgt);
+    ctx.drawImage(source, f.x, f.y, f.w, f.h, x, y, w, hgt);
+    const over = g.overlay && (assets.items[g.overlay]?.source.resource as CanvasImageSource | undefined);
+    if (over) {
+      // Tint the overlay: multiply it by the colour, keeping only its own pixels.
+      const t = document.createElement('canvas');
+      t.width = canvas.width;
+      t.height = canvas.height;
+      const tc = t.getContext('2d')!;
+      tc.imageSmoothingEnabled = false;
+      tc.drawImage(over, f.x, f.y, f.w, f.h, x, y, w, hgt);
+      tc.globalCompositeOperation = 'multiply';
+      tc.fillStyle = `#${(tint ?? 0xffffff).toString(16).padStart(6, '0')}`;
+      tc.fillRect(0, 0, t.width, t.height);
+      tc.globalCompositeOperation = 'destination-in';
+      tc.drawImage(over, f.x, f.y, f.w, f.h, x, y, w, hgt);
+      ctx.drawImage(t, 0, 0);
+    }
   } catch {
     // Not drawable in this browser; leave the slot empty.
   }
