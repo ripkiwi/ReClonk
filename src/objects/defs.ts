@@ -38,6 +38,8 @@ export interface ItemDef {
   contactIncinerate?: number;
   /** Blast damage that sets it alight (DefCore BlastIncinerate). */
   blastIncinerate?: number;
+  /** A sorcerer turns it into this many points of magic energy (Crystal.c4d Apply). */
+  manaGain?: number;
   /** Image in the content pack and the in-game frame inside it. */
   graphic: { file: string; facet: Facet };
   /** Its picture in the same file, for menus and the scenario settings (DefCore Picture). */
@@ -94,6 +96,16 @@ export const ITEMS: Record<ItemId, ItemDef> = {
     id: 'meteor', name: 'Meteor', value: 10, mass: 10, vertices: itemVertex, explodeOnHit: 10, explodeRandom: 12,
     graphic: { file: 'items/Meteor.png', facet: { x: 0, y: 0, w: 6, h: 5 } }, picture: { x: 8, y: 0, w: 120, h: 120 },
   },
+  // Crystal.c4d: holds a charge of magic energy; a sorcerer who picks one up turns it into 10 points.
+  crystal: {
+    id: 'crystal', name: 'Crystal', value: 5, rebuy: true, mass: 10, manaGain: 10,
+    vertices: [
+      { x: -4, y: -4, cnat: CNAT.None, friction: 50 },
+      { x: 1, y: 4, cnat: CNAT.None, friction: 50 },
+      { x: 4, y: -4, cnat: CNAT.None, friction: 50 },
+    ],
+    graphic: { file: 'items/Crystal.png', facet: { x: 0, y: 0, w: 10, h: 10 } }, picture: { x: 0, y: 10, w: 64, h: 64 },
+  },
 };
 
 export type Procedure = 'walk' | 'flight' | 'scale' | 'hangle' | 'dig' | 'swim' | 'throw' | 'kneel' | 'fight' | 'push' | 'build' | 'chop' | 'dead';
@@ -116,6 +128,9 @@ export interface ActionDef {
   inLiquid?: string;
   /** Play the animation backwards (climbing down). */
   reverse?: boolean;
+  /** Frame height if it isn't the clonk's own, and how far the frame is shifted (the Facet's last values): the magic sparkles. */
+  facetH?: number;
+  offsetY?: number;
 }
 
 const actions: ActionDef[] = [
@@ -142,6 +157,9 @@ const actions: ActionDef[] = [
   { name: 'Dead', procedure: 'dead', length: 6, delay: 3, facetX: 0, facetY: 240, next: 'Hold', disabled: true },
 ];
 
+/** The kinds of clonk a crew can have (Crew.c4d). */
+export type ClonkKind = 'clonk' | 'sorcerer';
+
 export const CLONK = {
   name: 'Clonk',
   /** Price of a new crew member in the shop (DefCore Value). */
@@ -165,10 +183,39 @@ export const CLONK = {
   energy: 50000,
   /** Weight, for how far hits fling it (DefCore Mass). */
   mass: 50,
-  physical: { walk: 70000, jump: 40000, scale: 30000, hangle: 30000, dig: 40000, swim: 60000, throw: 50000, fight: 50000 },
+  physical: { walk: 70000, jump: 40000, scale: 30000, hangle: 30000, dig: 40000, swim: 60000, throw: 50000, fight: 50000, magic: 0 },
   actions: Object.fromEntries(actions.map((a) => [a.name, a])) as Record<string, ActionDef>,
   graphic: { file: 'clonk/Graphics.png', overlay: 'clonk/Overlay.png' },
+  /** How many portraits it has, and where. */
+  portraits: { count: 5, path: 'clonk/portraits/' },
 };
+
+/**
+ * The sorcerer (Sorcerer.c4d, which includes MagiClonk.c4d): a clonk that
+ * casts spells with magic energy. It fights a little worse, costs twice as
+ * much, and its sprite sheet has the casting animations: Magic on the ground
+ * and JumpMagic in the air, 16 frames with the spell going off at frame 5.
+ */
+const sorcererActions: ActionDef[] = [
+  ...actions.map((a) => (a.name === 'Dead' ? { ...a, facetY: 308 } : a)),
+  { name: 'Magic', procedure: 'throw', length: 16, delay: 1, facetX: 0, facetY: 260, facetH: 24, offsetY: -4, next: 'Walk' },
+  { name: 'JumpMagic', procedure: 'flight', length: 16, delay: 1, facetX: 0, facetY: 260, facetH: 24, offsetY: -4, next: 'Jump', inLiquid: 'Swim' },
+];
+
+export const SORCERER: typeof CLONK = {
+  ...CLONK,
+  name: 'Sorcerer',
+  value: 50,
+  physical: { ...CLONK.physical, fight: 40000, magic: 100000 },
+  actions: Object.fromEntries(sorcererActions.map((a) => [a.name, a])) as Record<string, ActionDef>,
+  graphic: { file: 'sorcerer/Graphics.png', overlay: 'sorcerer/Overlay.png' },
+  portraits: { count: 2, path: 'sorcerer/portraits/' },
+};
+
+export const CLONK_KINDS: Record<ClonkKind, typeof CLONK> = { clonk: CLONK, sorcerer: SORCERER };
+
+/** Magic energy units per displayed point (MagicPhysicalFactor). */
+export const MAGIC_UNIT = 1000;
 
 /** Energy units per displayed point (C4MaxPhysical / 100 in the original). */
 export const ENERGY_UNIT = 1000;
@@ -210,6 +257,12 @@ export interface StructureDef {
   elevator?: boolean;
   /** Gates that slide up and down (the guard tower's), relative to the centre. */
   gates?: readonly GateDef[];
+  /**
+   * What it's made of (DefCore Components). With the Construction Material
+   * rule a clonk has to bring these to the site. (The original elevator takes
+   * metal, which isn't in the game yet: rock stands in for it.)
+   */
+  components: Partial<Record<ItemId, number>>;
   /** Blast damage that sets it alight (DefCore BlastIncinerate). */
   blastIncinerate: number;
   /** A burning object it touches sets it alight one time in this many (DefCore ContactIncinerate; missing: never). */
@@ -289,6 +342,7 @@ export const STRUCTURES: Record<string, StructureDef> = {
       picture: { x: 0, y: 0, w: 60, h: 50 },
     },
     basement: { width: 60, height: 8, file: 'structures/Basement60.png' },
+    components: { wood: 4, rock: 1 },
     // Hut2.c4d BlastIncinerate=45, BurnTo=HTB2 (ContactIncinerate=3, BlastIncinerate=10).
     blastIncinerate: 45,
     burned: { file: 'structures/Hut2Burned.png', blastIncinerate: 10, contactIncinerate: 3 },
@@ -307,6 +361,7 @@ export const STRUCTURES: Record<string, StructureDef> = {
     flagVertex: { x: -11, y: -28 },
     graphic: { file: 'structures/Elevator.png', facet: { x: 0, y: 0, w: 28, h: 56 }, picture: { x: 0, y: 0, w: 28, h: 56 } },
     elevator: true,
+    components: { wood: 4, rock: 2 },
     // Elevator.c4d BlastIncinerate=50, BurnTo=ELVB (ContactIncinerate=5, BlastIncinerate=50).
     blastIncinerate: 50,
     burned: { file: 'structures/ElevatorBurned.png', blastIncinerate: 50, contactIncinerate: 5 },
@@ -359,6 +414,7 @@ export const STRUCTURES: Record<string, StructureDef> = {
       { side: -1, x: -14, y: 10, mask: { x: 0, w: 3 }, file: 'structures/GateLeft.png' },
       { side: 1, x: 15, y: 10, mask: { x: 8, w: 3 }, file: 'structures/GateRight.png' },
     ],
+    components: { rock: 5, wood: 2 },
     // Tower2.c4d BlastIncinerate=250, BurnTo=TWB2 (BlastIncinerate=250).
     blastIncinerate: 250,
     burned: { file: 'structures/Tower2Burned.png', blastIncinerate: 250 },

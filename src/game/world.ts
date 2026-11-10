@@ -3,7 +3,7 @@ import type { GeneratedMap } from '../landscape/generate';
 import type { Landscape } from '../landscape/landscape';
 import { MATERIALS, type ItemId } from '../landscape/materials';
 import { Clonk, NO_CONTROL, type ControlState, type CrewCommand, type CrewInfo } from '../objects/clonk';
-import { BASE, BASEMENT, BUILD_PLANS, CLONK, ITEMS, STRUCTURES } from '../objects/defs';
+import { BASE, BASEMENT, BUILD_PLANS, CLONK, CLONK_KINDS, ITEMS, STRUCTURES, type ClonkKind } from '../objects/defs';
 import type { GameObject } from '../objects/gameObject';
 import { Item } from '../objects/item';
 import { HIT_SPEED_2 } from '../objects/physics';
@@ -12,6 +12,8 @@ import { findPlantSpot, FULL_CON, grassRooted, Plant, plantRooted, PLANTS, TREE,
 import { FIRE } from '../objects/fire';
 import { blastBurn, stepFire } from './fire';
 import { buildStep, construct, grabOrBuild, grabTarget, pushControl, siteProblem, stepElevator, stepGate } from './buildings';
+import { MagicState, openSpellMenu, spellList, startSpell, stepMagic, stepSorcerer, type SpellId } from './magic';
+import { stepRules, type RuleId } from './rules';
 import type { Weather } from './weather';
 
 export type WorldEvent =
@@ -52,7 +54,13 @@ export type WorldEvent =
   /** Something caught fire; big things with a whoosh (the Inflame sound). */
   | { type: 'inflame'; x: number; y: number; loud: boolean; tick: number }
   /** A fire went out; in water with a hiss (Pshshsh). */
-  | { type: 'extinguish'; x: number; y: number; hiss: boolean; tick: number };
+  | { type: 'extinguish'; x: number; y: number; hiss: boolean; tick: number }
+  /** A sorcerer's spell went off. */
+  | { type: 'magic'; clonk: Clonk; spell: SpellId; tick: number }
+  /** A sorcerer took in magic energy, from a crystal or a bolt of lightning. */
+  | { type: 'charge'; clonk: Clonk; points: number; tick: number }
+  /** A fireball left a flame behind. */
+  | { type: 'flame'; x: number; y: number; tick: number };
 
 /** Extra experience on top of the original's "1 per 5 commands", so promotions come at a fun pace. */
 export const EXPERIENCE = {
@@ -70,11 +78,16 @@ export interface PlayerMessage {
 }
 
 /** What a home base can sell: items, and clonks for the crew. */
-export type ShopId = ItemId | 'clonk';
+export type ShopId = ItemId | ClonkKind;
+
+/** True for the clonks a base sells. */
+export function isCrewId(id: ShopId): id is ClonkKind {
+  return id in CLONK_KINDS;
+}
 
 /** Name and price of something in the shop. */
 export function shopEntry(id: ShopId): { name: string; value: number } {
-  return id === 'clonk' ? CLONK : ITEMS[id];
+  return isCrewId(id) ? CLONK_KINDS[id] : ITEMS[id];
 }
 
 /** A player's money and what their home base has in stock to buy. */
@@ -129,7 +142,7 @@ export class World {
    * recruit. Set by the round, which knows the player's crew. Without it,
    * bought clonks have no name or rank.
    */
-  recruit: ((player: number) => CrewInfo | null) | null = null;
+  recruit: ((player: number, kind: ClonkKind) => CrewInfo | null) | null = null;
   /** Computer players, by player number. Their clonks follow these instead of the controls. */
   readonly brains = new Map<number, Brain>();
   goal: Goal = 'none';
@@ -138,6 +151,14 @@ export class World {
   /** Set when the goal is decided: the winning player, or -1 if nobody is left. */
   winner: number | null = null;
   private readonly deaths = new Set<Clonk>();
+  /** Spells and their effects: heals, force bridges, fireballs, bolts. */
+  readonly magic = new MagicState();
+  /** The spells sorcerers can cast (Scenario.txt Magic). None named means all of them. */
+  spells: SpellId[] = [];
+  /** The scenario's rules (Scenario.txt Rules). */
+  readonly rules = new Set<RuleId>();
+  /** Each player's captain, for the Kill The Captain rule. */
+  readonly captains = new Map<number, Clonk>();
   tick = 0;
   /** Seasons, wind, rain and disasters; null plays without weather (tests). */
   weather: Weather | null = null;
@@ -183,8 +204,8 @@ export class World {
     return null;
   }
 
-  addClonk(x: number, y: number, owner: number): Clonk {
-    const c = new Clonk(x, y, owner);
+  addClonk(x: number, y: number, owner: number, kind: ClonkKind = 'clonk'): Clonk {
+    const c = new Clonk(x, y, owner, kind);
     this.clonks.push(c);
     return c;
   }
@@ -335,7 +356,10 @@ export class World {
       const carried = c.carrying;
       // Whether a dig might be the first press of a double dig at a tree.
       if (mine) c.atTree = c.action.procedure === 'walk' && !!this.choppableAt(c);
-      if (mine && c.buildMenu !== null) this.buildMenuControl(c, mine);
+      if (mine && c.spellMenu !== null) this.spellMenuControl(c, mine);
+      else if (mine?.pressedMagic && c.buildMenu === null && openSpellMenu(this, c)) {
+        // The spell menu is open, or the sorcerer said why not.
+      } else if (mine && c.buildMenu !== null) this.buildMenuControl(c, mine);
       else if (mine && c.alive && c.action.procedure === 'push') pushControl(this, c, mine);
       else if (mine || c.goTo !== null) {
         // Moving on stops building.
@@ -354,6 +378,8 @@ export class World {
       if (c.action.procedure === 'build') buildStep(this, c);
       if (c.action.procedure === 'chop') this.chopStep(c);
       if (c.buildMenu !== null && (c.action.procedure !== 'walk' || c.carrying?.def.id !== 'conkit')) c.buildMenu = null;
+      if (c.spellMenu !== null && !c.readyToMagic) c.spellMenu = null;
+      stepSorcerer(this, c);
       const got = c.tryCollect(this.items, this.land);
       if (got) {
         this.events.push({ type: 'collect', clonk: c, item: got, tick: this.tick });
@@ -411,8 +437,10 @@ export class World {
     if (this.items.some((i) => i.removed)) this.items = this.items.filter((i) => !i.removed);
     if (this.plants.some((p) => p.removed)) this.plants = this.plants.filter((p) => !p.removed);
     this.weather?.step(this);
+    stepMagic(this);
     this.land.pxs.step(this.rng);
     this.land.step(this.tick, this.rng);
+    stepRules(this);
     this.afterDeaths();
     this.tick++;
   }
@@ -542,19 +570,38 @@ export class World {
       if (killer?.info) killer.info.kills = (killer.info.kills ?? 0) + 1;
       this.events.push({ type: 'death', clonk: c, killer, tick: this.tick });
     }
-    if (this.goal !== 'melee' || this.winner !== null) return;
+    // A crew is out when it's wiped out in a melee, or when a rule eliminated it.
+    if ((this.goal !== 'melee' && !this.eliminated.size) || this.winner !== null) return;
     const players = new Set(this.clonks.map((c) => c.owner));
     if (players.size < 2) return;
     const standing = new Set(this.clonks.filter((c) => c.alive).map((c) => c.owner));
     for (const p of players) {
-      if (standing.has(p) || this.eliminated.has(p)) continue;
+      if (this.goal !== 'melee' || standing.has(p) || this.eliminated.has(p)) continue;
       this.eliminated.add(p);
       this.events.push({ type: 'eliminated', player: p, tick: this.tick });
     }
+    for (const p of this.eliminated) standing.delete(p);
     if (standing.size <= 1) {
       this.winner = standing.size ? [...standing][0] : -1;
       this.events.push({ type: 'gameOver', winner: this.winner, tick: this.tick });
     }
+  }
+
+  /**
+   * A rule puts a player out of the round (EliminatePlayer): their clonks
+   * fall, and nobody gets the kills.
+   */
+  eliminate(player: number, why = ''): void {
+    if (this.eliminated.has(player)) return;
+    this.eliminated.add(player);
+    if (why) this.say(player, why);
+    for (const c of this.crewOf(player)) {
+      if (!c.alive) continue;
+      c.lastHurtBy = null;
+      if (c.contained) this.exit(c);
+      this.hurt(c, 1e6, null);
+    }
+    this.events.push({ type: 'eliminated', player, tick: this.tick });
   }
 
   private promoted(c: Clonk): void {
@@ -927,6 +974,21 @@ export class World {
     if (by && freed && by.doExperience(freed * EXPERIENCE.blastedLoose)) this.promoted(by);
   }
 
+  /** The spell menu: left/right choose, up or throw casts, down, dig or the magic key closes it. */
+  private spellMenuControl(c: Clonk, ctl: ControlState): void {
+    const list = spellList(this);
+    const n = list.length;
+    let i = Math.min(c.spellMenu ?? 0, n - 1);
+    if (ctl.pressedLeft) i = (i + n - 1) % n;
+    if (ctl.pressedRight) i = (i + 1) % n;
+    c.spellMenu = i;
+    c.comDir = { x: 0, y: 0 };
+    if (ctl.pressedUp || ctl.pressedThrow) {
+      c.spellMenu = null;
+      startSpell(this, c, list[i]);
+    } else if (ctl.pressedDown || ctl.pressedDig || ctl.pressedMagic) c.spellMenu = null;
+  }
+
   /** The build menu: left/right choose, up or throw builds here, down or dig closes it. */
   private buildMenuControl(c: Clonk, ctl: ControlState): void {
     const n = BUILD_PLANS.length;
@@ -1017,7 +1079,7 @@ export class World {
     const def = shopEntry(id);
     if ((p.stock[id] ?? 0) <= 0) return this.say(c.owner, `No ${def.name} left`);
     if (p.wealth < def.value) return this.say(c.owner, `Not enough gold for ${def.name}`);
-    if (id === 'clonk') return this.buyClonk(c, p);
+    if (isCrewId(id)) return this.buyClonk(c, p, id);
     if (c.contents.length >= CLONK.maxContents) return this.say(c.owner, 'Hands full: sell or drop it first');
     p.wealth -= def.value;
     p.stock[id]! -= 1;
@@ -1031,20 +1093,21 @@ export class World {
    * Buy a clonk (C4Player::MakeCrewMember): the player's best idle crew member
    * comes out of the base, or a new recruit who joins the crew for good.
    */
-  private buyClonk(c: Clonk, p: PlayerState): void {
+  private buyClonk(c: Clonk, p: PlayerState, kind: ClonkKind): void {
     const base = c.contained;
     if (!base) return;
-    p.wealth -= CLONK.value;
-    p.stock.clonk! -= 1;
+    const def = CLONK_KINDS[kind];
+    p.wealth -= def.value;
+    p.stock[kind]! -= 1;
     const at = base.exitPoint();
-    const n = this.addClonk(at.x, at.y, c.owner);
+    const n = this.addClonk(at.x, at.y, c.owner, kind);
     n.controlStyle = c.controlStyle;
-    n.join(this.recruit?.(c.owner) ?? null);
+    n.join(this.recruit?.(c.owner, kind) ?? null);
     n.setAction('Walk', 0, 0);
     n.dir = c.dir;
     base.openDoor();
     this.events.push({ type: 'recruit', clonk: n, tick: this.tick });
-    this.say(c.owner, n.info ? `${n.info.name} joins you for ${CLONK.value} gold` : `Bought a clonk for ${CLONK.value} gold`);
+    this.say(c.owner, n.info ? `${n.info.name} joins you for ${def.value} gold` : `Bought a ${def.name.toLowerCase()} for ${def.value} gold`);
   }
 
   /**
@@ -1071,7 +1134,7 @@ export class World {
 
 /** Keys that make a building clonk stop and do something else. */
 function stopsWork(c: ControlState): boolean {
-  return c.left || c.right || c.pressedUp || c.pressedDown || c.pressedDig || c.pressedThrow || c.pressedUse;
+  return c.left || c.right || c.pressedUp || c.pressedDown || c.pressedDig || c.pressedThrow || c.pressedUse || c.pressedMagic;
 }
 
 /** Is (x, y) a direct hit on the box: within 5 pixels of it, a bit more below and right (C4Game::BlastObjects)? */

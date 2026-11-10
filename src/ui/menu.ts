@@ -6,6 +6,7 @@ import {
   crewForRound,
   deleteProfile,
   hireClonk,
+  kindOf,
   PLAYER_COLORS,
   ROUND_BONUS,
   saveProfiles,
@@ -38,6 +39,8 @@ export interface MenuOptions {
   settings: Settings;
   /** Clonk names to hire from (the original's Names.txt). */
   names: readonly string[];
+  /** Names for sorcerers (the Sorcerer's ClonkNames.txt). */
+  sorcererNames?: readonly string[];
   onPlay(scenario: ScenarioDef, profile: Profile): void;
 }
 
@@ -331,6 +334,22 @@ export class Menu {
             },
             '+ Hire a clonk',
           ),
+          h(
+            'button',
+            {
+              class: 'ink-button',
+              title: 'A sorcerer casts spells with magic energy from crystals. It joins rounds of scenarios that take sorcerers, or when you buy one in your base.',
+              disabled: profile.crew.length >= MAX_CREW,
+              onclick: () => {
+                const m = hireClonk(profile, this.o.sorcererNames?.length ? this.o.sorcererNames : this.o.names, undefined, 'sorcerer');
+                this.save();
+                this.o.sounds.play('Click', 0.6);
+                rerender();
+                this.el?.querySelector(`[data-member="${m.id}"]`)?.scrollIntoView({ block: 'nearest' });
+              },
+            },
+            '+ Hire a sorcerer',
+          ),
         ),
       );
     } else {
@@ -353,7 +372,7 @@ export class Menu {
     return h(
       'li',
       { class: `crew-row${plays ? '' : ' benched'}`, 'data-member': m.id, style: { cursor: 'default' } },
-      portrait(m.portrait),
+      portrait(m.portrait, undefined, kindOf(m)),
       h(
         'div',
         { class: 'crew-info' },
@@ -365,7 +384,7 @@ export class Menu {
           ' ',
           h('small', {}, plural(m.rounds, 'round'), m.kills ? `, ${plural(m.kills, 'knockout')}` : '', m.deaths ? `, ${plural(m.deaths, 'death')}` : ''),
         ),
-        h('div', { class: 'crew-rank' }, rankBadge(m.rank), rankName(m.rank)),
+        h('div', { class: 'crew-rank' }, rankBadge(m.rank), rankName(m.rank), kindOf(m) === 'sorcerer' ? ' · Sorcerer' : ''),
         exp.bar,
       ),
       h(
@@ -423,12 +442,12 @@ export class Menu {
             ondblclick: () => profile && this.play(s, profile),
           },
           s.title,
-          h('small', {}, `${plural(s.crewSize, 'clonk')} · ${landscapeSize(s).width} × ${landscapeSize(s).height}`),
+          h('small', {}, `${plural(s.crewSize, 'clonk')}${s.sorcerers ? `, ${plural(s.sorcerers, 'sorcerer')}` : ''} · ${landscapeSize(s).width} × ${landscapeSize(s).height}`),
         ),
       );
     }
 
-    const crew = profile ? crewForRound(profile, scenario.crewSize) : [];
+    const crew = profile ? crewForRound(profile, scenario.crewSize, scenario.sorcerers) : [];
     const style = CTRL_STYLES.find((c) => c.style === profile?.controlStyle);
     const left = h(
       'div',
@@ -458,11 +477,11 @@ export class Menu {
           'div',
           { style: { display: 'flex', alignItems: 'center', gap: '5px', margin: '2px 0' } },
           rankBadge(m.rank),
-          `${rankName(m.rank)} ${m.name}`,
+          `${rankName(m.rank)} ${m.name}${kindOf(m) === 'sorcerer' ? ' (sorcerer)' : ''}`,
         ),
       );
     }
-    const recruits = profile ? scenario.crewSize - crew.length : 0;
+    const recruits = profile ? scenario.crewSize + scenario.sorcerers - crew.length : 0;
     if (recruits > 0) {
       crewLine.append(
         h(
@@ -607,7 +626,7 @@ export class Menu {
         h(
           'div',
           { class: 'result' },
-          portrait(m.portrait),
+          portrait(m.portrait, undefined, kindOf(m)),
           h(
             'div',
             { style: { flex: '1' } },

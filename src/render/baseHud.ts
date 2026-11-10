@@ -1,10 +1,11 @@
 import { Container, Graphics, Sprite, Text, type TextStyleOptions } from 'pixi.js';
 import { TICKS_PER_SECOND } from '../core/loop';
-import { shopEntry, type World } from '../game/world';
+import { SPELLS, spellList } from '../game/magic';
+import { isCrewId, shopEntry, type World } from '../game/world';
 import type { Clonk, ControlStyle } from '../objects/clonk';
 import { buildingKeys } from '../input/bindings';
 import { LAYOUTS, type KeyLayout } from '../input/keyboard';
-import { BUILD_PLANS, CLONK, ENERGY_UNIT, ITEMS, STRUCTURES } from '../objects/defs';
+import { BUILD_PLANS, CLONK, CLONK_KINDS, ENERGY_UNIT, ITEMS, MAGIC_UNIT, STRUCTURES } from '../objects/defs';
 import { frame, type GameAssets } from './assets';
 
 const style = (size: number, fill = '#ffffff'): TextStyleOptions => ({
@@ -84,8 +85,11 @@ export class BaseHud {
   private updateBuilding(screenW: number, clonk: Clonk): void {
     const s = clonk.contained;
     const planning = !s && clonk.buildMenu !== null;
-    const show = !!s || planning;
+    const casting = !s && clonk.spellMenu !== null;
+    const show = !!s || planning || casting;
     this.panel.visible = this.title.visible = this.hint.visible = this.menuRow.visible = show;
+    if (casting) return this.updateSpellMenu(screenW, clonk);
+    this.title.style.wordWrap = false;
     if (planning) return this.updateBuildMenu(screenW, clonk);
     if (!s) return;
     const own = this.world.inOwnBase(clonk);
@@ -103,19 +107,20 @@ export class BaseHud {
         if (i === clonk.menu) box.fill({ color: 0xffe070, alpha: 0.3 }).stroke({ color: 0xffe070, width: 2 });
         else box.fill({ color: 0x000000, alpha: 0.3 });
         let icon: Container;
-        if (id === 'clonk') {
+        if (isCrewId(id)) {
           // The clonk sprite plus its shirt overlay in the player's colour.
-          const walk = CLONK.actions.Walk;
+          const walk = CLONK_KINDS[id].actions.Walk;
+          const sheet = this.assets.clonks[id];
           icon = new Container();
-          const shirt = new Sprite(frame(this.assets.clonkOverlay, walk.facetX, walk.facetY, CLONK.width, CLONK.height));
+          const shirt = new Sprite(frame(sheet.overlay, walk.facetX, walk.facetY, CLONK.width, CLONK.height));
           shirt.tint = this.color;
-          icon.addChild(new Sprite(frame(this.assets.clonk, walk.facetX, walk.facetY, CLONK.width, CLONK.height)), shirt);
+          icon.addChild(new Sprite(frame(sheet.body, walk.facetX, walk.facetY, CLONK.width, CLONK.height)), shirt);
           icon.scale.set(2);
           icon.position.set(2, 10);
         } else {
           const g = ITEMS[id].graphic;
           icon = new Sprite(frame(this.assets.items[g.file], g.facet.x, g.facet.y, g.facet.w, g.facet.h));
-          icon.scale.set(4);
+          icon.scale.set(Math.min(4, 26 / g.facet.w));
           icon.position.set(8, 8);
         }
         // Long names go on two lines.
@@ -144,6 +149,50 @@ export class BaseHud {
     this.panel.clear().roundRect(x, 10, width, height, 8).fill({ color: 0x000000, alpha: 0.55 }).stroke({ color: 0xffffff, alpha: 0.5, width: 2 });
     this.title.position.set(x + 12, 16);
     this.menuRow.position.set(x + 12, 42);
+    this.hint.position.set(x + 12, 10 + height - 24);
+  }
+
+  /** The sorcerer's spell menu: every spell with what it costs; the ones it can't afford are dimmed. */
+  private updateSpellMenu(screenW: number, clonk: Clonk): void {
+    const list = spellList(this.world);
+    const mana = Math.floor(clonk.magicEnergy / MAGIC_UNIT);
+    const key = `spell:${clonk.spellMenu}:${mana}:${list.join()}`;
+    const per = Math.max(1, Math.min(list.length, Math.floor((screenW - 60) / 84)));
+    if (key !== this.menuKey) {
+      this.menuKey = key;
+      this.menuRow.removeChildren().forEach((c) => c.destroy({ children: true }));
+      list.forEach((id, i) => {
+        const def = SPELLS[id];
+        const cell = new Container();
+        const box = new Graphics().roundRect(0, 0, 78, 74, 6);
+        if (i === clonk.spellMenu) box.fill({ color: 0x70a0ff, alpha: 0.35 }).stroke({ color: 0xa0c0ff, width: 2 });
+        else box.fill({ color: 0x000000, alpha: 0.3 });
+        const pic = new Sprite(frame(this.assets.items[def.icon], 0, 0, def.iconSize, def.iconSize));
+        pic.scale.set(36 / def.iconSize);
+        pic.position.set(21, 4);
+        const label = new Text({ text: `${def.name}\n${def.value}`, style: { ...style(11, def.value > mana ? '#ff9080' : '#ffffff'), align: 'center', wordWrap: true, wordWrapWidth: 76 } });
+        label.anchor.set(0.5, 0);
+        label.position.set(39, 41);
+        cell.alpha = def.value > mana ? 0.6 : 1;
+        cell.addChild(box, pic, label);
+        cell.position.set((i % per) * 84, Math.floor(i / per) * 80);
+        this.menuRow.addChild(cell);
+      });
+    }
+    const k = this.keys;
+    const sel = SPELLS[list[Math.min(clonk.spellMenu ?? 0, list.length - 1)]];
+    this.title.text = `Magic (${mana} magic energy): ${sel.description}`;
+    this.title.style.wordWrap = true;
+    this.title.style.wordWrapWidth = Math.max(336, per * 84);
+    this.hint.text = `${k.choose} choose · ${k.buy} cast · ${k.down} close`;
+    const rows = Math.ceil(list.length / per);
+    const titleH = this.title.height;
+    const width = Math.max(360, per * 84 + 18);
+    const height = titleH + rows * 80 + 44;
+    const x = Math.round(screenW / 2 - width / 2);
+    this.panel.clear().roundRect(x, 10, width, height, 8).fill({ color: 0x000000, alpha: 0.55 }).stroke({ color: 0xffffff, alpha: 0.5, width: 2 });
+    this.title.position.set(x + 12, 16);
+    this.menuRow.position.set(x + 12, 22 + titleH);
     this.hint.position.set(x + 12, 10 + height - 24);
   }
 

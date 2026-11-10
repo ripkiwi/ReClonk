@@ -7,7 +7,7 @@ import { LAYOUTS, type KeyLayout } from './keyboard';
 export type Action = keyof KeyLayout;
 
 /** The actions in the order the settings screen lists them. */
-export const ACTIONS: readonly Action[] = ['left', 'right', 'up', 'down', 'dig', 'throw', 'crewPrev', 'crewNext', 'crewAll'];
+export const ACTIONS: readonly Action[] = ['left', 'right', 'up', 'down', 'dig', 'throw', 'magic', 'crewPrev', 'crewNext', 'crewAll'];
 
 /** What each action does, per control style, for the settings screen. */
 export const ACTION_LABELS: Record<ControlStyle, Record<Action, string>> = {
@@ -18,6 +18,7 @@ export const ACTION_LABELS: Record<ControlStyle, Record<Action, string>> = {
     down: 'Climb down, leave a building',
     dig: 'Dig (twice: use what you carry, or chop a tree)',
     throw: 'Throw',
+    magic: 'Magic: a sorcerer\'s spell menu',
     crewPrev: 'Previous clonk',
     crewNext: 'Next clonk (Shift: previous)',
     crewAll: 'Whole crew',
@@ -29,6 +30,7 @@ export const ACTION_LABELS: Record<ControlStyle, Record<Action, string>> = {
     down: 'Stop (twice: gather the crew)',
     dig: 'Dig (twice: use what you carry, or chop a tree)',
     throw: 'Throw',
+    magic: 'Magic: a sorcerer\'s spell menu',
     crewPrev: 'Previous clonk',
     crewNext: 'Next clonk (Shift: previous)',
     crewAll: 'Whole crew',
@@ -111,7 +113,9 @@ export function saveSettings(storage: KeyValueStore, settings: Settings): void {
 function cleanLayout(saved: Partial<Record<Action, unknown>>, style: ControlStyle): KeyLayout {
   const layout = copyLayout(LAYOUTS[style]);
   const used = new Set<string>();
-  for (const action of ACTIONS) {
+  // The player's own keys first, then the defaults of actions the save doesn't know (ones added since).
+  const known = ACTIONS.filter((a) => Array.isArray(saved[a]));
+  for (const action of [...known, ...ACTIONS.filter((a) => !known.includes(a))]) {
     const codesSaved = saved[action];
     const codes: unknown[] = Array.isArray(codesSaved) ? codesSaved : layout[action];
     layout[action] = [];
@@ -253,6 +257,7 @@ export function keyHelp(style: ControlStyle, k: KeyLayout): [keys: string, actio
     add(list(k.dig), `dig, again to stop (steer with ${first(k.left)} / ${first(k.right)} / ${first(k.up)} / ${first(k.down)})`);
     if (k.dig.length) add(`${first(k.dig)} ${first(k.dig)}`, 'use what you carry');
     add(list(k.throw), 'throw');
+    add(list(k.magic), 'spell menu (sorcerers)');
     add(crew ? `${crew} / 1–9` : '1–9', `${k.crewPrev.length ? 'previous / ' : ''}next clonk / pick a clonk`);
     add(list(k.crewAll), `whole crew (${first(k.down)} gathers them)`);
   } else {
@@ -263,6 +268,7 @@ export function keyHelp(style: ControlStyle, k: KeyLayout): [keys: string, actio
     if (k.dig.length) add(`${first(k.dig)} ${first(k.dig)}`, 'use what you carry');
     if (k.down.length) add(`${first(k.down)} ${first(k.down)}`, 'build, hold on to an elevator or tower');
     add(list(k.throw), 'throw');
+    add(list(k.magic), 'spell menu (sorcerers)');
     add(crew ? `${crew} or 1–9` : '1–9', `${k.crewPrev.length ? 'previous / ' : ''}next clonk, pick a clonk`);
     add(list(k.crewAll), `whole crew (${first(k.down)} ${first(k.down)} gathers them)`);
   }

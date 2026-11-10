@@ -1,6 +1,8 @@
 import { texIndex, type ItemId } from '../landscape/materials';
 import { DEFAULT_LANDSCAPE, MAX_MAP_PLAYER_EXTEND, sval, type LandscapeDef, type SVal } from '../landscape/mapCreator';
 import { PLANT_IDS } from '../objects/vegetation';
+import { SPELL_IDS, type SpellId } from './magic';
+import { RULE_IDS, type RuleId } from './rules';
 import { DEFAULT_WEATHER, type WeatherDef } from './weather';
 import type { Goal, ShopId } from './world';
 
@@ -27,6 +29,12 @@ export interface ScenarioDef {
   newMapEachRound: boolean;
   /** How many clonks of the player's crew take part. */
   crewSize: number;
+  /** How many sorcerers come along with them (Scenario.txt Crew=CLNK=..;SCLK=..). */
+  sorcerers: number;
+  /** The spells sorcerers can cast (Scenario.txt Magic). Like in the original, none named means all of them. */
+  magic: SpellId[];
+  /** The rules of the round (Scenario.txt Rules). */
+  rules: RuleId[];
   /** What each clonk carries at the start. */
   startItems: ItemId[];
   /** Start next to your own hut with your flag (gold, healing, buying and selling). */
@@ -43,10 +51,14 @@ export interface ScenarioDef {
   basedOn?: string;
 }
 
-/** The home base start of the original Gold Mine: 50 gold, flints, construction kits and clonks to buy. */
+/**
+ * The home base start of the original Gold Mine: 50 gold, flints, construction
+ * kits and clonks to buy. A sorcerer and crystals for its magic energy are our
+ * addition, so there's a way to get one in the first scenario.
+ */
 export const DEFAULT_BASE: BaseSettings = {
   wealth: 50,
-  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, clonk: 3 },
+  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, crystal: 5, clonk: 3, sorcerer: 1 },
 };
 
 /** The trees of the original Gold Mine and Minor Melee (Vegetation=TRE1=1;TRE2=2;TRE3=1;TRE4=1, VegetationLevel=100). */
@@ -93,6 +105,9 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     seed: 1337,
     newMapEachRound: true,
     crewSize: 1,
+    sorcerers: 0,
+    magic: [],
+    rules: [],
     startItems: ['flint'],
     homeBase: true,
     base: DEFAULT_BASE,
@@ -122,6 +137,9 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     seed: 4242,
     newMapEachRound: true,
     crewSize: 3,
+    sorcerers: 0,
+    magic: [],
+    rules: [],
     startItems: ['flint'],
     homeBase: false,
     base: { wealth: 0, stock: { flint: 5, clonk: 5 } },
@@ -172,6 +190,7 @@ export const LIMITS = {
   /** Objects on the surface per 1000 pixels of map width. */
   objects: { min: 0, max: 200, step: 1 },
   crewSize: { min: 1, max: 12, step: 1 },
+  sorcerers: { min: 0, max: 12, step: 1 },
   /** Gravity in percent of normal. */
   gravity: { min: 10, max: 200, step: 1 },
   /** Wind, to the left (negative) or right. */
@@ -182,9 +201,9 @@ export const LIMITS = {
 };
 
 /** Objects a scenario can hand out, bury or scatter, in the settings' order. */
-export const ITEM_IDS: ItemId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'gold', 'wood'];
+export const ITEM_IDS: ItemId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'gold', 'wood', 'crystal'];
 /** What a home base can sell, in the settings' and the shop's order. */
-export const SHOP_IDS: ShopId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'wood', 'conkit', 'clonk'];
+export const SHOP_IDS: ShopId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'wood', 'conkit', 'crystal', 'clonk', 'sorcerer'];
 
 function clamp(v: unknown, lim: { min: number; max: number }, fallback: number): number {
   const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback;
@@ -305,6 +324,10 @@ export function normalizeScenario(raw: Partial<ScenarioDef>, fallback: ScenarioD
     // Scenarios saved before this setting existed always had the same map.
     newMapEachRound: typeof raw.newMapEachRound === 'boolean' ? raw.newMapEachRound : raw.landscape ? f.newMapEachRound : false,
     crewSize: Math.round(clamp(raw.crewSize, LIMITS.crewSize, f.crewSize)),
+    // Scenarios saved before sorcerers, spells and rules existed have none.
+    sorcerers: Math.round(clamp(raw.sorcerers, LIMITS.sorcerers, raw.landscape ? 0 : f.sorcerers)),
+    magic: Array.isArray(raw.magic) ? SPELL_IDS.filter((id) => raw.magic!.includes(id)) : [],
+    rules: Array.isArray(raw.rules) ? RULE_IDS.filter((id) => raw.rules!.includes(id)) : [],
     startItems: items,
     homeBase: typeof raw.homeBase === 'boolean' ? raw.homeBase : f.homeBase,
     base: {

@@ -141,6 +141,6 @@ describe('Scenario settings', () => {
   it('the originals are untouched by all of this', () => {
     expect(SCENARIOS.map((s) => s.id)).toEqual(['goldmine', 'minor-melee']);
     expect(scenarioById('goldmine')!.base).toEqual(DEFAULT_BASE);
-    expect(DEFAULT_BASE).toEqual({ wealth: 50, stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, clonk: 3 } });
+    expect(DEFAULT_BASE).toEqual({ wealth: 50, stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, clonk: 3, crystal: 5, sorcerer: 1 } });
   });
 });

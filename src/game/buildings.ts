@@ -5,9 +5,9 @@
 // See licenses/clonk_engine_license.txt.
 
 import type { Landscape } from '../landscape/landscape';
-import { MATERIALS, Mat } from '../landscape/materials';
+import { MATERIALS, Mat, type ItemId } from '../landscape/materials';
 import type { Clonk, ControlState } from '../objects/clonk';
-import { CONSTRUCTION, ELEVATOR_CASE, GATE, STRUCTURES } from '../objects/defs';
+import { CONSTRUCTION, ELEVATOR_CASE, GATE, ITEMS, STRUCTURES } from '../objects/defs';
 import { maskFromArt, SolidMask } from '../objects/solidMask';
 import type { Item } from '../objects/item';
 import { ElevatorCase, Gate, type Structure } from '../objects/structure';
@@ -120,6 +120,14 @@ export function buildStep(world: World, c: Clonk): void {
     c.letGo();
     return;
   }
+  if (world.rules.has('constructionMaterial') && !s.burned) {
+    const needs = takeMaterial(s, c);
+    if (needs) {
+      world.say(c.owner, `${d.name} needs: ${needs}`);
+      c.letGo();
+      return;
+    }
+  }
   s.con = Math.min(CONSTRUCTION.fullCon, s.con + buildRate(d.id));
   if (world.tick % 36 === 0) world.events.push({ type: 'building', structure: s, tick: world.tick });
   // A burned building built back up is the real one again (ConstructTo).
@@ -128,6 +136,30 @@ export function buildStep(world: World, c: Clonk): void {
     completeStructure(world, s);
     c.letGo();
   }
+}
+
+/**
+ * The Construction Material rule (C4Object::Build): the site takes what it
+ * still needs out of the builder's hands, and can only be built as far as the
+ * material it has got allows. Returns what's missing ("3x Wood, 1x Rock"), or
+ * an empty string if building can go on.
+ */
+export function takeMaterial(s: Structure, c: Clonk): string {
+  const need = Object.entries(s.def.components) as [ItemId, number][];
+  for (const [id, n] of need) {
+    if ((s.components[id] ?? 0) >= n) continue;
+    const item = c.contents.find((i) => i.def.id === id && !i.fire);
+    if (!item) continue;
+    c.contents.splice(c.contents.indexOf(item), 1);
+    item.removed = true;
+    s.components[id] = (s.components[id] ?? 0) + 1;
+  }
+  const short = need.some(([id, n]) => n > 0 && Math.trunc((100 * (s.components[id] ?? 0)) / n) < Math.trunc((100 * s.con) / CONSTRUCTION.fullCon));
+  if (!short) return '';
+  return need
+    .filter(([id, n]) => (s.components[id] ?? 0) < n)
+    .map(([id, n]) => `${n - (s.components[id] ?? 0)}x ${ITEMS[id].name}`)
+    .join(', ');
 }
 
 /**

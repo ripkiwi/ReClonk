@@ -1,5 +1,5 @@
 import { experienceForRank, MAX_RANK, rankForExperience, rankName, rankSymbols } from '../game/ranks';
-import type { ItemDef } from '../objects/defs';
+import { CLONK_KINDS, type ClonkKind, type ItemDef } from '../objects/defs';
 import { CONTENT_BASE, type GameAssets } from '../render/assets';
 
 type Child = Node | string | number | null | undefined | false;
@@ -50,9 +50,10 @@ export function bigButton(label: string, x: number, y: number, onclick: () => vo
   return h('button', { class: 'big-button', style: { left: `${x}px`, top: `${y}px` }, onclick, disabled }, label);
 }
 
-export function portrait(n: number, cls = 'portrait'): HTMLImageElement {
-  const p = Math.max(1, Math.min(5, n || 1));
-  return h('img', { class: cls, src: `${CONTENT_BASE}clonk/portraits/Portrait${p}.png`, alt: '', draggable: false });
+export function portrait(n: number, cls = 'portrait', kind: ClonkKind = 'clonk'): HTMLImageElement {
+  const set = (CLONK_KINDS[kind] ?? CLONK_KINDS.clonk).portraits;
+  const p = Math.max(1, Math.min(set.count, n || 1));
+  return h('img', { class: cls, src: `${CONTENT_BASE}${set.path}Portrait${p}.png`, alt: '', draggable: false });
 }
 
 /** The rank symbol from the original's Rank.png, with a star for extended ranks. */

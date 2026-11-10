@@ -1,9 +1,10 @@
 import { Rng } from '../core/rng';
 import { generateMap, type GeneratedMap } from '../landscape/generate';
 import type { Clonk, CrewInfo } from '../objects/clonk';
+import { CLONK_KINDS, type ClonkKind } from '../objects/defs';
 import { CrewAI } from './ai';
 import { dryGround, groundAt, setupDefaultBases } from './homeBase';
-import { hireClonk, idleMember, PLAYER_COLORS, type CrewMember, type CrewResult, type Profile } from './profiles';
+import { hireClonk, idleMember, kindOf, PLAYER_COLORS, type CrewMember, type CrewResult, type Profile } from './profiles';
 import { evaluate } from '../landscape/mapCreator';
 import { crewCount, type ScenarioDef } from './scenarios';
 import { Weather } from './weather';
@@ -46,6 +47,7 @@ function crewInfo(m: CrewMember): CrewInfo {
     gained: 0,
     controlCount: m.controlCount,
     portrait: m.portrait,
+    kind: kindOf(m),
   };
 }
 
@@ -67,7 +69,14 @@ export function newSeed(): number {
  * part and isn't in the round yet, or a new recruit with a random name from
  * `names` who joins the crew for good. Buying a clonk in the shop works the same way.
  */
-export function startRound(scenario: ScenarioDef, profile: Profile, names: readonly string[] = [], seed = scenario.seed): Round {
+export function startRound(
+  scenario: ScenarioDef,
+  profile: Profile,
+  names: readonly string[] = [],
+  seed = scenario.seed,
+  /** Names for new sorcerers (the Sorcerer's own ClonkNames.txt); the clonk names if there are none. */
+  sorcererNames: readonly string[] = [],
+): Round {
   const map = generateMap(scenario.landscape, seed, { players: crewCount(scenario) });
   const world = World.fromMap(map, seed);
   // The weather and gravity get their own random numbers, so they don't change the map or the crews.
@@ -75,17 +84,19 @@ export function startRound(scenario: ScenarioDef, profile: Profile, names: reado
   world.land.gravity = evaluate(scenario.landscape.gravity, weatherRng) / 500;
   world.weather = new Weather(scenario.weather, weatherRng, world.land.width);
   const recruited = new Set<string>();
-  const recruit = (): CrewInfo => {
+  const recruit = (kind: ClonkKind = 'clonk'): CrewInfo => {
     const busy = new Set(world.crewOf(LOCAL_PLAYER).flatMap((c) => (c.info ? [c.info.memberId] : [])));
-    let m = idleMember(profile, busy);
+    let m = idleMember(profile, busy, kind);
     if (!m) {
-      m = hireClonk(profile, names);
+      m = hireClonk(profile, kind === 'sorcerer' && sorcererNames.length ? sorcererNames : names, undefined, kind);
       recruited.add(m.id);
     }
     return crewInfo(m);
   };
-  world.recruit = (player) => (player === LOCAL_PLAYER ? recruit() : null);
+  world.recruit = (player, kind) => (player === LOCAL_PLAYER ? recruit(kind) : null);
   world.goal = scenario.goal;
+  world.spells = [...scenario.magic];
+  for (const r of scenario.rules) world.rules.add(r);
 
   const colors = PLAYER_COLORS.map((_, i) => i).filter((i) => i !== profile.color % PLAYER_COLORS.length);
   const players: RoundPlayer[] = [
@@ -99,6 +110,9 @@ export function startRound(scenario: ScenarioDef, profile: Profile, names: reado
   // Computer clonks get names too, from a generator of their own so the map and the round stay the same.
   const aiNames = new Rng(seed ^ 0xa1);
   const pool = names.length ? names : ['Clonk'];
+  const sorcererPool = sorcererNames.length ? sorcererNames : pool;
+  // The crew: the clonks first, then the sorcerers.
+  const kinds: ClonkKind[] = [...Array<ClonkKind>(scenario.crewSize).fill('clonk'), ...Array<ClonkKind>(scenario.sorcerers).fill('sorcerer')];
   const columns = startColumns(world, map, players.length);
   const localCrew: CrewInfo[] = [];
   players.forEach((p, n) => {
@@ -108,27 +122,29 @@ export function startRound(scenario: ScenarioDef, profile: Profile, names: reado
       ? setupDefaultBases(world, p.id, x0, scenario.base, !p.computer).home.exitPoint()
       : { x: x0, y: n === 0 && players.length === 1 ? map.spawn.y : groundAt(world, x0) - 10 };
     if (p.computer) world.brains.set(p.id, new CrewAI(world, p.id));
-    for (let i = 0; i < scenario.crewSize; i++) {
+    kinds.forEach((kind, i) => {
+      const kindPool = kind === 'sorcerer' ? sorcererPool : pool;
       // Computer clonks match the rank of the player's clonk in the same place, so crews are even.
       const info = p.computer
         ? {
             memberId: `computer-${p.id}-${i}`,
-            name: pool[aiNames.int(pool.length)],
+            name: kindPool[aiNames.int(kindPool.length)],
             rank: localCrew[i]?.rank ?? 0,
             experience: localCrew[i]?.experience ?? 0,
             gained: 0,
             controlCount: 0,
-            portrait: 1 + aiNames.int(5),
+            portrait: 1 + aiNames.int(CLONK_KINDS[kind].portraits.count),
+            kind,
           }
-        : recruit();
+        : recruit(kind);
       if (!p.computer) localCrew.push(info);
       // Line the rest of the crew up next to the first clonk.
       const x = Math.max(8, Math.min(world.land.width - 8, start.x + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 14));
-      const c = world.addClonk(x, i === 0 ? start.y : groundAt(world, x) - 10, p.id);
+      const c = world.addClonk(x, i === 0 ? start.y : groundAt(world, x) - 10, p.id, kind);
       if (!p.computer) c.controlStyle = profile.controlStyle;
       c.join(info);
       for (const id of scenario.startItems) world.give(c, id);
-    }
+    });
   });
   return {
     scenario,
