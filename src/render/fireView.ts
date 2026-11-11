@@ -9,6 +9,7 @@ import type { World } from '../game/world';
 import { Clonk } from '../objects/clonk';
 import { CLONK } from '../objects/defs';
 import { Item } from '../objects/item';
+import { Vehicle } from '../objects/vehicle';
 import { Plant } from '../objects/vegetation';
 import { frame } from './assets';
 
@@ -83,6 +84,10 @@ function look(o: Burning): Look | null {
     const c = o.center;
     const b = o.def.burned;
     return { mode: 'living', x: c.x, y: c.y, w: b.width, h: b.height, fireTop: b.fireTop, con: o.scale * 100, stretch: true, r: o.r, xdir: 0, ydir: 0 };
+  }
+  if (o instanceof Vehicle) {
+    if (o.removed) return null;
+    return { mode: 'object', x: o.x, y: o.y, w: o.def.width, h: o.def.height, fireTop: 0, con: o.con / 1000, stretch: false, r: 0, xdir: o.xdir, ydir: o.ydir };
   }
   if (o.gone) return null;
   const con = o.con / 1000;

@@ -11,9 +11,10 @@ import { FIRE } from '../objects/fire';
 import { Item } from '../objects/item';
 import { Structure } from '../objects/structure';
 import { Plant } from '../objects/vegetation';
+import { Vehicle } from '../objects/vehicle';
 import type { World } from './world';
 
-export type Burnable = Clonk | Item | Plant | Structure;
+export type Burnable = Clonk | Item | Plant | Structure | Vehicle;
 
 /** Every 35 ticks burning things set fire to what they touch. */
 export const FIRE_SPREAD_INTERVAL = FIRE.contactInterval;
@@ -29,7 +30,7 @@ export function fireCenter(o: Burnable): { x: number; y: number } {
 /** Is the point inside its shape? */
 export function contains(o: Burnable, px: number, py: number): boolean {
   if (o instanceof Plant) return o.contains(px, py);
-  if (o instanceof Structure) return o.inside(px, py);
+  if (o instanceof Structure || o instanceof Vehicle) return o.inside(px, py);
   const w = o instanceof Clonk ? CLONK.width : o.def.graphic.facet.w;
   const h = o instanceof Clonk ? CLONK.height : o.def.graphic.facet.h;
   const dx = px - (o.x - Math.floor(w / 2));
@@ -42,6 +43,7 @@ export function contactIncinerate(o: Burnable): number {
   if (o instanceof Clonk) return FIRE.clonkContact;
   if (o instanceof Item) return o.def.contactIncinerate ?? 0;
   if (o instanceof Plant) return o.def.contactIncinerate;
+  if (o instanceof Vehicle) return o.burned ? o.def.burned.contactIncinerate : o.def.contactIncinerate;
   return (o.burned ? o.def.burned.contactIncinerate : o.def.contactIncinerate) ?? 0;
 }
 
@@ -50,6 +52,7 @@ export function blastIncinerate(o: Burnable): number {
   if (o instanceof Clonk) return 0;
   if (o instanceof Item) return o.def.blastIncinerate ?? 0;
   if (o instanceof Plant) return o.def.blastIncinerate;
+  if (o instanceof Vehicle) return o.burned ? o.def.burned.blastIncinerate : o.def.blastIncinerate;
   return o.burned ? o.def.burned.blastIncinerate : o.def.blastIncinerate;
 }
 
@@ -91,6 +94,20 @@ function burnTo(world: World, o: Burnable): void {
   if (o instanceof Plant) o.burned = true;
   else if (o instanceof Item) o.burned = o.burned || !!o.def.contactIncinerate;
   else if (o instanceof Structure && !o.burned) burnStructure(world, o);
+  else if (o instanceof Vehicle && !o.burned) burnVehicle(world, o);
+}
+
+/**
+ * A vehicle becomes its burned self (BurnTo): no floor, nothing to steer,
+ * whoever held on lets go. A burned balloon or blimp falls out of the sky.
+ */
+function burnVehicle(world: World, v: Vehicle): void {
+  v.burned = true;
+  v.mask?.remove(world.land);
+  v.mask = null;
+  v.comDir = { x: 0, y: 0 };
+  v.windX = v.windY = v.clearX = v.clearY = false;
+  for (const c of world.clonks) if (c.vehicle === v) c.letGo();
 }
 
 /**
@@ -145,7 +162,7 @@ export function extinguish(world: World, o: Burnable, hiss = false): void {
  * A blast hit it directly (C4Object::Blast): it takes the blast's level in
  * damage, and catches fire once the damage reaches its BlastIncinerate.
  */
-export function blastBurn(world: World, o: Item | Plant | Structure, level: number, by: Clonk | null): void {
+export function blastBurn(world: World, o: Item | Plant | Structure | Vehicle, level: number, by: Clonk | null): void {
   o.damage += level;
   const at = blastIncinerate(o);
   if (at && o.damage >= at) incinerate(world, o, by, true);
@@ -157,6 +174,7 @@ function* burnables(world: World): Generator<Burnable> {
   yield* world.items;
   yield* world.plants;
   for (const s of world.structures) if (!s.gone) yield s;
+  for (const v of world.vehicles) if (!v.removed) yield v;
 }
 
 /** One tick of every fire (FnFxFireTimer → C4Object::ExecFire), and every 35 ticks fire spreads. */
@@ -190,7 +208,7 @@ function burn(world: World, o: Burnable, t: number): void {
 }
 
 /** Nothing left of it (C4Object::DoCon at con 0). */
-function burnedAway(world: World, o: Item | Plant | Structure): void {
+function burnedAway(world: World, o: Item | Plant | Structure | Vehicle): void {
   o.con = 0;
   o.fire = null;
   if (o instanceof Item) {
@@ -200,6 +218,8 @@ function burnedAway(world: World, o: Item | Plant | Structure): void {
     o.container = null;
   } else if (o instanceof Plant) {
     o.removed = true;
+  } else if (o instanceof Vehicle) {
+    world.removeVehicle(o);
   } else {
     // The basement it stood on stays.
     o.gone = true;

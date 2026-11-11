@@ -79,6 +79,8 @@ export class GameScreen {
       this.view.camY = lead.y - app.screen.height / 4;
     }
     app.stage.addChild(this.view.root);
+    // For poking at a round from the browser console while developing.
+    if (import.meta.env.DEV) (globalThis as { reclonk?: Round }).reclonk = round;
 
     const style = round.profile.controlStyle;
     const layout = layoutFor(env.settings, style);
@@ -178,6 +180,8 @@ export class GameScreen {
       else if (e.type === 'gate') this.env.sounds.play('SteelGate1', volumeAt(e.x, e.y));
       else if (e.type === 'elevator') this.env.sounds.play('Elevator', volumeAt(e.x, e.y) * 0.6);
       else if (e.type === 'click') this.env.sounds.play('Click', volumeAt(e.x, e.y) * 0.7);
+      else if (e.type === 'grab') this.env.sounds.play('Click', volumeAt(e.x, e.y) * 0.5);
+      else if (e.type === 'vehicle' && e.sound !== 'Propel') this.env.sounds.play(e.sound, volumeAt(e.x, e.y));
       // Thunder comes from the sky above the bolt, so only the distance across counts.
       else if (e.type === 'thunder') this.env.sounds.play(pick(THUNDER), near ? Math.max(0.3, 1 - Math.abs(e.x - near.x) / 800) : 1);
       else if (e.type === 'fuse') this.env.sounds.play('Fuse', volumeAt(e.x, e.y));
@@ -219,6 +223,12 @@ export class GameScreen {
     // Burning oil crackles too (Flame.c4d's Burn action sound).
     for (const f of this.round.world.flames) fire = Math.max(fire, volumeAt(f.x, f.y));
     this.env.sounds.loop('Fire', fire * 0.7);
+    // The blimp's propeller hums while it flies (the FloatPropel and Turn actions' Sound=Propel).
+    let propel = 0;
+    for (const v of this.round.world.vehicles) {
+      if (!v.burned && (v.action === 'FloatPropel' || v.action === 'Turn')) propel = Math.max(propel, volumeAt(v.x, v.y));
+    }
+    this.env.sounds.loop('Propel', propel * 0.6);
     // A burning fuse hisses (the T-flint's Activated action sound).
     let fusing = 0;
     for (const item of this.round.world.items) {

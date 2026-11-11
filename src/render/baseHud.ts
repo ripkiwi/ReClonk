@@ -120,6 +120,13 @@ export class BaseHud {
           icon.addChild(new Sprite(frame(sheet.body, walk.facetX, walk.facetY, CLONK.width, CLONK.height)), shirt);
           icon.scale.set(2);
           icon.position.set(2, 10);
+        } else if (isVehicleId(id)) {
+          // The vehicle's picture, fitted into the icon's corner.
+          const vd = VEHICLES[id];
+          const p = vd.picture;
+          icon = new Sprite(frame(this.assets.items[vd.graphic.file], p.x, p.y, p.w, p.h));
+          icon.scale.set(32 / Math.max(p.w, p.h));
+          icon.position.set(2, 14);
         } else {
           const g = ITEMS[id].graphic;
           icon = new Container();

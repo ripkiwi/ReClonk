@@ -9,6 +9,7 @@ import { GameObject } from './gameObject';
 import { experienceForRank, rankForExperience } from '../game/ranks';
 import type { Item } from './item';
 import type { Structure } from './structure';
+import type { Vehicle } from './vehicle';
 import type { Plant } from './vegetation';
 import {
   CNAT,
@@ -138,6 +139,8 @@ export const THROW_SPEED = physical(400, P.throw);
 const GO_TO_TICKS = 36 * 20;
 /** Close enough to the leader. */
 const GO_TO_NEAR = 6;
+/** A clonk pushing a vehicle lets go when it's this far outside it (iPushRange). */
+const PUSH_RANGE = 10;
 /** How long a dig waits for a second press while holding a usable item: the keyboard's double-press time. */
 const USE_WAIT_TICKS = 12;
 
@@ -170,6 +173,8 @@ export class Clonk extends GameObject {
   casting: string | null = null;
   /** The building it's working on (Build) or holding on to (Push). */
   workOn: Structure | null = null;
+  /** The vehicle it holds on to (Push): pushing it along or steering it. */
+  vehicle: Vehicle | null = null;
   /** The tree it's chopping (Chop). */
   chopping: Plant | null = null;
   /** Standing at a tree: a dig may be the first press of a double dig that chops it. */
@@ -327,6 +332,7 @@ export class Clonk extends GameObject {
       this.actionStarted = true;
       if (a.procedure !== 'fight') this.fightTarget = null;
       if (a.procedure !== 'push' && a.procedure !== 'build') this.workOn = null;
+      if (a.procedure !== 'push') this.vehicle = null;
       if (a.procedure !== 'chop') this.chopping = null;
     }
     if (xdir !== undefined) this.xdir = xdir;
@@ -416,6 +422,16 @@ export class Clonk extends GameObject {
   startPush(s: Structure): void {
     this.setAction('Push', 0, 0);
     this.workOn = s;
+    this.comDir = STOP;
+    this.goTo = null;
+  }
+
+  /** Hold on to a vehicle to push or steer it (ObjectActionPush). */
+  startPushVehicle(v: Vehicle): void {
+    this.setAction('Push', 0, 0);
+    this.workOn = null;
+    this.vehicle = v;
+    v.held = null;
     this.comDir = STOP;
     this.goTo = null;
   }
@@ -692,11 +708,31 @@ export class Clonk extends GameObject {
         this.ydir = 0;
         if (this.action.procedure === 'throw') this.xdir = 0;
         break;
-      case 'push':
-        // Holding still; the case it holds on to carries it along.
-        this.xdir = this.ydir = 0;
-        advance = 0;
+      case 'push': {
+        const v = this.vehicle;
+        if (!v) {
+          // Holding still; the case it holds on to carries it along.
+          this.xdir = this.ydir = 0;
+          advance = 0;
+          break;
+        }
+        // DFA_PUSH: let go when it's out of reach, otherwise walk after it
+        // so it stays within the vehicle's width.
+        const l = v.left;
+        const r = l + v.def.width - 1;
+        if (this.x < l - PUSH_RANGE || this.x > r + PUSH_RANGE || this.y < v.top - PUSH_RANGE || this.y > v.top + v.def.height - 1 + PUSH_RANGE) {
+          this.walk();
+          break;
+        }
+        const tx = Math.max(l, Math.min(r, this.x));
+        this.xdir = tx === this.x ? 0 : tx > this.x ? WALK_SPEED : -WALK_SPEED;
+        this.ydir = 0;
+        if (this.xdir < 0) this.setDir(-1);
+        if (this.xdir > 0) this.setDir(1);
+        // Pushing walks the animation along with the vehicle.
+        advance = Math.floor(Math.abs(this.xdir || (v.grab === 1 ? v.xdir : 0)) * 10);
         break;
+      }
       case 'build':
       case 'chop':
         this.xdir = this.ydir = 0;

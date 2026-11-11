@@ -12,6 +12,7 @@ import { loadSettings, setKeyLabels } from './input/bindings';
 import { TEXMAP, TUNNEL } from './landscape/materials';
 import { SPELLS } from './game/magic';
 import { ELEVATOR_CASE, FLAG, ITEMS, STRUCTURES } from './objects/defs';
+import { SAIL, VEHICLES } from './objects/vehicle';
 import { GRASS, PLANTS } from './objects/vegetation';
 import { CONTENT_BASE, loadAssets } from './render/assets';
 import { FIRE_PARTICLES } from './render/fireView';
@@ -90,6 +91,8 @@ async function start(): Promise<void> {
           ...(s.gates ?? []).map((g) => g.file),
           ...(s.elevator ? [ELEVATOR_CASE.file] : []),
         ]),
+        ...Object.values(VEHICLES).flatMap((v) => [v.graphic.file, v.burned.file]),
+        SAIL.file,
         FLAG.graphic.file,
         FLAG.graphic.overlay,
         ...Object.values(PLANTS).flatMap((p) => [p.file, p.burned.file]),

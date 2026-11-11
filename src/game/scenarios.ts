@@ -53,6 +53,12 @@ export interface ScenarioDef {
 
 /**
  * The home base start of the original Gold Mine: 50 gold, flints, construction
+ * kits and clonks to buy. The original sells a catapult and lorries instead of
+ * a boat, a balloon and a blimp; those come once there are lorries and catapults.
+ */
+export const DEFAULT_BASE: BaseSettings = {
+  wealth: 50,
+  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, boat: 2, balloon: 1, blimp: 1, clonk: 3 },
  * kits and clonks to buy. A sorcerer and crystals for its magic energy are our
  * addition, so there's a way to get one in the first scenario.
  */
@@ -203,7 +209,7 @@ export const LIMITS = {
 /** Objects a scenario can hand out, bury or scatter, in the settings' order. */
 export const ITEM_IDS: ItemId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'gold', 'wood', 'crystal'];
 /** What a home base can sell, in the settings' and the shop's order. */
-export const SHOP_IDS: ShopId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'wood', 'conkit', 'flag', 'crystal', 'clonk', 'sorcerer'];
+export const SHOP_IDS: ShopId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'wood', 'conkit', 'boat', 'balloon', 'blimp', 'flag', 'crystal', 'clonk', 'sorcerer'];
 
 function clamp(v: unknown, lim: { min: number; max: number }, fallback: number): number {
   const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback;

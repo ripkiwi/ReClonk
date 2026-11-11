@@ -63,8 +63,9 @@ const ITEM_SHEETS: Record<ItemId, [number, number]> = {
 const itemPicture = (id: ItemId): Picture => ({ file: ITEMS[id].graphic.file, sheet: ITEM_SHEETS[id], ...ITEMS[id].picture });
 const plantPicture = (id: PlantId): Picture => ({ file: PLANTS[id].file, sheet: PLANTS[id].sheet, ...PLANTS[id].picture });
 
-const PICTURES: Record<ItemId | 'clonk' | 'sorcerer' | 'hut' | 'melee' | 'grass', Picture> = {
+const PICTURES: Record<ItemId | VehicleId | 'clonk' | 'sorcerer' | 'hut' | 'melee' | 'grass', Picture> = {
   ...(Object.fromEntries((Object.keys(ITEM_SHEETS) as ItemId[]).map((id) => [id, itemPicture(id)])) as Record<ItemId, Picture>),
+  ...(Object.fromEntries((Object.keys(VEHICLES) as VehicleId[]).map((id) => [id, vehiclePicture(id)])) as Record<VehicleId, Picture>),
   clonk: { file: 'clonk/Graphics.png', sheet: [256, 280], x: 192, y: 100, w: 32, h: 40 },
   sorcerer: { file: 'sorcerer/Graphics.png', sheet: [256, 348], x: 192, y: 100, w: 32, h: 40 },
   hut: { file: 'structures/Hut2.png', sheet: [100, 66], x: 0, y: 0, w: 60, h: 50 },

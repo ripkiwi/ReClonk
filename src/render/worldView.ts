@@ -10,7 +10,8 @@ import type { Clonk } from '../objects/clonk';
 import type { Item } from '../objects/item';
 import type { Structure } from '../objects/structure';
 import { GRASS, type Grass, type Plant } from '../objects/vegetation';
-import { frame, type GameAssets } from './assets';
+import { BALLOON_FLAG, BLIMP, SAIL, isSailing, type Vehicle } from '../objects/vehicle';
+import { colorByOwner, frame, type GameAssets } from './assets';
 import { FireView } from './fireView';
 import { LandscapeView } from './landscapeView';
 
@@ -24,6 +25,14 @@ interface Message {
   text: Text;
   born: number;
   follow: Clonk;
+}
+
+/** A vehicle: its picture behind the clonks, its top face (the front of the basket or hull) in front of them. */
+interface VehicleSprites {
+  body: Sprite;
+  /** The balloon's flag in its owner's colour. */
+  flag: Sprite | null;
+  front: Sprite;
 }
 
 interface StructureSprites {
@@ -120,6 +129,11 @@ export class WorldView {
   /** The owner-coloured cloth of loose flags, drawn over their item sprite. */
   private readonly itemOverlays = new Map<Item, Sprite>();
   private readonly structureSprites = new Map<Structure, StructureSprites>();
+  private readonly vehicleSprites = new Map<Vehicle, VehicleSprites>();
+  /** Vehicles sit in front of buildings and behind clonks... */
+  private readonly vehicleLayer = new Container();
+  /** ...except the front of their baskets and hulls, which is in front of the clonks in them. */
+  private readonly vehicleFront = new Container();
   /** Trees and bushes: a holder at the root that tilts when it falls, and the picture in it. */
   private readonly plantSprites = new Map<Plant, { holder: Container; body: Sprite; burned: boolean | null }>();
   private readonly grassSprites = new Map<Grass, Sprite>();
@@ -158,7 +172,7 @@ export class WorldView {
     this.root.addChild(this.sky, this.layer);
     this.landscape = new LandscapeView(world.land, assets.materials);
     this.fire = new FireView(world, assets.items);
-    this.layer.addChild(this.landscape.sprite, this.grassLayer, this.fire.back, this.plantLayer, this.structureLayer, this.pxs);
+    this.layer.addChild(this.landscape.sprite, this.grassLayer, this.fire.back, this.plantLayer, this.structureLayer, this.vehicleLayer, this.pxs);
   }
 
   /**
@@ -222,6 +236,7 @@ export class WorldView {
     this.updatePlants();
     this.updateStructures();
     this.updateItems();
+    this.updateVehicles();
     this.updateClonks();
     this.updateBridges();
     this.updateMarks(cursor);
