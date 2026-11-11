@@ -6,7 +6,7 @@ import { Clonk, NO_CONTROL, type ControlState, type CrewCommand, type CrewInfo }
 import { BASE, BASEMENT, BUILD_PLANS, CLONK, CLONK_KINDS, ITEMS, STRUCTURES, type ClonkKind } from '../objects/defs';
 import type { GameObject } from '../objects/gameObject';
 import { Item } from '../objects/item';
-import { HIT_SPEED_2 } from '../objects/physics';
+import { contactCheck, HIT_SPEED_2 } from '../objects/physics';
 import { Structure } from '../objects/structure';
 import { findPlantSpot, FULL_CON, grassRooted, Plant, plantRooted, PLANTS, TREE, type Grass } from '../objects/vegetation';
 import { FIRE } from '../objects/fire';
@@ -1220,7 +1220,9 @@ export class World {
 
   /**
    * Buy a vehicle. The original puts it into the base, to be pushed out; here
-   * it comes out of the door at once, standing on the ground.
+   * it comes out of the door at once, standing on the ground. Where the
+   * ground beside the door is higher than the building's floor (a hill, a
+   * wall) it comes out above it, so it never starts stuck in the landscape.
    */
   private buyVehicle(c: Clonk, p: PlayerState, id: VehicleId): void {
     const base = c.contained;
@@ -1231,7 +1233,8 @@ export class World {
     const at = base.exitPoint();
     // Its lowest vertex one pixel above the ground the clonk stands on.
     const bottom = Math.max(...def.vertices.map((v) => v.y));
-    this.addVehicle(id, at.x, at.y + 9 - bottom, c.owner);
+    const v = this.addVehicle(id, at.x, at.y + 9 - bottom, c.owner);
+    for (let up = 1; up <= def.height && contactCheck(this.land, v.vertices, v.x, v.y).count; up++) v.setPosition(v.x, v.y - 1);
     base.openDoor();
     this.say(c.owner, `Bought ${def.name} for ${def.value} gold`);
   }

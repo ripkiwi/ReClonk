@@ -190,8 +190,24 @@ export function stepVehicle(world: World, v: Vehicle): void {
   const dy = v.y - y0;
   if (dx || dy) {
     for (const o of ride) {
-      if (!contactCheck(land, o.vertices, o.x + dx, o.y + dy).count) o.setPosition(o.x + dx, o.y + dy);
+      carryTo(world, o, o.x + dx, o.y + dy);
     }
+  }
+}
+
+/** Steps a carried clonk or item may go up to keep up with its vehicle on uneven ground. */
+const CARRY_STEP = 3;
+
+/**
+ * Take a rider or pilot along to (x, y). Where the ground there is a little
+ * higher (the edge of a building's basement, a bump), it steps up onto it
+ * instead of staying behind, the way a clonk walks up a slope.
+ */
+function carryTo(world: World, o: Clonk | Item, x: number, y: number): void {
+  for (let up = 0; up <= CARRY_STEP; up++) {
+    if (contactCheck(world.land, o.vertices, x, y - up).count) continue;
+    o.setPosition(x, y - up);
+    return;
   }
 }
 
@@ -384,7 +400,7 @@ function turnStep(world: World, v: Vehicle, t: number): void {
     if (!c || c.vehicle !== v || c.action.procedure !== 'push') continue;
     if (t === total / 2) c.dir = v.dir;
     const x = t >= total ? v.x - r.dx : v.x + r.dx - Math.trunc((r.dx * 2 * pos) / 100);
-    if (!contactCheck(world.land, c.vertices, x, c.y).count) c.setPosition(x, c.y);
+    carryTo(world, c, x, c.y);
   }
   if (t < total) return;
   v.turnRiders = [];
@@ -483,8 +499,9 @@ export function vehicleControl(world: World, c: Clonk, ctl: ControlState, throwI
       if (up && v.action === 'WaterLand') v.setAction('WaterLaunch');
       if (classic) {
         if (up) {
-          const stop = solidBelow(world, v) || v.comDir.y > 0;
-          balloonSetDirection(world, v, stop ? STOP : { x: 0, y: -1 });
+          // ControlUp: on the ground it always goes up; in the air up stops it sinking.
+          const sinking = !solidBelow(world, v) && v.comDir.y > 0;
+          balloonSetDirection(world, v, sinking ? STOP : { x: 0, y: -1 });
         } else if (ctl.pressedDown) balloonSetDirection(world, v, v.comDir.y < 0 ? STOP : { x: 0, y: 1 });
         return;
       }
