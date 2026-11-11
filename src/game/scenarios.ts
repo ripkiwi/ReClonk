@@ -57,7 +57,7 @@ export interface ScenarioDef {
  */
 export const DEFAULT_BASE: BaseSettings = {
   wealth: 50,
-  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, boat: 2, balloon: 1, blimp: 1, crystal: 5, clonk: 3, sorcerer: 1 },
+  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, lorry: 2, boat: 2, balloon: 1, blimp: 1, crystal: 5, clonk: 3, sorcerer: 1 },
 };
 
 /** The trees of the original Gold Mine and Minor Melee (Vegetation=TRE1=1;TRE2=2;TRE3=1;TRE4=1, VegetationLevel=100). */
@@ -202,7 +202,7 @@ export const LIMITS = {
 /** Objects a scenario can hand out, bury or scatter, in the settings' order. */
 export const ITEM_IDS: ItemId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'gold', 'wood', 'crystal'];
 /** What a home base can sell, in the settings' and the shop's order. */
-export const SHOP_IDS: ShopId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'wood', 'conkit', 'boat', 'balloon', 'blimp', 'flag', 'crystal', 'clonk', 'sorcerer'];
+export const SHOP_IDS: ShopId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'wood', 'conkit', 'lorry', 'boat', 'balloon', 'blimp', 'flag', 'crystal', 'clonk', 'sorcerer'];
 
 function clamp(v: unknown, lim: { min: number; max: number }, fallback: number): number {
   const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback;

@@ -103,6 +103,12 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
   sinks. The blimp flies wherever you steer it and turns round, pilot and all, to go the other way. Whoever
   stands on a deck or in a basket rides along. Vehicles float on water, burn (a blast of 35 sets one alight),
   and a burning balloon or blimp falls out of the sky.
+- **The lorry** (20 gold, two in Gold Mine's base, like the original): push it along like the boat. It holds 50
+  things: whatever falls into its open top goes in (throw your nuggets in from the side), throw while holding it
+  puts in what you carry, and throw with empty hands opens a menu to take something out. Loaded it's heavier and
+  slower to get going. Push it up to a door and press up to take it inside: in your own base the gold in it is
+  sold at once, the rest stays in it, and it comes back out with you. Push it into an elevator case and stop: your
+  clonk takes hold of the case to ride up and down with it. It's metal, so it doesn't burn, and it sinks.
 - In Gold Mine you start next to your own wooden hut. The flag on its roof makes it your **home base**; a hut without
   a flag is just a building you can shelter in. Jump in a doorway to go in, press down to come out.
 - In your base: carried gold sells automatically (5 gold), you heal 2 energy every 3 ticks, and the base
@@ -145,7 +151,7 @@ Each player picks a control style in the player screen.
 | `A` / `D` or `←` / `→` | Walk (hold) |
 | `W`, `↑` or `Space` | Jump; climb up while on a wall; in a doorway, go in |
 | `S` / `↓` | Climb down, let go of a ceiling, leave a building. At a construction site: build. In an elevator case, guard tower or vehicle: hold on to work it (`↓` `↓` lets go of a vehicle). With the whole crew selected: gather everyone at the leader |
-| Holding a vehicle | Boat on land: `←`/`→` push it. Sailing: `←`/`→` steer, `↑` `↑` raise the sail. Balloon: hold `↑`/`↓` to rise or sink. Blimp: hold any direction |
+| Holding a vehicle | Boat or lorry on land: `←`/`→` push it, `↑` at a door pushes it inside. Lorry: `E` puts in what you carry, or with empty hands opens the take-out menu. Sailing: `←`/`→` steer, `↑` `↑` raise the sail. Balloon: hold `↑`/`↓` to rise or sink. Blimp: hold any direction |
 | `Q` | Dig the way you hold (straight down if you hold nothing). The clonk keeps digging on its own, so you can switch to another clonk; hold `A`/`D`/`W`/`S` to steer, `Q` again stops |
 | `Q` `Q` (quickly) | Use what you carry (a construction kit opens the build menu: `←`/`→` choose, `↑`/`E` build, `↓` close) |
 | `E` | Throw the carried item (drop it while climbing or swimming) |
@@ -165,7 +171,7 @@ Each player picks a control style in the player screen.
 | `D` or `Enter` | Dig. While digging, `←` / `→` turn the direction one step; `X` stops |
 | `D` `D` (quickly) | Use what you carry (a construction kit opens the build menu) |
 | `X` `X` (quickly) | At a construction site: build. In an elevator case, guard tower or vehicle: hold on to work it; at a vehicle again: let go |
-| Holding a vehicle | Boat on land: `Z`/`C` push it, `X` stop. Sailing: `Z`/`C` steer, `X` stop, `S` `S` raise the sail. Balloon: `S` up, `X` down (each press the other way stops). Blimp: each press turns its course one step that way |
+| Holding a vehicle | Boat or lorry on land: `Z`/`C` push it, `X` stop, `S` at a door pushes it inside. Lorry: `A` puts in what you carry, or with empty hands opens the take-out menu. Sailing: `Z`/`C` steer, `X` stop, `S` `S` raise the sail. Balloon: `S` up, `X` down (each press the other way stops). Blimp: each press turns its course one step that way |
 | `A` or `Space` | Throw |
 | `F` | Sorcerers: open the spell menu (`Z`/`C` choose, `S`/`A` cast, `X`/`F` close) |
 | `Q` / `E` (or `Tab`), `1` to `9` | Previous / next clonk, pick a clonk (the original's crew cursor) |

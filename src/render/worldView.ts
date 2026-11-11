@@ -586,7 +586,8 @@ export class WorldView {
   private updateVehicles(): void {
     const seen = new Set<Vehicle>();
     for (const v of this.world.vehicles) {
-      if (v.removed) continue;
+      // Pushed into a building, it's out of sight.
+      if (v.removed || v.contained) continue;
       seen.add(v);
       let s = this.vehicleSprites.get(v);
       if (!s) {

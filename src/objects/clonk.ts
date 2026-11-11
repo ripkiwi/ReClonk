@@ -169,6 +169,8 @@ export class Clonk extends GameObject {
   magicEnergy = 0;
   /** Selected line of the spell menu, or null when it's closed. */
   spellMenu: number | null = null;
+  /** Selected line of the menu of what's in the lorry it pushes (the Get menu), or null when it's closed. */
+  loadMenu: number | null = null;
   /** The spell that goes off when the casting animation reaches its fifth frame (the original's idCurSpell). */
   casting: string | null = null;
   /** The building it's working on (Build) or holding on to (Push). */
@@ -332,7 +334,10 @@ export class Clonk extends GameObject {
       this.actionStarted = true;
       if (a.procedure !== 'fight') this.fightTarget = null;
       if (a.procedure !== 'push' && a.procedure !== 'build') this.workOn = null;
-      if (a.procedure !== 'push') this.vehicle = null;
+      if (a.procedure !== 'push') {
+        this.vehicle = null;
+        this.loadMenu = null;
+      }
       if (a.procedure !== 'chop') this.chopping = null;
     }
     if (xdir !== undefined) this.xdir = xdir;
@@ -422,6 +427,8 @@ export class Clonk extends GameObject {
   startPush(s: Structure): void {
     this.setAction('Push', 0, 0);
     this.workOn = s;
+    this.vehicle = null;
+    this.loadMenu = null;
     this.comDir = STOP;
     this.goTo = null;
   }
@@ -431,6 +438,7 @@ export class Clonk extends GameObject {
     this.setAction('Push', 0, 0);
     this.workOn = null;
     this.vehicle = v;
+    this.loadMenu = null;
     v.held = null;
     this.comDir = STOP;
     this.goTo = null;
@@ -711,9 +719,14 @@ export class Clonk extends GameObject {
       case 'push': {
         const v = this.vehicle;
         if (!v) {
-          // Holding still; the case it holds on to carries it along.
-          this.xdir = this.ydir = 0;
-          advance = 0;
+          // Holding still; the case it holds on to carries it along. Standing
+          // at the case's edge, it walks in towards the middle first (Case.c4d
+          // ChangeClonkGrabs), so it doesn't catch on the shaft's walls.
+          const k = this.workOn?.liftCase;
+          const tx = k ? Math.max(k.x - 5, Math.min(k.x + 5, this.x)) : this.x;
+          this.xdir = tx === this.x ? 0 : tx > this.x ? WALK_SPEED : -WALK_SPEED;
+          this.ydir = 0;
+          advance = Math.floor(Math.abs(this.xdir) * 10);
           break;
         }
         // DFA_PUSH: let go when it's out of reach, otherwise walk after it

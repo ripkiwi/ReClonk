@@ -250,5 +250,6 @@ function spread(world: World): void {
 function isContained(o: Burnable): boolean {
   if (o instanceof Clonk) return !!o.contained;
   if (o instanceof Item) return !!o.container;
+  if (o instanceof Vehicle) return !!o.contained;
   return false;
 }

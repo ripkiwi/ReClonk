@@ -32,6 +32,8 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `vehicles/Sailboat.png`, `vehicles/SailboatSailing.png`, `vehicles/SailboatBurned.png` | `Objects.c4d/Vehicles.c4d/Sailboat.c4d/Graphics.png`, `Sailing.c4d/Graphics.png`, `Burned.c4d/Graphics.png` |
 | `vehicles/Balloon.png`, `vehicles/BalloonBurned.png` | `Objects.c4d/Vehicles.c4d/Balloon.c4d/Graphics.png`, `Burned.c4d/Graphics.png` |
 | `vehicles/Blimp.png`, `vehicles/BlimpBurned.png` | `Objects.c4d/Vehicles.c4d/Blimp.c4d/Graphics.png`, `Burned.c4d/Graphics.png` |
+| `vehicles/Lorry.png` | `Objects.c4d/Vehicles.c4d/Lorry.c4d/Graphics.png` |
+| `sound/Clonk.wav` | `Sound.c4g/Clonk.wav` (something going into the lorry) |
 | `sound/SailUp.wav`, `sound/SailDown.wav` | `Objects.c4d/Vehicles.c4d/Sailboat.c4d/SailUp.wav`, `SailDown.wav` |
 | `sound/Propel.wav` | `Sound.c4g/Propel.WAV` (**renamed to lower-case `.wav`**) |
 | `vegetation/Tree1-4.png`, `vegetation/Bush1.png`, `vegetation/Grass.png` | `Objects.c4d/Vegetation.c4d/Tree1-4.c4d`, `Bush1.c4d`, `Grass.c4d` `/Graphics.png` |

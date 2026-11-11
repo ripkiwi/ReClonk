@@ -1,14 +1,16 @@
 // Vehicles from the original Clonk Rage content (Objects.c4d/Vehicles.c4d):
-// the sailboat, the balloon and the blimp. Values follow their DefCore.txt,
+// the sailboat, the balloon, the blimp and the lorry. Values follow their DefCore.txt,
 // ActMap.txt and Script.c. See licenses/clonk_engine_license.txt.
 
 import type { Facet } from './defs';
 import type { FireState } from './fire';
 import { GameObject } from './gameObject';
+import type { Item } from './item';
 import { CNAT, type Vertex } from './physics';
 import { maskRect, SolidMask } from './solidMask';
+import type { Structure } from './structure';
 
-export type VehicleId = 'boat' | 'balloon' | 'blimp';
+export type VehicleId = 'boat' | 'balloon' | 'blimp' | 'lorry';
 
 /** A part of the graphics sheet drawn at (x, y) from the vehicle's top-left corner. */
 export interface Part extends Facet {
@@ -51,10 +53,15 @@ export interface VehicleDef {
   picture: Facet;
   /** What it turns into when it catches fire (DefCore BurnTo). */
   burned: { file: string; mass: number; float: number; blastIncinerate: number; contactIncinerate: number };
+  /**
+   * Loose things falling into this box (DefCore Collection, from the centre)
+   * go into it, up to `limit` of them (the Lorry script's MaxContents).
+   */
+  collection?: { x: number; y: number; w: number; h: number; limit: number };
 }
 
-const vtx = (xs: number[], ys: number[], cnat: number[], friction: number): Vertex[] =>
-  xs.map((x, i) => ({ x, y: ys[i], cnat: cnat[i], friction }));
+const vtx = (xs: number[], ys: number[], cnat: number[], friction: number | number[]): Vertex[] =>
+  xs.map((x, i) => ({ x, y: ys[i], cnat: cnat[i], friction: typeof friction === 'number' ? friction : friction[i] }));
 const CORNERS = [CNAT.Top | CNAT.Left, CNAT.Top | CNAT.Right, CNAT.Bottom | CNAT.Left, CNAT.Bottom | CNAT.Right];
 
 export const VEHICLES: Record<VehicleId, VehicleDef> = {
@@ -130,6 +137,31 @@ export const VEHICLES: Record<VehicleId, VehicleDef> = {
     // BLMB: Mass=40, Float=1.
     burned: { file: 'vehicles/BlimpBurned.png', mass: 40, float: 1, blastIncinerate: 35, contactIncinerate: 5 },
   },
+  // Lorry.c4d (LORY): pushed along, holds up to 50 things (GrabPutGet), empties
+  // into buildings. It's metal: no ContactIncinerate or BlastIncinerate, so it
+  // never burns, and with no Float it sinks.
+  lorry: {
+    id: 'lorry',
+    name: 'Lorry',
+    value: 20,
+    rebuy: true,
+    mass: 75,
+    width: 24,
+    height: 20,
+    offset: { x: -12, y: -10 },
+    vertices: vtx([-8, 7, -8, 7], [-6, -6, 9, 9], [5, 6, 9, 10], [80, 80, 10, 10]),
+    float: 0,
+    floatSpeed: 0,
+    noPushEnter: false,
+    contactIncinerate: 0,
+    blastIncinerate: 0,
+    graphic: { file: 'vehicles/Lorry.png', facet: { x: 0, y: 0, w: 24, h: 20 }, sheet: [74, 40] },
+    picture: { x: 24, y: 0, w: 50, h: 40 },
+    // Never happens: it doesn't burn.
+    burned: { file: 'vehicles/Lorry.png', mass: 75, float: 0, blastIncinerate: 0, contactIncinerate: 0 },
+    // Collection=-12,-10,24,12 and CollectionLimit=51; the script turns away the 51st (MaxContents 50).
+    collection: { x: -12, y: -10, w: 24, h: 12, limit: 50 },
+  },
 };
 
 export const VEHICLE_IDS = Object.keys(VEHICLES) as VehicleId[];
@@ -151,8 +183,10 @@ export const BLIMP = { propel: 12, turnFrames: 25, turnDelay: 2 };
  * Actions, by the original's names. Boat: OnLand, InWater, JustLanded,
  * LowerSail, Sailing, RaiseSail. Balloon: Float, WaterLand, WaterLaunch,
  * DropOff. Blimp: FloatIdle, FloatPropel, Turn, WaterLand, WaterLaunch, DropOff.
+ * The lorry has no actions (Idle).
  */
 export type VehicleAction =
+  | 'Idle'
   | 'OnLand' | 'InWater' | 'JustLanded' | 'LowerSail' | 'Sailing' | 'RaiseSail'
   | 'Float' | 'FloatIdle' | 'FloatPropel' | 'Turn' | 'WaterLand' | 'WaterLaunch' | 'DropOff';
 
@@ -204,6 +238,10 @@ export class Vehicle extends GameObject {
   damage = 0;
   fire: FireState | null = null;
   burned = false;
+  /** What's in it (the lorry's load). */
+  readonly contents: Item[] = [];
+  /** The building it was pushed into, if any: it's hidden there. */
+  contained: Structure | null = null;
 
   constructor(
     readonly def: VehicleDef,
@@ -211,9 +249,9 @@ export class Vehicle extends GameObject {
     y: number,
   ) {
     super(x, y);
-    this.action = def.id === 'boat' ? 'OnLand' : def.id === 'balloon' ? 'Float' : 'FloatIdle';
+    this.action = def.id === 'boat' ? 'OnLand' : def.id === 'balloon' ? 'Float' : def.id === 'blimp' ? 'FloatIdle' : 'Idle';
     // Balloon and blimp Initialize: sink down until someone steers.
-    if (def.id !== 'boat') this.comDir = { x: 0, y: 1 };
+    if (def.id === 'balloon' || def.id === 'blimp') this.comDir = { x: 0, y: 1 };
   }
 
   get vertices(): readonly Vertex[] {
@@ -228,8 +266,17 @@ export class Vehicle extends GameObject {
     return this.y + this.def.offset.y;
   }
 
+  /** Its own mass plus what's in it (C4Object::UpdateMass). */
   get mass(): number {
-    return this.burned ? this.def.burned.mass : this.def.mass;
+    let m = this.burned ? this.def.burned.mass : this.def.mass;
+    for (const it of this.contents) m += it.def.mass;
+    return m;
+  }
+
+  /** Room for more (the lorry's RejectCollect). */
+  get full(): boolean {
+    const c = this.def.collection;
+    return !c || this.contents.length >= c.limit;
   }
 
   /** Float depth now: burned ones barely float. */
@@ -248,7 +295,7 @@ export class Vehicle extends GameObject {
     // Burned: BLMB keeps Grab=2, SLBB and BALB are Grab=1.
     if (this.burned) return this.def.id === 'blimp' ? 2 : 1;
     if (this.def.id === 'boat') return isSailing(this.action) ? 2 : 1;
-    return 2;
+    return this.def.id === 'lorry' ? 1 : 2;
   }
 
   /** It takes its pilot's controls (DefCore VehicleControl). */
