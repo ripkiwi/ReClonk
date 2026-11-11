@@ -14,7 +14,7 @@ import { blastBurn, stepFire } from './fire';
 import { blastIgnite, igniteOil, stepLiquids, type OilFlame } from './liquids';
 import { buildStep, construct, grabOrBuild, grabTarget, pushControl, siteProblem, stepElevator, stepGate } from './buildings';
 import { Vehicle, VEHICLES, type VehicleId } from '../objects/vehicle';
-import { grabVehicle, stepVehicle, vehicleAt, vehicleControl } from './vehicles';
+import { grabVehicle, stepVehicle, takeOut, vehicleAt, vehicleBottom, vehicleControl } from './vehicles';
 import { MagicState, openSpellMenu, spellList, startSpell, stepMagic, stepSorcerer, type SpellId } from './magic';
 import { stepRules, takeFlag, type RuleId } from './rules';
 import type { Weather } from './weather';
@@ -44,8 +44,8 @@ export type WorldEvent =
   | { type: 'gate' | 'elevator' | 'click'; x: number; y: number; tick: number }
   /** A clonk took hold of a vehicle or let go of it. */
   | { type: 'grab'; x: number; y: number; tick: number }
-  /** A vehicle made a sound: the sail going up or down, the blimp's propeller. */
-  | { type: 'vehicle'; sound: 'SailUp' | 'SailDown' | 'Propel'; x: number; y: number; tick: number }
+  /** A vehicle made a sound: the sail going up or down, the blimp's propeller, something going into the lorry. */
+  | { type: 'vehicle'; sound: 'SailUp' | 'SailDown' | 'Propel' | 'Clonk' | 'WoodHit1' | 'WoodHit2' | 'WoodHit3'; x: number; y: number; tick: number }
   /** A lightning bolt came down with a clap of thunder. */
   | { type: 'thunder'; x: number; y: number; tick: number }
   /** A T-flint's fuse was lit. */
@@ -149,7 +149,7 @@ export class World {
   readonly clonks: Clonk[] = [];
   items: Item[] = [];
   readonly structures: Structure[] = [];
-  /** Boats, balloons and blimps. */
+  /** Boats, balloons, blimps and lorries. */
   vehicles: Vehicle[] = [];
   /** Trees and bushes, standing or felled. */
   plants: Plant[] = [];
@@ -394,8 +394,12 @@ export class World {
       else if (mine?.pressedMagic && c.buildMenu === null && openSpellMenu(this, c)) {
         // The spell menu is open, or the clonk said why not.
       } else if (mine && c.alive && c.action.procedure === 'push' && c.vehicle) {
-        vehicleControl(this, c, mine, () =>
-          c.control({ ...NO_CONTROL, pressedThrow: true }, { throwItem: (item, xdir, ydir) => throwItem(item, xdir, ydir, c), tryEnter: () => false, useItem: () => false, grabOrBuild: () => false }),
+        vehicleControl(
+          this,
+          c,
+          mine,
+          () => c.control({ ...NO_CONTROL, pressedThrow: true }, { throwItem: (item, xdir, ydir) => throwItem(item, xdir, ydir, c), tryEnter: () => false, useItem: () => false, grabOrBuild: () => false }),
+          () => this.pushEnter(c),
         );
       } else if (mine && c.alive && c.action.procedure === 'push') pushControl(this, c, mine);
       else if (mine || c.goTo !== null) {
@@ -429,6 +433,11 @@ export class World {
 
     for (const v of this.vehicles) {
       if (v.removed) continue;
+      if (v.contained) {
+        // Pushed into a building: it comes back out with whoever pushes it, or by itself if they're gone.
+        if (!this.clonks.some((c) => c.vehicle === v && c.contained === v.contained && c.alive)) this.pushOut(v);
+        continue;
+      }
       if (this.fellOut(v)) {
         this.removeVehicle(v);
         continue;
@@ -509,6 +518,8 @@ export class World {
   /** Take a vehicle out of the world: its floor goes, and whoever held on lets go. */
   removeVehicle(v: Vehicle): void {
     v.removed = true;
+    for (const it of v.contents) it.removed = true;
+    v.contents.length = 0;
     v.mask?.remove(this.land);
     v.mask = null;
     for (const c of this.clonks) if (c.vehicle === v) c.letGo();
@@ -742,7 +753,7 @@ export class World {
       if (!s.gone && directHit(x, y, { x: s.left, y: s.top, w: s.def.width, h: s.def.height })) blastBurn(this, s, level, by);
     }
     for (const v of this.vehicles) {
-      if (!v.removed && directHit(x, y, { x: v.left, y: v.top, w: v.def.width, h: v.def.height })) blastBurn(this, v, level, by);
+      if (!v.removed && !v.contained && directHit(x, y, { x: v.left, y: v.top, w: v.def.width, h: v.def.height })) blastBurn(this, v, level, by);
     }
   }
 
@@ -754,7 +765,7 @@ export class World {
    */
   private shoveVehicles(x: number, y: number, level: number): void {
     for (const v of this.vehicles) {
-      if (v.removed || v.grab !== 1 || Math.abs(y - v.y) > level || Math.abs(x - v.x) > level) continue;
+      if (v.removed || v.contained || v.grab !== 1 || Math.abs(y - v.y) > level || Math.abs(x - v.x) > level) continue;
       const k = Math.max(4, Math.min(20, Math.trunc(v.mass / 10)));
       const side = Math.sign(v.x - x + this.rng.int(3) - 1);
       v.xdir += (side * (level - Math.abs(x - v.x))) / k;
@@ -859,10 +870,51 @@ export class World {
   private tryEnter(c: Clonk): boolean {
     const s = this.structureAt(c);
     if (!s) return false;
+    this.enter(c, s);
+    return true;
+  }
+
+  /**
+   * Up while pushing a vehicle whose centre is in a doorway: the clonk goes
+   * in and takes it along (ObjectComEnter). In its own base the gold in it is
+   * sold (BASEFUNC_AutoSellContents sells the gold in the base's contents'
+   * contents too). The original's lorry empties itself into any building
+   * (Lorry.c4d Entrance); our buildings don't keep things, so the rest stays in.
+   */
+  private pushEnter(c: Clonk): boolean {
+    const v = c.vehicle;
+    if (!v) return false;
+    const s = this.structures.find((o) => o.atEntrance(v.x, v.y));
+    if (!s) return false;
+    if (!this.enter(c, s)) return true;
+    v.contained = s;
+    v.mask?.remove(this.land);
+    v.mask = null;
+    v.xdir = v.ydir = 0;
+    v.setPosition(s.x, s.y);
+    for (const it of v.contents) it.setPosition(s.x, s.y);
+    if (s.base !== c.owner) return true;
+    const gold = v.contents.filter((it) => it.def.id === 'gold');
+    if (!gold.length) return true;
+    const p = this.players.get(c.owner);
+    if (!p) return true;
+    let earned = 0;
+    for (const it of gold) {
+      takeOut(v, it);
+      it.removed = true;
+      earned += it.def.value;
+    }
+    p.wealth = Math.min(BASE.maxWealth, p.wealth + earned);
+    this.say(c.owner, `Sold ${gold.length} gold from the ${v.def.name.toLowerCase()} for ${earned} gold`);
+    return true;
+  }
+
+  /** Go into a building. Returns false if the door stays shut. */
+  private enter(c: Clonk, s: Structure): boolean {
     // Enemies can't get into your base (BASEFUNC_RejectEntrance).
     if (s.base >= 0 && this.hostile(s.base, c.owner)) {
       this.say(c.owner, 'Enemy base: the door stays shut');
-      return true;
+      return false;
     }
     c.contained = s;
     c.menu = null;
@@ -878,11 +930,29 @@ export class World {
     return true;
   }
 
+  /** Leave a building, pushing out the vehicle it pushed in. */
   exit(c: Clonk): void {
     const s = c.contained;
     if (!s) return;
+    const v = c.vehicle?.contained === s ? c.vehicle : null;
     const p = s.exitPoint();
     this.exitTo(c, p.x, p.y);
+    s.openDoor();
+    if (!v) return;
+    this.pushOut(v);
+    c.startPushVehicle(v);
+  }
+
+  /** A vehicle comes out of the building it was pushed into, standing in the doorway. */
+  private pushOut(v: Vehicle): void {
+    const s = v.contained;
+    if (!s) return;
+    v.contained = null;
+    const p = s.exitPoint();
+    // Its lowest vertex where a clonk's feet would be.
+    v.setPosition(p.x, p.y + 9 - vehicleBottom(v));
+    v.xdir = v.ydir = 0;
+    for (const it of v.contents) it.setPosition(v.x, v.y);
     s.openDoor();
   }
 
@@ -1038,6 +1108,12 @@ export class World {
    */
   private blowUp(item: Item): void {
     item.removed = true;
+    // In a lorry, it goes off where the lorry is (inside a building, the building takes it).
+    if (item.container instanceof Vehicle) {
+      const v = item.container;
+      takeOut(v, item);
+      if (v.contained) return blastBurn(this, v.contained, item.def.fuse?.explode ?? 20, this.thrower(item));
+    }
     const holder = item.container instanceof Clonk ? item.container : null;
     if (holder) holder.contents.splice(holder.contents.indexOf(item), 1);
     item.container = null;

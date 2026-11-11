@@ -6,7 +6,8 @@ import type { Clonk, ControlStyle } from '../objects/clonk';
 import { buildingKeys } from '../input/bindings';
 import { LAYOUTS, type KeyLayout } from '../input/keyboard';
 import { BUILD_PLANS, CLONK, CLONK_KINDS, ENERGY_UNIT, ITEMS, MAGIC_UNIT, STRUCTURES } from '../objects/defs';
-import { VEHICLES } from '../objects/vehicle';
+import { VEHICLES, type Vehicle } from '../objects/vehicle';
+import { loadList } from '../game/vehicles';
 import { frame, type GameAssets } from './assets';
 
 const style = (size: number, fill = '#ffffff'): TextStyleOptions => ({
@@ -90,9 +91,11 @@ export class BaseHud {
     const s = clonk.contained;
     const planning = !s && clonk.buildMenu !== null;
     const casting = !s && clonk.spellMenu !== null;
-    const show = !!s || planning || casting;
+    const lorry = !s && clonk.action.procedure === 'push' && clonk.vehicle?.def.collection ? clonk.vehicle : null;
+    const show = !!s || planning || casting || !!lorry;
     this.panel.visible = this.title.visible = this.hint.visible = this.menuRow.visible = show;
     if (casting) return this.updateSpellMenu(screenW, clonk);
+    if (lorry) return this.updateLoadMenu(screenW, clonk, lorry);
     this.title.style.wordWrap = false;
     if (planning) return this.updateBuildMenu(screenW, clonk);
     if (!s) return;
@@ -215,6 +218,51 @@ export class BaseHud {
     this.panel.clear().roundRect(x, 10, width, height, 8).fill({ color: 0x000000, alpha: 0.55 }).stroke({ color: 0xffffff, alpha: 0.5, width: 2 });
     this.title.position.set(x + 12, 16);
     this.menuRow.position.set(x + 12, 22 + titleH);
+    this.hint.position.set(x + 12, 10 + height - 24);
+  }
+
+  /**
+   * Pushing a lorry: how full it is and what's in it. With the Get menu open
+   * (throw with empty hands), one of them can be taken out.
+   */
+  private updateLoadMenu(screenW: number, clonk: Clonk, v: Vehicle): void {
+    const list = loadList(v);
+    const open = clonk.loadMenu !== null;
+    const key = `load:${clonk.loadMenu}:${list.map((e) => `${e.id}=${e.count}`).join(',')}`;
+    if (key !== this.menuKey) {
+      this.menuKey = key;
+      this.menuRow.removeChildren().forEach((c) => c.destroy({ children: true }));
+      list.forEach((e, i) => {
+        const g = ITEMS[e.id].graphic;
+        const cell = new Container();
+        const box = new Graphics().roundRect(0, 0, 56, 50, 6);
+        if (open && i === clonk.loadMenu) box.fill({ color: 0xffe070, alpha: 0.3 }).stroke({ color: 0xffe070, width: 2 });
+        else box.fill({ color: 0x000000, alpha: 0.3 });
+        const f = g.facet;
+        const icon = new Sprite(frame(this.assets.items[g.file], f.x, f.y, f.w, f.h));
+        icon.scale.set(Math.min(4, 24 / Math.max(f.w, f.h)));
+        icon.position.set(6, 6);
+        const label = new Text({ text: `x${e.count}`, style: style(12) });
+        label.position.set(24, 30);
+        cell.addChild(box, icon, label);
+        cell.position.set(i * 62, 0);
+        this.menuRow.addChild(cell);
+      });
+    }
+    const k = this.keys;
+    const limit = v.def.collection?.limit ?? 0;
+    this.title.text = `${v.def.name}: ${v.contents.length}/${limit}${open ? ' · take out' : ''}`;
+    if (open) this.hint.text = `${k.choose} choose · ${k.buy} take · ${k.down} close`;
+    else {
+      const what = clonk.carrying ? `${k.sell} put in · ` : v.contents.length ? `${k.sell} take out · ` : '';
+      this.hint.text = `${what}${k.up} at a door: push it in · ${k.down} twice: let go`;
+    }
+    const height = list.length ? 126 : 64;
+    const width = Math.max(360, this.menuRow.width + 24, this.hint.width + 24);
+    const x = width > screenW - 2 * HUD_PANEL ? Math.max(Math.min(HUD_PANEL, screenW - width - 8), 8) : Math.round(screenW / 2 - width / 2);
+    this.panel.clear().roundRect(x, 10, width, height, 8).fill({ color: 0x000000, alpha: 0.55 }).stroke({ color: 0xffffff, alpha: 0.5, width: 2 });
+    this.title.position.set(x + 12, 16);
+    this.menuRow.position.set(x + 12, 42);
     this.hint.position.set(x + 12, 10 + height - 24);
   }
 

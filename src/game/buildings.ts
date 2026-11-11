@@ -11,9 +11,11 @@ import { CONSTRUCTION, ELEVATOR_CASE, GATE, ITEMS, STRUCTURES } from '../objects
 import { maskFromArt, SolidMask } from '../objects/solidMask';
 import type { Item } from '../objects/item';
 import { ElevatorCase, Gate, type Structure } from '../objects/structure';
-import { round, sign } from '../objects/physics';
+import { contactCheck, round, sign } from '../objects/physics';
+import type { Vehicle } from '../objects/vehicle';
 import { layBasement } from './homeBase';
 import { rebuilt } from './fire';
+import { vehicleBottom } from './vehicles';
 import type { World } from './world';
 
 /** How many pixels in a rectangle are solid (C4Landscape::AreaSolidCount). */
@@ -287,8 +289,9 @@ function pusher(world: World, s: Structure): Clonk | undefined {
 }
 
 /** Things standing on the case's floor, and whoever holds on to it: they ride along. */
-function riders(world: World, s: Structure, k: ElevatorCase): (Clonk | Item)[] {
-  const out: (Clonk | Item)[] = [];
+function riders(world: World, s: Structure, k: ElevatorCase): (Clonk | Item | Vehicle)[] {
+  const out: (Clonk | Item | Vehicle)[] = [];
+  for (const v of world.vehicles) if (onCase(v, k)) out.push(v);
   const x0 = k.left;
   const x1 = k.left + ELEVATOR_CASE.width;
   for (const c of world.clonks) {
@@ -299,6 +302,37 @@ function riders(world: World, s: Structure, k: ElevatorCase): (Clonk | Item)[] {
     if (!it.container && !it.removed && it.x >= x0 && it.x < x1 && it.y + 1 === k.floorY) out.push(it);
   }
   return out;
+}
+
+/** A vehicle standing on the case's floor. */
+function onCase(v: Vehicle, k: ElevatorCase): boolean {
+  if (v.removed || v.contained) return false;
+  return v.x >= k.left && v.x < k.left + ELEVATOR_CASE.width && v.y + vehicleBottom(v) + 1 === k.floorY;
+}
+
+/** It fits in the case (Case.c4d FitsInElevator: all its vertices within -12..11 and -20..15). */
+function fitsInCase(v: Vehicle): boolean {
+  return v.def.vertices.every((p) => p.x >= -12 && p.x <= 11 && p.y >= -20 && p.y <= 15);
+}
+
+/**
+ * A clonk that pushed a vehicle into the case and stopped takes hold of the
+ * case instead, the vehicle centred in it, to ride up and down with it
+ * (Case.c4d ChangeClonkGrabs). To push it out again, let go of the case and
+ * grab the vehicle.
+ */
+function changeClonkGrabs(world: World, s: Structure, k: ElevatorCase): void {
+  for (const c of world.clonks) {
+    const v = c.vehicle;
+    if (!v || !c.alive || c.contained || c.action.procedure !== 'push' || c.loadMenu !== null) continue;
+    if (c.comDir.x !== 0 || Math.abs(c.xdir) > 0.2 || v.steered || !fitsInCase(v)) continue;
+    if (Math.abs(v.x - k.x) > 8 || Math.abs(v.xdir) > 0.2 || !onCase(v, k)) continue;
+    if (Math.abs(c.x - k.x) > 15 || world.hostile(s.owner, c.owner)) continue;
+    if (!contactCheck(world.land, v.vertices, k.x, v.y).count) v.setPosition(k.x, v.y);
+    v.xdir = 0;
+    c.startPush(s);
+    world.events.push({ type: 'click', x: c.x, y: c.y, tick: world.tick });
+  }
 }
 
 function haltCase(k: ElevatorCase): void {
@@ -421,6 +455,7 @@ export function stepElevator(world: World, s: Structure): void {
   const k = s.liftCase;
   if (!k) return;
   const c = ELEVATOR_CASE;
+  if (k.mode === 'wait') changeClonkGrabs(world, s, k);
   if (--k.timer <= 0) {
     k.timer = c.waitInterval;
     const busy = world.clonks.some((o) => o.alive && !o.contained && riders(world, s, k).includes(o));

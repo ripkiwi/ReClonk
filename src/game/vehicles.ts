@@ -1,8 +1,10 @@
 // Vehicles, like the original's: the engine's PUSH and FLOAT procedures,
 // floating in liquids (DoGravity), solid masks that carry whoever stands on
-// them (C4SolidMask), and the Sailboat, Balloon and Blimp scripts.
+// them (C4SolidMask), the Sailboat, Balloon and Blimp scripts, and the
+// lorry's load (Collection, GrabPutGet and the Lorry script).
 // See licenses/clonk_engine_license.txt.
 
+import type { ItemId } from '../landscape/materials';
 import type { Clonk, ControlState } from '../objects/clonk';
 import type { Item } from '../objects/item';
 import { CLONK } from '../objects/defs';
@@ -19,6 +21,7 @@ export const PUSH_SPEED = physical(280, CLONK.physical.walk);
 /** Ticks between two presses of up that count as a double press. */
 const DOUBLE_TICKS = 12;
 
+
 // ----------------------------------------------------------------- helpers
 
 /** The clonks holding on to a vehicle. */
@@ -28,8 +31,67 @@ export function pushersOf(world: World, v: Vehicle): Clonk[] {
 
 /** The vehicle a clonk standing here could hold on to (ObjectComDownDouble finds it at the clonk's position). */
 export function vehicleAt(world: World, c: Clonk): Vehicle | null {
-  for (const v of world.vehicles) if (!v.removed && !v.burned && v.inside(c.x, c.y)) return v;
+  for (const v of world.vehicles) if (!v.removed && !v.burned && !v.contained && v.inside(c.x, c.y)) return v;
   return null;
+}
+
+/** Its lowest vertex, below its centre. */
+export function vehicleBottom(v: Vehicle): number {
+  return Math.max(...v.def.vertices.map((p) => p.y));
+}
+
+// ------------------------------------------------------------------- lorry
+
+/** What's in a lorry, one entry per kind of thing, in the order they went in (the Get menu). */
+export function loadList(v: Vehicle): { id: ItemId; count: number }[] {
+  const out: { id: ItemId; count: number }[] = [];
+  for (const it of v.contents) {
+    const e = out.find((o) => o.id === it.def.id);
+    if (e) e.count++;
+    else out.push({ id: it.def.id, count: 1 });
+  }
+  return out;
+}
+
+/**
+ * Put something into a vehicle that holds things. Returns false when it's
+ * full (the Lorry script's RejectCollect); otherwise it goes in with a clonk.
+ */
+export function putIn(world: World, v: Vehicle, it: Item): boolean {
+  if (v.full) return false;
+  it.container = v;
+  it.xdir = it.ydir = it.rdir = 0;
+  it.setPosition(v.x, v.y);
+  v.contents.push(it);
+  world.events.push({ type: 'vehicle', sound: 'Clonk', x: v.x, y: v.y, tick: world.tick });
+  return true;
+}
+
+/** Take something out of a vehicle (it's then in nobody's hands). */
+export function takeOut(v: Vehicle, it: Item): void {
+  const i = v.contents.indexOf(it);
+  if (i >= 0) v.contents.splice(i, 1);
+  it.container = null;
+}
+
+/**
+ * Every 3 ticks a lorry takes in the loose things in its open top, the
+ * Collection box (C4GameObjects::CrossCheck). Full, it turns them away: fast
+ * ones bounce up off it (RejectCollect).
+ */
+function collect(world: World, v: Vehicle): void {
+  const box = v.def.collection;
+  if (!box || world.tick % 3 !== 0) return;
+  const x0 = v.x + box.x;
+  const y0 = v.y + box.y;
+  for (const it of world.items) {
+    if (it.container || it.removed) continue;
+    if (it.x < x0 || it.x >= x0 + box.w || it.y < y0 || it.y >= y0 + box.h) continue;
+    if (putIn(world, v, it)) continue;
+    // Full. Only things on the move clatter (a resting one would every 3 ticks).
+    if (Math.abs(it.xdir) > 0.6) it.ydir = -0.5;
+    if (it.xdir || it.ydir) world.events.push({ type: 'vehicle', sound: `WoodHit${1 + world.rng.int(3)}` as 'WoodHit1', x: v.x, y: v.y, tick: world.tick });
+  }
 }
 
 /** Hold on to the vehicle where the clonk stands. Returns false if there's none. */
@@ -193,6 +255,9 @@ export function stepVehicle(world: World, v: Vehicle): void {
       carryTo(world, o, o.x + dx, o.y + dy);
     }
   }
+  // Its load goes where it goes.
+  for (const it of v.contents) it.setPosition(v.x, v.y);
+  collect(world, v);
 }
 
 /** Steps a carried clonk or item may go up to keep up with its vehicle on uneven ground. */
@@ -221,6 +286,9 @@ function script(world: World, v: Vehicle, pushers: Clonk[]): void {
       return balloonScript(world, v, pushers);
     case 'blimp':
       return blimpScript(world, v, pushers);
+    case 'lorry':
+      // Nothing runs on its own; see collect and lorryControl.
+      return;
   }
 }
 
@@ -452,19 +520,25 @@ function heldDir(ctl: ControlState): Dir {
  * with jump'n'run keys the held direction (ControlUpdate), with classic keys
  * each press (ControlUp, ControlDownSingle, ControlLeft, ControlRight).
  */
-export function vehicleControl(world: World, c: Clonk, ctl: ControlState, throwIt: () => void): void {
+export function vehicleControl(world: World, c: Clonk, ctl: ControlState, throwIt: () => void, enter: () => boolean): void {
   const v = c.vehicle;
   if (!v || v.removed || v.burned) return c.letGo();
   const classic = c.controlStyle === 'classic';
+  if (c.loadMenu !== null) return loadMenuControl(world, c, v, ctl);
   if (ctl.doubleDown) {
     world.events.push({ type: 'grab', x: c.x, y: c.y, tick: world.tick });
     return c.letGo();
   }
   if (ctl.pressedThrow) {
+    // The lorry (GrabPutGet): throw puts in what the clonk carries, or with
+    // empty hands opens the menu of what's in it (ObjectComPutTake).
+    if (v.def.collection) return putOrGet(world, c, v);
     c.letGo();
     return throwIt();
   }
   if (!v.steered) {
+    // Up with it in a doorway pushes it in (ObjectComEnter).
+    if (ctl.pressedUp && !v.def.noPushEnter && enter()) return;
     // Pushing: walk it along.
     if (classic) {
       if (ctl.pressedLeft) c.comDir = { x: -1, y: 0 };
@@ -531,6 +605,47 @@ export function vehicleControl(world: World, c: Clonk, ctl: ControlState, throwI
       return;
     }
   }
+}
+
+/** Throw at a lorry: put in what's carried, or open the Get menu. */
+function putOrGet(world: World, c: Clonk, v: Vehicle): void {
+  c.comDir = STOP;
+  const item = c.carrying;
+  if (!item) {
+    if (v.contents.length) c.loadMenu = 0;
+    else world.say(c.owner, `The ${v.def.name.toLowerCase()} is empty`);
+    return;
+  }
+  if (v.full) return world.say(c.owner, `${v.def.name} is full!`);
+  c.contents.splice(c.contents.indexOf(item), 1);
+  putIn(world, v, item);
+}
+
+/**
+ * The Get menu (C4MN_Get): left/right choose, up or throw takes one into the
+ * clonk's hands, down or dig closes it.
+ */
+function loadMenuControl(world: World, c: Clonk, v: Vehicle, ctl: ControlState): void {
+  const list = loadList(v);
+  c.comDir = STOP;
+  if (!list.length) {
+    c.loadMenu = null;
+    return;
+  }
+  const n = list.length;
+  let i = Math.min(c.loadMenu ?? 0, n - 1);
+  if (ctl.pressedLeft) i = (i + n - 1) % n;
+  if (ctl.pressedRight) i = (i + 1) % n;
+  c.loadMenu = i;
+  if (ctl.pressedUp || ctl.pressedThrow) {
+    c.loadMenu = null;
+    if (c.contents.length >= CLONK.maxContents) return world.say(c.owner, 'Hands full: put it in first');
+    const it = [...v.contents].reverse().find((o) => o.def.id === list[i].id)!;
+    takeOut(v, it);
+    it.container = c;
+    c.contents.push(it);
+    world.events.push({ type: 'collect', clonk: c, item: it, tick: world.tick });
+  } else if (ctl.pressedDown || ctl.pressedDig) c.loadMenu = null;
 }
 
 /** Sailboat ControlUpdate / ControlLeft / ControlRight. */

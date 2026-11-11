@@ -12,6 +12,7 @@ export const SOUND_FILES = [
   'Chop3',
   'Chop4',
   'Click',
+  'Clonk',
   'Crystal1',
   'Crystal2',
   'Crystal3',
