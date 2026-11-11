@@ -4,6 +4,7 @@
 
 import { Container, Graphics, Sprite, type Texture } from 'pixi.js';
 import type { Burnable } from '../game/fire';
+import { OilFlame } from '../game/liquids';
 import type { World } from '../game/world';
 import { Clonk } from '../objects/clonk';
 import { CLONK } from '../objects/defs';
@@ -22,9 +23,12 @@ export const FIRE_PARTICLES = {
 /** WindDrift=35: how strongly the wind takes the flames along. */
 const WIND_DRIFT = 35 - 20;
 
+/** Anything flames are drawn on: burning things, and the flames on burning oil. */
+type Burning = Burnable | OilFlame;
+
 interface Flame {
   sprite: Sprite;
-  owner: Burnable;
+  owner: Burning;
   x: number;
   y: number;
   vx: number;
@@ -40,6 +44,7 @@ interface Puff {
   r: number;
   age: number;
   life: number;
+  color: number;
 }
 
 /** How a fire looks: living things and plants burn in an arch, buildings along the bottom, small objects in a trail. */
@@ -62,7 +67,9 @@ interface Look {
   ydir: number;
 }
 
-function look(o: Burnable): Look | null {
+function look(o: Burning): Look | null {
+  // The original's FLAM is a vehicle: it burns like an object.
+  if (o instanceof OilFlame) return { mode: 'object', x: o.x, y: o.y, w: 16, h: 18, fireTop: 0, con: o.con, stretch: true, r: 0, xdir: o.xdir, ydir: o.ydir };
   if (o instanceof Clonk) {
     if (o.contained) return null;
     return { mode: 'living', x: o.x, y: o.y, w: CLONK.width, h: CLONK.height, fireTop: 0, con: 100, stretch: true, r: 0, xdir: o.xdir, ydir: o.ydir };
@@ -93,7 +100,7 @@ export class FireView {
   private readonly pool: Sprite[] = [];
   private readonly puffs: Puff[] = [];
   /** Where each burning thing was last tick, so its flames move with it (the particles' Attach). */
-  private readonly last = new Map<Burnable, { x: number; y: number }>();
+  private readonly last = new Map<Burning, { x: number; y: number }>();
   private lastTick = -1;
 
   constructor(
@@ -107,13 +114,19 @@ export class FireView {
     const tick = this.world.tick;
     if (tick === this.lastTick) return;
     this.lastTick = tick;
-    const now = new Map<Burnable, Look>();
+    const now = new Map<Burning, Look>();
     for (const o of this.burning()) {
       const l = look(o);
       if (l) now.set(o, l);
     }
     this.move(now);
     for (const [o, l] of now) {
+      if (o instanceof OilFlame) {
+        // Many flames sit side by side on a pool: every other tick is plenty.
+        if ((tick + o.id) % 2 === 0) this.emit(o, l);
+        if ((tick + o.id * 7) % 25 === 0) this.puff(l.x, l.y - 6, 3 + Math.random() * 2);
+        continue;
+      }
       const since = tick - (o.fire?.since ?? tick);
       if (l.mode === 'object' || since % 4 === 0) this.emit(o, l);
       this.smokeFrom(o, l, tick);
@@ -123,8 +136,9 @@ export class FireView {
     this.drawSmoke();
   }
 
-  private *burning(): Generator<Burnable> {
+  private *burning(): Generator<Burning> {
     const w = this.world;
+    yield* w.flames;
     for (const c of w.clonks) if (c.fire) yield c;
     for (const i of w.items) if (i.fire) yield i;
     for (const p of w.plants) if (p.fire) yield p;
@@ -137,7 +151,7 @@ export class FireView {
   }
 
   /** Move and fade the flames (fxStdExec): with their object, in the wind. */
-  private move(now: Map<Burnable, Look>): void {
+  private move(now: Map<Burning, Look>): void {
     for (let i = this.flames.length - 1; i >= 0; i--) {
       const f = this.flames[i];
       const l = now.get(f.owner);
@@ -166,7 +180,7 @@ export class FireView {
   }
 
   /** A new set of flames, half reddish and half bright (FnFxFireTimer). */
-  private emit(o: Burnable, l: Look): void {
+  private emit(o: Burning, l: Look): void {
     const w = Math.max(l.w, 1);
     const h = l.h;
     let yOff = h / 2 - l.fireTop;
@@ -224,7 +238,13 @@ export class FireView {
     const rate = Math.max(Math.trunc((50 * level) / 100), 3);
     const id = 'id' in o ? o.id : 0;
     if ((tick + id * 7) % rate !== 0 && Math.abs(l.xdir) <= 2) return;
-    this.puffs.push({ x: l.x, y: l.y - (l.h * l.con) / 200, r: Math.max(2, level / 6), age: 0, life: 50 + Math.floor(Math.random() * 30) });
+    this.puffs.push({ x: l.x, y: l.y - (l.h * l.con) / 200, r: Math.max(2, level / 6), age: 0, life: 50 + Math.floor(Math.random() * 30), color: 0x404040 });
+  }
+
+  /** A puff of smoke (the original's Smoke): lava boiling water away, acid eating, oil burning. */
+  puff(x: number, y: number, r: number, dark = 0x404040): void {
+    if (this.puffs.length > 400) return;
+    this.puffs.push({ x, y, r, age: 0, life: 40 + Math.floor(Math.random() * 30), color: dark });
   }
 
   private drawSmoke(): void {
@@ -240,7 +260,7 @@ export class FireView {
       p.y -= 0.5;
       p.x += this.wind(p.x, p.y) / 60;
       const t = p.age / p.life;
-      g.circle(p.x, p.y, p.r * (1 + 2 * t)).fill({ color: 0x404040, alpha: 0.4 * (1 - t) });
+      g.circle(p.x, p.y, p.r * (1 + 2 * t)).fill({ color: p.color, alpha: 0.4 * (1 - t) });
     }
   }
 

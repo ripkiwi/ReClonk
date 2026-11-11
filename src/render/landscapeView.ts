@@ -3,6 +3,9 @@ import type { Landscape } from '../landscape/landscape';
 import { MATERIALS, Mat, TEXMAP, TUNNEL } from '../landscape/materials';
 import type { GrayTexture } from './assets';
 
+/** See-through liquids: you can make out what's in water and acid, not in oil or lava. */
+const ALPHA: Partial<Record<Mat, number>> = { [Mat.Water]: 190, [Mat.Acid]: 200, [Mat.Oil]: 240 };
+
 /** Precomputed 256-step colour ramp from a material's dark/base/light colours. */
 function ramp(colors: [number, number, number], brightness: number): Uint8Array {
   const out = new Uint8Array(256 * 3);
@@ -70,7 +73,7 @@ export class LandscapeView {
           else px[o] = px[o + 1] = px[o + 2] = px[o + 3] = 0;
         } else if (m === Mat.Basement) {
           px[o] = px[o + 1] = px[o + 2] = px[o + 3] = 0;
-        } else this.shade(o, x, y, this.textures[tex[i]], this.ramps[m], m === Mat.Water ? 190 : 255);
+        } else this.shade(o, x, y, this.textures[tex[i]], this.ramps[m], ALPHA[m as Mat] ?? 255);
       }
     }
     d.clear();

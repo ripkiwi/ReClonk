@@ -316,8 +316,16 @@ function spin(x: number, y: number, w: number, lim: { min: number; max: number; 
 const ITEM_NAMES: [ItemId, string][] = ITEM_IDS.map((id) => [id, ITEMS[id].name]);
 const FOR_SALE: [ShopId, string, Picture][] = SHOP_IDS.map((id) => [id, id === 'clonk' ? 'Clonk' : ITEMS[id].name, PICTURES[id]]);
 /** Textures a material layer can use: everything but sky and basements. */
-const LAYER_TEXTURES = TEXMAP.filter((t) => t.mat !== Mat.Basement && t.name !== 'Sky' && t.name !== 'Water-Liquid');
-const GROUNDS = ['Earth', 'Earth-Rough', 'Earth-Smooth2', 'Earth-Ridge', 'Sand', 'Sand-Smooth3'];
+const LAYER_TEXTURES = TEXMAP.filter((t) => t.mat !== Mat.Basement && t.name !== 'Sky' && !(t.name.endsWith('-Liquid') && TEXMAP.some((u) => u.name === t.name.replace('-Liquid', '-Smooth'))));
+const GROUNDS = ['Earth', 'Earth-Rough', 'Earth-Smooth2', 'Earth-Ridge', 'Sand', 'Sand-Smooth3', 'Ashes-Rough'];
+/** What fills the lakes below the water level (the original's Liquid in Scenario.txt). */
+const LIQUIDS: [string, string][] = [
+  ['Water-Smooth', 'Water'],
+  ['Oil-Smooth', 'Oil'],
+  ['Acid-Smooth', 'Acid'],
+  ['Lava-Smooth', 'Lava'],
+  ['DuroLava-Smooth', 'Lava that never hardens'],
+];
 
 /** The tabs of the dialog, in the original's order. */
 type Tab = 'game' | 'equipment' | 'landscape' | 'environment' | 'weather';
@@ -537,6 +545,16 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     ...GROUNDS.map((g) => h('option', { value: g }, g.replace('-', ' '))),
   );
   ground.value = GROUNDS.includes(l.material) ? l.material : 'Earth';
+  const liquid = h(
+    'select',
+    { class: 'pp-select', style: at(295, 186, 90), title: 'What fills the lakes below the water level (Landscape page)', onchange: () => {
+      l.liquid = liquid.value;
+      changed();
+    } },
+    ...LIQUIDS.map(([v, name]) => h('option', { value: v }, name)),
+  );
+  // Names like "Water" or "Water-Liquid" pick the matching entry.
+  liquid.value = LIQUIDS.find(([v]) => v.split('-')[0].toLowerCase() === l.liquid.split('-')[0].toLowerCase())?.[0] ?? 'Water-Smooth';
   const inEarthLevel = slider({ x: 205, y: 84, w: 170, color: 'rgb(130,90,40)', label: 'Objects in earth amount:', value: l.inEarthLevel, random: true, show: plain, onChange: changed });
   const vegetationLevel = slider({ x: 5, y: 166, w: 170, color: 'rgb(40,140,40)', label: 'Vegetation amount:', value: l.vegetationLevel, random: true, show: plain, onChange: changed });
   const environmentPage = h(
@@ -554,6 +572,8 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     ),
     h('div', { class: 'pp-label', style: at(205, 176, 80) }, 'Ground:'),
     ground,
+    h('div', { class: 'pp-label', style: at(295, 176, 90) }, 'Liquid:'),
+    liquid,
     ...idList(
       ITEM_NAMES.map(([id, name]) => ({
         name: `${name}: share of the objects in the earth`,
@@ -628,7 +648,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
   ws('Thunderstorms:', 18, 142, 'rgb(90,90,200)', w.lightning, ['none', 'plenty'], (v) => pm(v));
   ws('Wind:', 18, 171, 'rgb(140,140,250)', w.wind, ['left', 'right'], (v) => pm(v));
   ws('Earthquakes:', 205, 17, 'rgb(255,80,50)', w.earthquake, ['none', 'plenty'], (v) => pm(v));
-  ws('Volcanoes:', 205, 46, 'rgb(220,60,30)', w.volcano, ['none', 'plenty'], () => 'need lava, which comes later', 'Volcanoes need lava, which comes later');
+  ws('Volcanoes:', 205, 46, 'rgb(220,60,30)', w.volcano, ['none', 'plenty'], (v) => pm(v));
   ws('Meteorites:', 205, 76, 'rgb(200,30,0)', w.meteorite, ['none', 'plenty'], (v) => pm(v));
   ws('Gravity:', 205, 113, 'rgb(80,80,80)', l.gravity, ['weak', 'strong'], (v) => pm(v, '%'));
   const weatherPage = h(
