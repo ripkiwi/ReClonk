@@ -6,7 +6,7 @@
 
 import { MATERIALS } from '../landscape/materials';
 import { Clonk } from '../objects/clonk';
-import { CLONK } from '../objects/defs';
+import { CLONK, CONSTRUCTION } from '../objects/defs';
 import { FIRE } from '../objects/fire';
 import { Item } from '../objects/item';
 import { Structure } from '../objects/structure';
@@ -24,13 +24,37 @@ export function fireCenter(o: Burnable): { x: number; y: number } {
   if (o instanceof Plant) return o.center;
   if (o instanceof Clonk && o.contained) return { x: o.contained.x, y: o.contained.y };
   if (o instanceof Item && o.container) return fireCenter(o.container as Clonk);
+  if (o instanceof Structure) return { x: o.x, y: structureShape(o).y };
   return { x: o.x, y: o.y };
+}
+
+/**
+ * A building's shape as it burns down (or is still being built): the original
+ * shrinks it from the top and keeps its bottom where it was (C4Shape::Jolt and
+ * the bottom y-adjust in C4Object::DoCon), so its centre sinks towards the
+ * ground. A shape is never less than 18 pixels tall when something checks
+ * what's at a point (C4Object::At, addtop).
+ */
+export function structureShape(s: Structure): { y: number; top: number; height: number } {
+  const d = s.def;
+  const pct = Math.trunc((s.con * 100) / CONSTRUCTION.fullCon);
+  if (pct >= 100) return { y: s.y, top: s.top, height: d.height };
+  const height = Math.trunc((d.height * pct) / 100);
+  const offY = Math.trunc((d.offset.y * pct) / 100);
+  const y = s.top + d.height - height - offY;
+  const addTop = Math.max(18 - height, 0);
+  return { y, top: y + offY - addTop, height: height + addTop };
 }
 
 /** Is the point inside its shape? */
 export function contains(o: Burnable, px: number, py: number): boolean {
   if (o instanceof Plant) return o.contains(px, py);
-  if (o instanceof Structure || o instanceof Vehicle) return o.inside(px, py);
+  if (o instanceof Structure) {
+    if (o.gone || px < o.left || px >= o.left + o.def.width) return false;
+    const sh = structureShape(o);
+    return py >= sh.top && py < sh.top + sh.height;
+  }
+  if (o instanceof Vehicle) return o.inside(px, py);
   const w = o instanceof Clonk ? CLONK.width : o.def.graphic.facet.w;
   const h = o instanceof Clonk ? CLONK.height : o.def.graphic.facet.h;
   const dx = px - (o.x - Math.floor(w / 2));
@@ -232,7 +256,10 @@ function burnedAway(world: World, o: Item | Plant | Structure | Vehicle): void {
  * first inflammable thing its centre is in, one time in that thing's
  * ContactIncinerate (C4GameObjects::CrossCheck, OCF_OnFire at OCF_Inflammable).
  * So a burning tree lights the trees it reaches into, a burning clonk the
- * tree it runs through, and burning wood the clonk standing over it.
+ * tree it runs through, and burning wood the clonk standing over it. A
+ * burning building's centre sinks as it burns down, so once it's low enough
+ * it lights a clonk standing in the middle of it (a hut after a fifth of it
+ * has burned), every time this check comes round.
  */
 function spread(world: World): void {
   const all = [...burnables(world)];
