@@ -3,7 +3,11 @@ import { Rng } from '../core/rng';
 import { Landscape } from '../landscape/landscape';
 import { Mat } from '../landscape/materials';
 import { NO_CONTROL, type Clonk, type ControlState } from '../objects/clonk';
+import { contactCheck } from '../objects/physics';
 import { VEHICLES, type Vehicle, type VehicleId } from '../objects/vehicle';
+import { createProfile } from './profiles';
+import { LOCAL_PLAYER, startRound } from './round';
+import { SCENARIOS } from './scenarios';
 import { comDirTransform, PUSH_SPEED } from './vehicles';
 import type { Weather } from './weather';
 import { World } from './world';
@@ -155,6 +159,21 @@ describe('Balloon', () => {
     expect(b.y).toBeGreaterThan(y);
   });
 
+  it('lifts off the ground with classic keys: one press of up', () => {
+    const world = lakeWorld();
+    const { b, c } = manned(world);
+    c.controlStyle = 'classic';
+    const y0 = b.y;
+    tap(world, { up: true, pressedUp: true });
+    expect(b.comDir).toEqual({ x: 0, y: -1 });
+    run(world, 60);
+    expect(b.y).toBeLessThan(y0 - 30);
+    expect(c.vehicle).toBe(b);
+    // Up again in the air keeps rising; down stops it.
+    tap(world, { down: true, pressedDown: true });
+    expect(b.comDir).toEqual({ x: 0, y: 0 });
+  });
+
   it('drifts with the wind in the air', () => {
     const world = lakeWorld(-40);
     const { b } = manned(world);
@@ -247,5 +266,58 @@ describe('Buying vehicles', () => {
     run(world, 30);
     expect(Math.abs(b.x - hut.exitPoint().x)).toBeLessThan(3);
     expect(b.y + 21).toBeLessThan(GROUND);
+  });
+
+  it('come out above the ground when it is higher beside the door, and fly off', () => {
+    const world = lakeWorld();
+    const hut = world.addStructure('hut', 60, GROUND - 25, 0);
+    // A hill left of the hut, where the blimp's corner reaches.
+    for (let y = GROUND - 60; y < GROUND; y++) for (let x = 0; x < 26; x++) world.land.set(x, y, Mat.Earth);
+    const c = clonkAt(world, hut.exitPoint().x);
+    tap(world, { up: true, pressedUp: true });
+    tap(world, { up: true, pressedUp: true });
+    c.menu = world.shopList(0).indexOf('blimp');
+    tap(world, { pressedThrow: true });
+    const b = world.vehicles[0];
+    expect(b.def.id).toBe('blimp');
+    expect(contactCheck(world.land, b.vertices, b.x, b.y).count).toBe(0);
+    tap(world, { down: true, pressedDown: true });
+    tap(world, { down: true, pressedDown: true });
+    expect(c.contained).toBeNull();
+    run(world, 20);
+    grab(world, c);
+    const y0 = b.y;
+    run(world, 40, { up: true });
+    expect(b.y).toBeLessThan(y0 - 20);
+  });
+
+  it('in Gold Mine: the pilot stays aboard flying off from the hut, past the edge of its basement', () => {
+    // Seed 10's hut stands on a basement a little higher than the ground right of it.
+    const round = startRound(SCENARIOS[0], createProfile({ profiles: [], activeId: null }, 'K'), ['A'], 10);
+    const world = round.world;
+    world.players.get(LOCAL_PLAYER)!.wealth = 1000;
+    const hut = world.structures.find((s) => s.base === LOCAL_PLAYER)!;
+    const c = world.crewOf(LOCAL_PLAYER)[0];
+    for (const id of ['balloon', 'blimp'] as const) {
+      c.contained = hut;
+      c.menu = world.shopList(LOCAL_PLAYER).indexOf(id);
+      tap(world, { pressedThrow: true });
+      const v = world.vehicles.at(-1)!;
+      expect(v.def.id).toBe(id);
+      tap(world, { down: true, pressedDown: true });
+      tap(world, { down: true, pressedDown: true });
+      run(world, 20);
+      grab(world, c);
+      run(world, 60, { right: true });
+      run(world, 60, { left: true });
+      const y0 = v.y;
+      run(world, 40, { up: true });
+      expect(v.y).toBeLessThan(y0 - 20);
+      expect(c.vehicle).toBe(v);
+      expect(Math.abs(c.x - v.x)).toBeLessThan(25);
+      // Let go and fly the next one.
+      tap(world, { down: true, pressedDown: true, doubleDown: true });
+      world.removeVehicle(v);
+    }
   });
 });
