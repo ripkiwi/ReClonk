@@ -7,6 +7,8 @@ export interface KeyLayout {
   down: string[];
   throw: string[];
   dig: string[];
+  /** Open the spell menu (sorcerers). */
+  magic: string[];
   /** Crew cursor: previous and next clonk, and the whole crew. */
   crewPrev: string[];
   crewNext: string[];
@@ -35,6 +37,7 @@ export const LAYOUTS: Record<ControlStyle, KeyLayout> = {
     down: ['ArrowDown', 'KeyS'],
     throw: ['KeyE'],
     dig: ['KeyQ'],
+    magic: ['KeyF'],
     crewPrev: [],
     crewNext: ['Tab'],
     crewAll: ['KeyR'],
@@ -52,6 +55,7 @@ export const LAYOUTS: Record<ControlStyle, KeyLayout> = {
     down: ['KeyX', 'ArrowDown'],
     throw: ['KeyA', 'Space'],
     dig: ['KeyD', 'Enter'],
+    magic: ['KeyF'],
     crewPrev: ['KeyQ'],
     crewNext: ['KeyE', 'Tab'],
     crewAll: ['KeyW'],
@@ -156,6 +160,7 @@ export class Keyboard {
       pressedRight: this.any(k.right, p),
       pressedThrow: this.any(k.throw, p),
       pressedDig: dig,
+      pressedMagic: this.any(k.magic, p),
       pressedUse: dig && tick - this.lastDig <= DOUBLE_PRESS_TICKS,
       doubleDown: down && tick - this.lastDown <= DOUBLE_PRESS_TICKS,
       crew: this.crew,

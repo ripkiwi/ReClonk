@@ -61,6 +61,34 @@ describe('Clonk movement', () => {
     expect(c.action.name).toBe('Walk');
   });
 
+  /** Run right, then press up while holding left after `brakeTicks`; returns height, distance and facing in the air. */
+  function reverseJump(brakeTicks: number) {
+    const world = flatWorld(400);
+    const c = world.addClonk(200, 70, 0);
+    run(world, 30);
+    run(world, 20, { right: true });
+    run(world, brakeTicks, { left: true });
+    const x0 = c.x;
+    press(world, { left: true, up: true, pressedUp: true }, { left: true });
+    const facing = c.dir;
+    let minY = c.y;
+    for (let i = 0; i < 60 && (i < 2 || c.action.name !== 'Walk'); i++) {
+      run(world, 1, { left: true });
+      minY = Math.min(minY, c.y);
+    }
+    return { height: 70 - minY, dist: x0 - c.x, facing };
+  }
+
+  it('backjumps when reversing out of a run: a bit higher, a bit shorter, still facing forward', () => {
+    const back = reverseJump(0);
+    const turned = reverseJump(20); // braked and turned round first: a normal jump
+    expect(back.facing).toBe(1);
+    expect(turned.facing).toBe(-1);
+    expect(back.height).toBeGreaterThan(turned.height + 3);
+    expect(back.dist).toBeGreaterThan(0);
+    expect(back.dist).toBeLessThan(turned.dist);
+  });
+
   it('climbs a wall it walks into', () => {
     const world = flatWorld();
     for (let y = 0; y < 80; y++) for (let x = 120; x < 130; x++) world.land.set(x, y, Mat.Granite);

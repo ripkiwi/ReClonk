@@ -29,10 +29,12 @@ const HURTS = ['Hurt1', 'Hurt2', 'Hurt3'] as const;
 const KIMES = ['Kime1', 'Kime2', 'Kime3'] as const;
 const PUNCHES = ['Punch1', 'Punch2', 'Punch3'] as const;
 const THUNDER = ['Thunder1', 'Thunder2', 'Thunder3'] as const;
+const LAVA = ['Lava1', 'Lava2', 'Lava3'] as const;
 const CHOPS = ['Chop1', 'Chop2', 'Chop3', 'Chop4'] as const;
 const TREE_DOWN = ['TreeDown1', 'TreeDown2', 'TreeDown3'] as const;
 const ROCK_HITS = ['RockHit1', 'RockHit2', 'RockHit3'] as const;
 const WOOD_HITS = ['WoodHit1', 'WoodHit2', 'WoodHit3'] as const;
+const CRYSTAL_HITS = ['Crystal1', 'Crystal2', 'Crystal3'] as const;
 /** The original's DeathAnnounce messages. */
 const DEATH_MESSAGES = ['%s is dead.', '%s has\ndeceased.', '%s\nrests in peace.'];
 /** How long the round goes on after it's decided before the results show: 3.5 seconds. */
@@ -89,7 +91,7 @@ export class GameScreen {
       onMenu: () => this.pause(),
       // Click picks a clonk, Shift-click adds it to the group or takes it out.
       onCrew: (index, add) => this.keyboard.command(add ? { type: 'toggle', index } : { type: 'pick', index }),
-    });
+    }, (owner) => colors.get(owner) ?? color);
     this.baseHud = new BaseHud(round.world, assets, LOCAL_PLAYER, style, false, color, layout);
     app.stage.addChild(this.baseHud.root);
     this.announce = h('div', { class: 'announce' });
@@ -152,10 +154,13 @@ export class GameScreen {
     // Quieter the further away from the clonk it happens.
     const volumeAt = (x: number, y: number): number =>
       near ? Math.max(0.15, 1 - Math.hypot(x - near.x, y - near.y) / 500) : 1;
+    // Hundreds of pixels can react at once: a couple of sounds a tick is enough.
+    let hissed = 0;
+    let sizzled = 0;
     for (const e of events) {
       if (e.type === 'explosion') this.env.sounds.play(BLASTS[Math.floor(Math.random() * BLASTS.length)], volumeAt(e.x, e.y));
       else if (e.type === 'collect' && e.clonk === near) this.env.sounds.play('Grab', 0.8);
-      else if (e.type === 'promotion') this.env.sounds.play('Trumpet');
+      else if (e.type === 'promotion' || e.type === 'newBase') this.env.sounds.play('Trumpet');
       else if (e.type === 'recruit') this.env.sounds.play('Click', 0.9);
       // Like the original clonk script: a swing sometimes grunts and whooshes,
       // a clonk who takes a blow sometimes cries out, and dying always makes a sound.
@@ -186,9 +191,24 @@ export class GameScreen {
       // Big things catch fire with a whoosh (FnFxFireStart: shape over 500), and water hisses as it puts a fire out.
       else if (e.type === 'inflame' && e.loud) this.env.sounds.play('Inflame', volumeAt(e.x, e.y));
       else if (e.type === 'extinguish' && e.hiss) this.env.sounds.play('Pshshsh', volumeAt(e.x, e.y));
+      // Spells sound like their scripts: most go off with Magic1, the wind howls, lightning thunders by itself.
+      else if (e.type === 'magic') {
+        const v = volumeAt(e.clonk.x, e.clonk.y);
+        if (e.spell === 'wind') this.env.sounds.play('Wind2', v);
+        else if (e.spell === 'heal') this.env.sounds.play('Energy', v);
+        else if (e.spell !== 'lightning') this.env.sounds.play('Magic1', v);
+      } else if (e.type === 'charge') this.env.sounds.play('Electric', volumeAt(e.clonk.x, e.clonk.y) * 0.8);
+      // Lava boiling water away hisses one time in three, acid sizzles one time in 20 (C4Material.cpp's reactions).
+      else if (e.type === 'poof' && Math.random() < 1 / 3 && hissed < 2) {
+        hissed++;
+        this.env.sounds.play('Pshshsh', volumeAt(e.x, e.y) * 0.6);
+      } else if (e.type === 'corrode' && Math.random() < 1 / 20 && sizzled < 1) {
+        sizzled++;
+        this.env.sounds.play('Corrode', volumeAt(e.x, e.y) * 0.6);
+      } else if (e.type === 'volcano') this.env.sounds.play(Math.random() < 0.5 ? 'VolcanoCast' : pick(LAVA), volumeAt(e.x, e.y));
       else if (e.type === 'itemHit') {
         const id = e.item.def.id;
-        const set = id === 'wood' ? WOOD_HITS : id === 'rock' || id === 'gold' || e.item.def.fuse ? ROCK_HITS : null;
+        const set = id === 'crystal' ? CRYSTAL_HITS : id === 'wood' ? WOOD_HITS : id === 'rock' || id === 'gold' || e.item.def.fuse ? ROCK_HITS : null;
         if (set) this.env.sounds.play(pick(set), volumeAt(e.item.x, e.item.y) * 0.5);
       }
     }
@@ -200,6 +220,8 @@ export class GameScreen {
     let fire = 0;
     for (const p of this.round.world.plants) if (p.fire) fire = Math.max(fire, volumeAt(p.x, p.bottom));
     for (const st of this.round.world.structures) if (st.fire) fire = Math.max(fire, volumeAt(st.x, st.y));
+    // Burning oil crackles too (Flame.c4d's Burn action sound).
+    for (const f of this.round.world.flames) fire = Math.max(fire, volumeAt(f.x, f.y));
     this.env.sounds.loop('Fire', fire * 0.7);
     // The blimp's propeller hums while it flies (the FloatPropel and Turn actions' Sound=Propel).
     let propel = 0;

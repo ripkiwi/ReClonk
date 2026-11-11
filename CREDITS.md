@@ -18,6 +18,7 @@ shaped many of our childhoods. None of it would exist without the people below.
 ## Graphics, sounds, music and font
 
 - The clonk, rock, gold, flint, flag, construction kit, wooden hut, elevator, guard tower and basement sprites, the sailboat, balloon and blimp, the Melee goal picture, material textures, sky, menu backgrounds
+- The clonk, sorcerer, crystal, spell and rule pictures, rock, gold, flint, flag, construction kit, wooden hut, elevator, guard tower and basement sprites, the Melee goal picture, material textures, sky, menu backgrounds
   and buttons, clonk portraits and rank symbols are the original Clonk Rage graphics by **RedWolf Design**,
   used under CC BY-NC 4.0 via LegacyClonk's content release.
 - The main menu picture is by **Matthes Bender** and **Christopher Graulich**.

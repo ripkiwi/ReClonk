@@ -1,7 +1,7 @@
 import { rankName } from '../game/ranks';
 import type { CrewCursor, PlayerState } from '../game/world';
 import type { Clonk } from '../objects/clonk';
-import { CLONK, ENERGY_UNIT, ITEMS } from '../objects/defs';
+import { CLONK, ENERGY_UNIT, ITEMS, MAGIC_UNIT } from '../objects/defs';
 import type { GameAssets } from '../render/assets';
 import { drawItem, expProgress, h, portrait, rankBadge } from './dom';
 
@@ -37,6 +37,10 @@ export class Hud {
   private readonly slot: HTMLCanvasElement;
   private readonly energy: HTMLElement;
   private readonly energyText: HTMLElement;
+  /** Magic energy, shown for sorcerers only. */
+  private readonly magicRow: HTMLElement;
+  private readonly magic: HTMLElement;
+  private readonly magicText: HTMLElement;
   private readonly wealth: HTMLElement;
   private readonly wealthText: HTMLElement;
   private readonly help: HTMLElement;
@@ -49,6 +53,7 @@ export class Hud {
     item: '' as string | undefined,
     clonk: null as Clonk | null,
     energy: -1,
+    magic: -2,
     wealth: -1,
   };
 
@@ -58,6 +63,8 @@ export class Hud {
     /** Key hints to show along the bottom, or null to leave them out (the default, see Settings). */
     keyHelp: readonly [keys: string, action: string][] | null,
     private readonly actions: HudActions,
+    /** A player's colour, for owner-coloured things in hand (flags). */
+    private readonly colorOf: (owner: number) => number = () => 0xffffff,
   ) {
     this.portrait = portrait(1);
     this.name = h('div', { class: 'crew-name' });
@@ -67,6 +74,9 @@ export class Hud {
     this.slot = h('canvas', { width: 32, height: 32 });
     this.energy = h('div');
     this.energyText = h('span');
+    this.magic = h('div');
+    this.magicText = h('span');
+    this.magicRow = h('div', { class: 'hud-energy hud-magic', title: 'Magic energy' }, h('div', { class: 'bar' }, this.magic), this.magicText);
     this.wealthText = h('span');
     const coin = h('canvas', { width: 16, height: 16 });
     drawItem(coin, ITEMS.gold, assets);
@@ -89,6 +99,7 @@ export class Hud {
           h('div', { class: 'exp' }, this.fill),
           this.expText,
           h('div', { class: 'hud-energy', title: 'Energy' }, h('div', { class: 'bar' }, this.energy), this.energyText),
+          this.magicRow,
         ),
         h('div', { class: 'hud-side' }, h('div', { class: 'hud-slot', title: 'Carrying' }, this.slot), this.wealth),
       ),
@@ -107,7 +118,7 @@ export class Hud {
     const info = c?.info;
     if (c !== s.clonk) {
       s.clonk = c ?? null;
-      this.portrait.src = portrait(info?.portrait ?? 1).src;
+      this.portrait.src = portrait(info?.portrait ?? 1, undefined, c?.kind).src;
       this.name.textContent = info?.name ?? 'Clonk';
       s.rank = s.exp = -1;
     }
@@ -131,16 +142,27 @@ export class Hud {
       this.energy.classList.toggle('low', frac <= 0.3);
       this.energyText.textContent = c && !c.alive ? 'dead' : String(Math.ceil(energy / ENERGY_UNIT));
     }
+    const magic = c?.maxMagic ? c.magicEnergy : -1;
+    if (magic !== s.magic) {
+      s.magic = magic;
+      this.magicRow.style.display = magic < 0 ? 'none' : '';
+      if (c && magic >= 0) {
+        this.magic.style.width = `${((magic / c.maxMagic) * 100).toFixed(1)}%`;
+        this.magicText.textContent = String(Math.floor(magic / MAGIC_UNIT));
+      }
+    }
     const wealth = player ? player.wealth : -1;
     if (wealth !== s.wealth) {
       s.wealth = wealth;
       this.wealth.style.display = player ? '' : 'none';
       this.wealthText.textContent = String(wealth);
     }
-    const item = c?.carrying?.def.id;
+    const carried = c?.carrying;
+    // A flag shows its owner's colour, so a stolen one looks different.
+    const item = carried ? `${carried.def.id}:${carried.owner}` : undefined;
     if (item !== s.item) {
       s.item = item;
-      drawItem(this.slot, c?.carrying?.def, this.assets);
+      drawItem(this.slot, carried?.def, this.assets, carried ? this.colorOf(carried.owner) : undefined);
       this.slot.parentElement!.title = c?.carrying ? `Carrying ${c.carrying.def.name}` : 'Empty hands';
     }
   }
@@ -169,14 +191,14 @@ export class Hud {
       const info = c.info;
       const state = !c.alive ? 'dead' : cursor?.leader === c ? 'leader' : cursor?.selected.has(c) ? 'selected' : '';
       const energy = c.alive ? Math.ceil((c.energy / c.maxEnergy) * 20) : 0;
-      const key = `${info?.memberId}:${info?.rank}:${state}:${energy}:${!!c.contained}`;
+      const key = `${info?.memberId}:${info?.rank}:${state}:${energy}:${!!c.contained}:${c.kind}`;
       if (key === cell.key) return;
       cell.key = key;
-      cell.img.src = portrait(info?.portrait ?? 1).src;
+      cell.img.src = portrait(info?.portrait ?? 1, undefined, c.kind).src;
       cell.el.className = `crew-cell ${state}`;
       cell.energy.style.width = `${energy * 5}%`;
       cell.energy.classList.toggle('low', energy <= 6);
-      const name = info ? `${rankName(info.rank)} ${info.name}` : 'Clonk';
+      const name = (info ? `${rankName(info.rank)} ${info.name}` : c.def.name) + (c.kind === 'sorcerer' ? ' (sorcerer)' : '');
       const where = !c.alive ? ' (dead)' : c.contained ? ` (in the ${c.contained.def.name})` : '';
       cell.el.title = `${name}${where}\nClick to control, Shift-click to add to the group`;
     });

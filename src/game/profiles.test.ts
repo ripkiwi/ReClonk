@@ -7,6 +7,7 @@ import {
   deleteProfile,
   hireClonk,
   idleMember,
+  kindOf,
   loadProfiles,
   ROUND_BONUS,
   saveProfiles,
@@ -115,5 +116,23 @@ describe('profiles', () => {
     expect(b.rank).toBe(0);
     expect(p.rounds).toBe(1);
     expect(promotions).toEqual([{ member: a, from: 0, to: 1 }]);
+  });
+});
+
+describe('sorcerers in the crew', () => {
+  it('a sorcerer is hired as its own kind and only goes where a sorcerer is asked for', () => {
+    const p = withCrew(2);
+    const s = hireClonk(p, ['Merlin'], new Rng(3), 'sorcerer');
+    expect(s.kind).toBe('sorcerer');
+    expect(s.name).toBe('Merlin');
+    expect(kindOf(s)).toBe('sorcerer');
+    expect(kindOf(p.crew[0])).toBe('clonk');
+    // Older saves have no kind: ordinary clonks.
+    expect(p.crew[0].kind).toBeUndefined();
+    s.experience = 9999;
+    expect(crewForRound(p, 5).map(kindOf)).toEqual(['clonk', 'clonk']);
+    expect(crewForRound(p, 1, 1).map(kindOf)).toEqual(['clonk', 'sorcerer']);
+    expect(idleMember(p, new Set(), 'sorcerer')).toBe(s);
+    expect(idleMember(p, new Set([s.id]), 'sorcerer')).toBeUndefined();
   });
 });

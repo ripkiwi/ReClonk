@@ -80,7 +80,7 @@ describe('Scenario settings', () => {
           mapWidth: { std: 9999, rnd: 0, min: 64, max: 250 },
           mapZoom: { std: 1, rnd: 0, min: 0, max: 99 },
           amplitude: { std: 50, rnd: -3, min: 60, max: 40 },
-          layers: [{ name: 'Gold', count: 500 }, { name: 'Lava', count: 5 }, { name: 'Rock-Ridge', count: 3 }],
+          layers: [{ name: 'Gold', count: 500 }, { name: 'Cheese', count: 5 }, { name: 'Rock-Ridge', count: 3 }],
           inEarth: { flint: 1e6, rock: -3, gold: 2 },
           material: 'Cheese',
         } as never,
@@ -141,6 +141,6 @@ describe('Scenario settings', () => {
   it('the originals are untouched by all of this', () => {
     expect(SCENARIOS.map((s) => s.id)).toEqual(['goldmine', 'minor-melee']);
     expect(scenarioById('goldmine')!.base).toEqual(DEFAULT_BASE);
-    expect(DEFAULT_BASE).toEqual({ wealth: 50, stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, boat: 2, balloon: 1, blimp: 1, clonk: 3 } });
+    expect(DEFAULT_BASE).toEqual({ wealth: 50, stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, boat: 2, balloon: 1, blimp: 1, clonk: 3, crystal: 5, sorcerer: 1 } });
   });
 });

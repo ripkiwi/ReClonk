@@ -69,6 +69,16 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
 - **More flints, like the original:** the T-flint lights its fuse when it lands (or on a double dig in your hands)
   and goes off 60 ticks later, wherever it is, even in your hands; the super T-flint burns 120 ticks for a
   bigger blast. Super-flints (radius 30) and tera-flints (40) explode on impact like flints (18).
+- **The sorcerer and its spells, like the original:** a second kind of clonk (50 gold, weaker in a fight) with a
+  blue magic energy bar, empty to begin with. It fills from crystals (10 points each, 5 gold in the shop; the
+  sorcerer turns one into energy as soon as it holds it) and from lightning that strikes it. The magic key (`F`)
+  opens the spell menu: Wind (8 points; with a flint in hand it hurls a burning log), Magic Bridge (10), Lower
+  and Raise Gravity (11), Earthquake (12), Extinguish (15), Lightning (15), Heal (19), Fire Fist (21) and Meteor
+  Hail (50). A spell only costs energy if it worked. Scenario Properties choose how many sorcerers the crew
+  starts with and which spells they know.
+- **Rules, like the original's Scenario Properties:** Construction Material (bring a building's wood and rock to
+  its site), Flag removeable (an enemy who reaches your flag takes it off the building), Capture The Flag (you
+  are out when your flag is sold or destroyed), Loss of Base and Kill The Captain.
 - **Trees, bushes and grass:** Gold Mine and Minor Melee get the original's trees (Vegetation and
   VegetationLevel, now on the Environment tab). Trees sway in strong wind, grow slowly (15 minutes for the big
   one), and now and then seed a new one nearby, up to 40 in an area. Double dig at a tree to chop it: 10
@@ -139,6 +149,7 @@ Each player picks a control style in the player screen.
 | `Q` | Dig the way you hold (straight down if you hold nothing). The clonk keeps digging on its own, so you can switch to another clonk; hold `A`/`D`/`W`/`S` to steer, `Q` again stops |
 | `Q` `Q` (quickly) | Use what you carry (a construction kit opens the build menu: `←`/`→` choose, `↑`/`E` build, `↓` close) |
 | `E` | Throw the carried item (drop it while climbing or swimming) |
+| `F` | Sorcerers: open the spell menu (`←`/`→` choose, `↑`/`E` cast, `↓`/`F` close) |
 | `Tab` / `Shift`+`Tab` | Next / previous clonk |
 | `1` to `9` | Pick a clonk by its place in the crew bar |
 | `R` | Select the whole crew |
@@ -156,6 +167,7 @@ Each player picks a control style in the player screen.
 | `X` `X` (quickly) | At a construction site: build. In an elevator case, guard tower or vehicle: hold on to work it; at a vehicle again: let go |
 | Holding a vehicle | Boat on land: `Z`/`C` push it, `X` stop. Sailing: `Z`/`C` steer, `X` stop, `S` `S` raise the sail. Balloon: `S` up, `X` down (each press the other way stops). Blimp: each press turns its course one step that way |
 | `A` or `Space` | Throw |
+| `F` | Sorcerers: open the spell menu (`Z`/`C` choose, `S`/`A` cast, `X`/`F` close) |
 | `Q` / `E` (or `Tab`), `1` to `9` | Previous / next clonk, pick a clonk (the original's crew cursor) |
 | `W` | Select the whole crew; `X` `X` gathers everyone at the leader |
 | In a building | `X`/`↓` leave · in your base: `S`/`↑` buy menu (`Z`/`C` or `←`/`→` choose, `S`/`↑`/`A` buy, `X`/`↓` close), `A` sell what you carry |

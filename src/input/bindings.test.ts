@@ -55,6 +55,18 @@ describe('Key bindings', () => {
     expect(layoutFor(s, 'classic').dig).toEqual(LAYOUTS.classic.dig);
   });
 
+  it('the magic key is F, and a save from before it keeps the player’s own F', () => {
+    expect(LAYOUTS.jumpAndRun.magic).toEqual(['KeyF']);
+    expect(LAYOUTS.classic.magic).toEqual(['KeyF']);
+    const store = memory();
+    const { magic: _, ...old } = LAYOUTS.classic;
+    store.setItem('reclonk.settings.v1', JSON.stringify({ keys: { classic: old, jumpAndRun: { ...LAYOUTS.jumpAndRun, magic: undefined, throw: ['KeyF'] } } }));
+    const s = loadSettings(store);
+    expect(layoutFor(s, 'classic').magic).toEqual(['KeyF']);
+    expect(layoutFor(s, 'jumpAndRun').throw).toEqual(['KeyF']);
+    expect(layoutFor(s, 'jumpAndRun').magic).toEqual([]);
+  });
+
   it('the help text follows the bindings', () => {
     const s = defaultSettings();
     bindKey(s, 'jumpAndRun', 'dig', 'KeyF');

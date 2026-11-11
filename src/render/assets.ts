@@ -1,4 +1,5 @@
 import { Assets, Rectangle, Texture } from 'pixi.js';
+import { CLONK_KINDS, type ClonkKind } from '../objects/defs';
 
 /** Where the original Clonk graphics live (CC BY-NC, see public/classic/README.md). */
 export const CONTENT_BASE = `${import.meta.env.BASE_URL}classic/`;
@@ -36,6 +37,8 @@ export interface GameAssets {
   sky: Texture;
   clonk: Texture;
   clonkOverlay: Texture;
+  /** The sprite sheet and shirt overlay of every kind of clonk. */
+  clonks: Record<ClonkKind, { body: Texture; overlay: Texture }>;
   items: Record<string, Texture>;
 }
 
@@ -47,20 +50,22 @@ async function loadTexture(file: string): Promise<Texture> {
 
 export async function loadAssets(materialTextures: string[], itemFiles: string[]): Promise<GameAssets> {
   const unique = [...new Set(materialTextures)];
-  const [mats, sky, clonk, clonkOverlay, items] = await Promise.all([
+  const kinds = Object.keys(CLONK_KINDS) as ClonkKind[];
+  const [mats, sky, sheets, items] = await Promise.all([
     Promise.all(unique.map((t) => loadGray(`${CONTENT_BASE}materials/${t}.png`))),
     loadTexture('sky/Clouds1.jpg'),
-    loadTexture('clonk/Graphics.png'),
-    loadTexture('clonk/Overlay.png'),
+    Promise.all(kinds.map(async (k) => ({ body: await loadTexture(CLONK_KINDS[k].graphic.file), overlay: await loadTexture(CLONK_KINDS[k].graphic.overlay) }))),
     Promise.all(itemFiles.map(loadTexture)),
   ]);
+  const clonks = Object.fromEntries(kinds.map((k, i) => [k, sheets[i]])) as GameAssets['clonks'];
   sky.source.scaleMode = 'linear';
   sky.source.addressMode = 'repeat';
   return {
     materials: Object.fromEntries(unique.map((t, i) => [t, mats[i]])),
     sky,
-    clonk,
-    clonkOverlay,
+    clonk: clonks.clonk.body,
+    clonkOverlay: clonks.clonk.overlay,
+    clonks,
     items: Object.fromEntries(itemFiles.map((f, i) => [f, items[i]])),
   };
 }

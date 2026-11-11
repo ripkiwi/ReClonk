@@ -7,6 +7,7 @@ import type { Rng } from '../core/rng';
 import { evaluate, sval, type SVal } from '../landscape/mapCreator';
 import { LIQUID, MATERIALS, Mat } from '../landscape/materials';
 import { CNAT } from '../objects/physics';
+import { launchVolcano, stepVolcanoes, type Volcano } from './volcano';
 import type { World } from './world';
 
 /** The Weather page of a scenario: the original's [Weather] and [Disasters] sections. */
@@ -24,7 +25,7 @@ export interface WeatherDef {
   /** Wind from -100 (to the left) to 100 (to the right); a new wind every 1000 ticks. */
   wind: SVal;
   earthquake: SVal;
-  /** Volcanoes need lava, which isn't in the game yet: kept for later. */
+  /** Chance of a volcano breaking out of the bottom of the map, every 10 ticks one time in 60 (Disasters Volcano). */
   volcano: SVal;
   meteorite: SVal;
   /**
@@ -117,6 +118,7 @@ export class Weather {
   readonly clouds: Cloud[] = [];
   bolts: Bolt[] = [];
   quakes: Quake[] = [];
+  volcanoes: Volcano[] = [];
   /** How bright lightning lights up the world (lgt_enlightment), and the brightness shown: 0 to 255. */
   private enlightenment = 0;
   flash = 0;
@@ -191,11 +193,18 @@ export class Weather {
       if (this.earthquakeLevel && !rng.int(50) && rng.int(100) < this.earthquakeLevel) {
         this.launchEarthquake(rng.int(land.width), rng.int(land.height));
       }
+      // Volcanoes break out of the bottom of the map, wider on taller maps.
+      if (this.volcanoLevel && !rng.int(60) && rng.int(100) < this.volcanoLevel) {
+        const size = Math.max(10, Math.min(60, Math.trunc((15 * land.height) / 500) + rng.int(10)));
+        const v = launchVolcano(world, rng, Mat.Lava, rng.int(land.width), land.height - 1, size);
+        if (v) this.volcanoes.push(v);
+      }
     }
 
     this.rain(world);
     this.stepBolts(world);
     this.stepQuakes(world);
+    if (this.volcanoes.length) this.volcanoes = stepVolcanoes(world, rng, this.volcanoes);
     land.scanTemperature(this.temperature);
   }
 

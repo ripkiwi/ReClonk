@@ -1,6 +1,7 @@
 import { ColorMatrixFilter, Container, Graphics, Sprite, Text, TilingSprite } from 'pixi.js';
 import { PLAYER_COLORS } from '../game/profiles';
 import { rankName } from '../game/ranks';
+import { MAGIC, type Bridge } from '../game/magic';
 import { Weather } from '../game/weather';
 import type { CrewCursor, World, WorldEvent } from '../game/world';
 import { MATERIALS, Mat } from '../landscape/materials';
@@ -66,6 +67,9 @@ interface Particle {
   gravity?: number;
 }
 
+/** Graphics of things spells make. The bridge's file holds the four looks of a segment: alone, first, middle, last. */
+export const MAGIC_SPRITES = { bridge: 'magic/BridgeSegment.png' };
+
 /** How long a message above a clonk stays up, in ticks. */
 const MESSAGE_TICKS = 36 * 4;
 
@@ -122,6 +126,8 @@ export class WorldView {
   private readonly landscape: LandscapeView;
   private readonly clonkSprites = new Map<Clonk, { body: Sprite; shirt: Sprite }>();
   private readonly itemSprites = new Map<Item, Sprite>();
+  /** The owner-coloured cloth of loose flags, drawn over their item sprite. */
+  private readonly itemOverlays = new Map<Item, Sprite>();
   private readonly structureSprites = new Map<Structure, StructureSprites>();
   private readonly vehicleSprites = new Map<Vehicle, VehicleSprites>();
   /** Vehicles sit in front of buildings and behind clonks... */
@@ -131,6 +137,7 @@ export class WorldView {
   /** Trees and bushes: a holder at the root that tilts when it falls, and the picture in it. */
   private readonly plantSprites = new Map<Plant, { holder: Container; body: Sprite; burned: boolean | null }>();
   private readonly grassSprites = new Map<Grass, Sprite>();
+  private readonly bridgeSprites = new Map<Bridge, Container>();
   /** Grass sits behind trees, trees behind buildings (the original's object order). */
   private readonly grassLayer = new Container();
   private readonly plantLayer = new Container();
@@ -231,7 +238,7 @@ export class WorldView {
     this.updateItems();
     this.updateVehicles();
     this.updateClonks();
-    this.layer.addChild(this.vehicleFront, this.marks);
+    this.updateBridges();
     this.updateMarks(cursor);
     this.updatePxs(viewW, viewH);
     this.fire.update();
@@ -280,7 +287,7 @@ export class WorldView {
       const p = list[i];
       if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
       if (p.mat === Mat.Snow) snow = true;
-      else if (Math.abs(p.xdir) + Math.abs(p.ydir) >= 1) {
+      else if (p.mat === Mat.Water && Math.abs(p.xdir) + Math.abs(p.ydir) >= 1) {
         g.moveTo(p.x - p.xdir, p.y - p.ydir).lineTo(p.x, p.y);
         rain = true;
       }
@@ -289,7 +296,13 @@ export class WorldView {
     for (let i = 0; i < list.length; i++) {
       const p = list[i];
       if (p.mat === Mat.Snow || p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
-      if (Math.abs(p.xdir) + Math.abs(p.ydir) < 1) g.rect(Math.floor(p.x), Math.floor(p.y), 1, 1).fill(MATERIALS[p.mat].colors[2]);
+      const fast = Math.abs(p.xdir) + Math.abs(p.ydir) >= 1;
+      if (p.mat === Mat.Water && fast) continue;
+      // Flying lava glows (Lava.c4m PXSGfx, 6 px); other drops show their own colour.
+      if (p.mat === Mat.Lava || p.mat === Mat.DuroLava) {
+        g.circle(p.x, p.y, 3).fill({ color: 0xff8010, alpha: 0.35 });
+        g.circle(p.x, p.y, 1.4).fill(0xfff060);
+      } else g.rect(Math.floor(p.x), Math.floor(p.y), fast ? 2 : 1, fast ? 2 : 1).fill(MATERIALS[p.mat].colors[2]);
     }
     if (!snow) return;
     for (let i = 0; i < list.length; i++) {
@@ -324,10 +337,41 @@ export class WorldView {
       for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
       g.stroke({ color: 0xffffff, width: 1, alpha: 0.95 });
     }
+    // Bolts a sorcerer cast: blue light with a white core (LightningSpark).
+    const magic = this.world.magic;
+    for (const sh of magic.shots) {
+      const pts = sh.points;
+      if (pts.length < 2) continue;
+      const fade = sh.glow >= 0 ? Math.min(1, sh.glow / 10) : 1;
+      for (const [color, width, alpha] of [[0x0064ff, 4, 0.45], [0xfafaff, 1.2, 0.95]] as const) {
+        g.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x + Math.random() - 0.5, pts[i].y + Math.random() - 0.5);
+        g.stroke({ color, width, alpha: alpha * fade });
+      }
+    }
+    for (const f of magic.firetails) {
+      g.circle(f.x, f.y, 4).fill({ color: 0xff7010, alpha: 0.85 });
+      g.circle(f.x, f.y, 2).fill({ color: 0xffe080, alpha: 0.95 });
+    }
     // New smoke and sparks once per tick for every meteor.
     const tick = this.world.tick;
     if (tick !== this.lastTick) {
       this.lastTick = tick;
+      // Fireballs trail sparks (Firetail.c4d Timer), healing glows red (Heal.c4d).
+      for (const f of magic.firetails) {
+        const c = 20 + Math.random() * 41;
+        this.particles.push({
+          x: f.x + Math.random() * 11 - 5, y: f.y + Math.random() * 11 - 5, vx: 0, vy: -Math.random(), size: c / 30,
+          color: (255 << 16) | (Math.floor(Math.random() * 100) << 8), alpha: 0.9, life: 10, age: 0,
+        });
+      }
+      for (const hl of magic.heals) {
+        const c = hl.caster;
+        this.particles.push({
+          x: c.x + Math.random() * 17 - 8, y: c.y + Math.random() * 21 - 10, vx: 0, vy: -0.6, size: 0.9,
+          color: 0xd21414, alpha: 0.9, life: 14, age: 0,
+        });
+      }
       for (const item of this.world.items) {
         if (item.def.id !== 'meteor' || item.container) continue;
         const add = (p: Partial<Particle> & { size: number; color: number; life: number }): void => {
@@ -442,89 +486,49 @@ export class WorldView {
       s.body.visible = s.shirt.visible = !c.contained;
       const a = c.action;
       const fx = a.facetX + c.phase * CLONK.width;
+      const sheets = this.assets.clonks[c.kind];
+      // Taller frames (the magic sparkles) stick out above the clonk.
+      const fh = a.facetH ?? CLONK.height;
+      const oy = (a.offsetY ?? 0) + (fh - CLONK.height) / 2;
       for (const [sprite, sheet] of [
-        [s.body, this.assets.clonk],
-        [s.shirt, this.assets.clonkOverlay],
+        [s.body, sheets.body],
+        [s.shirt, sheets.overlay],
       ] as const) {
-        sprite.texture = frame(sheet, fx, a.facetY, CLONK.width, CLONK.height);
-        sprite.position.set(c.x, c.y);
+        sprite.texture = frame(sheet, fx, a.facetY, CLONK.width, fh);
+        sprite.position.set(c.x, c.y + oy);
         // The sheet is drawn facing left; mirror it when facing right.
         sprite.scale.x = -c.dir;
       }
     }
   }
 
-  private updateVehicles(): void {
-    const tex = this.assets.items;
-    const seen = new Set<Vehicle>();
-    for (const v of this.world.vehicles) {
-      if (v.removed) continue;
-      seen.add(v);
-      const d = v.def;
-      let s = this.vehicleSprites.get(v);
+  /** Force bridges: four glimmering segments, fading as they run out. */
+  private updateBridges(): void {
+    const bridges = this.world.magic.bridges;
+    for (const b of bridges) {
+      let s = this.bridgeSprites.get(b);
       if (!s) {
-        s = { body: new Sprite(), flag: null, front: new Sprite() };
-        s.body.anchor.set(0.5);
-        s.front.anchor.set(0.5);
-        this.vehicleLayer.addChild(s.body);
-        this.vehicleFront.addChild(s.front);
-        if (d.id === 'balloon') {
-          s.flag = new Sprite();
-          s.flag.tint = v.owner >= 0 ? this.colorOf(v.owner) : 0xffffff;
-          this.vehicleLayer.addChild(s.flag);
+        s = new Container();
+        const n = MAGIC.bridge.segments;
+        const w = MAGIC.bridge.width / n;
+        for (let i = 0; i < n; i++) {
+          const look = i === 0 ? 1 : i === n - 1 ? 3 : 2;
+          const seg = new Sprite(frame(this.assets.items[MAGIC_SPRITES.bridge], look * w, 0, w, MAGIC.bridge.height));
+          seg.position.set(i * w, 0);
+          s.addChild(seg);
         }
-        this.vehicleSprites.set(v, s);
+        s.position.set(b.x, b.y);
+        this.layer.addChild(s);
+        this.bridgeSprites.set(b, s);
       }
-      // What to draw: the burned wreck, the boat's sail going up or down, the blimp's propeller turning or the blimp turning round.
-      let sheet = tex[d.graphic.file];
-      let fx = 0;
-      let fy = 0;
-      let front = !v.burned && !!d.topFace;
-      if (v.burned) sheet = tex[d.burned.file];
-      else if (d.id === 'boat') {
-        front = isSailing(v.action);
-        if (front) {
-          sheet = tex[SAIL.file];
-          const last = SAIL.frames - 1;
-          const f = v.action === 'LowerSail' ? last - Math.min(last, v.actTime) : v.action === 'RaiseSail' ? Math.min(last, v.actTime) : 0;
-          fx = f * d.width;
-        }
-      } else if (d.id === 'blimp') {
-        if (v.action === 'FloatPropel') fx = (v.actTime % BLIMP.propel) * d.width;
-        else if (v.action === 'Turn') {
-          fx = Math.min(BLIMP.turnFrames - 1, Math.floor(v.actTime / BLIMP.turnDelay)) * d.width;
-          fy = d.height;
-        }
-      } else if (d.id === 'balloon') sheet = colorByOwner(sheet).body;
-      s.body.texture = frame(sheet, fx, fy, d.width, d.height);
-      s.body.position.set(v.left + d.width / 2, v.top + d.height / 2);
-      // The blimp is drawn facing left; mirrored when it faces right (FlipDir).
-      const flip = d.id === 'blimp' && v.dir > 0 && !v.burned ? -1 : 1;
-      s.body.scale.x = flip;
-      s.body.angle = v.r;
-      s.front.visible = front;
-      if (front && d.topFace) {
-        const t = d.topFace;
-        // The blimp's and the sailing boat's come from the frame shown (FacetTopFace), the balloon's from its sheet.
-        s.front.texture = d.id === 'balloon' ? frame(sheet, t.x, t.y, t.w, t.h) : frame(sheet, fx + t.x, fy + t.y, t.w, t.h);
-        const cx = flip < 0 ? d.width - t.at.x - t.w / 2 : t.at.x + t.w / 2;
-        s.front.position.set(v.left + cx, v.top + t.at.y + t.h / 2);
-        s.front.scale.x = flip;
-      }
-      if (s.flag) {
-        s.flag.visible = !v.burned;
-        const f = BALLOON_FLAG;
-        const phase = Math.floor(this.world.tick / f.delay) % f.length;
-        s.flag.texture = frame(colorByOwner(tex[d.graphic.file]).overlay, f.x + phase * f.w, v.flagDir * f.h, f.w, f.h);
-        s.flag.position.set(v.left + f.at.x, v.top + f.at.y);
-      }
+      const left = MAGIC.bridge.ticks - b.time;
+      s.alpha = (left < 108 ? 0.3 + (0.6 * left) / 108 : 0.9) + Math.sin(this.world.tick / 3) * 0.08;
     }
-    for (const [v, s] of this.vehicleSprites) {
-      if (seen.has(v)) continue;
-      s.body.destroy();
-      s.front.destroy();
-      s.flag?.destroy();
-      this.vehicleSprites.delete(v);
+    for (const [b, s] of this.bridgeSprites) {
+      if (!bridges.includes(b)) {
+        s.destroy({ children: true });
+        this.bridgeSprites.delete(b);
+      }
     }
   }
 
@@ -551,11 +555,28 @@ export class WorldView {
         const f = item.lit ? lit : item.def.graphic.facet;
         s.texture = frame(this.assets.items[item.def.graphic.file], f.x, f.y, f.w, f.h);
       }
+      const over = item.def.graphic.overlay;
+      if (over) {
+        let o = this.itemOverlays.get(item);
+        if (!o) {
+          const f = item.def.graphic.facet;
+          o = new Sprite(frame(this.assets.items[over], f.x, f.y, f.w, f.h));
+          o.anchor.set(0.5);
+          this.layer.addChildAt(o, this.layer.getChildIndex(s) + 1);
+          this.itemOverlays.set(item, o);
+        }
+        o.position.copyFrom(s.position);
+        o.angle = s.angle;
+        o.scale.copyFrom(s.scale);
+        o.tint = item.owner >= 0 ? this.colorOf(item.owner) : 0xffffff;
+      }
     }
     for (const [item, s] of this.itemSprites) {
       if (!seen.has(item)) {
         s.destroy();
         this.itemSprites.delete(item);
+        this.itemOverlays.get(item)?.destroy();
+        this.itemOverlays.delete(item);
       }
     }
   }
@@ -761,6 +782,40 @@ export class WorldView {
             color: 0x9a7040, alpha: 0.9, life: 14, age: 0, gravity: 0.08,
           });
         }
+        continue;
+      }
+      if (e.type === 'magic' || e.type === 'charge') {
+        // Blue sparks fly out from the sorcerer (MSpark).
+        const c = e.clonk;
+        for (let n = e.type === 'magic' ? 14 : 8; n > 0; n--) {
+          const a = Math.random() * Math.PI * 2;
+          const v = 0.5 + Math.random() * 1.5;
+          this.particles.push({
+            x: c.x, y: c.y - 2, vx: Math.cos(a) * v, vy: Math.sin(a) * v, size: 0.8 + Math.random() * 0.6,
+            color: Math.random() < 0.5 ? 0x6464ff : 0xa0c8ff, alpha: 0.9, life: 16 + Math.floor(Math.random() * 10), age: 0,
+          });
+        }
+        continue;
+      }
+      if (e.type === 'flame') {
+        // The flame a fireball leaves behind burns for a moment.
+        for (let n = 10; n > 0; n--) {
+          this.particles.push({
+            x: e.x + Math.random() * 8 - 4, y: e.y + 2 - Math.random() * 4, vx: Math.random() * 0.4 - 0.2, vy: -0.2 - Math.random() * 0.5, size: 1 + Math.random(),
+            color: Math.random() < 0.5 ? 0xff5a00 : 0xffb020, alpha: 0.9, life: 20 + Math.floor(Math.random() * 30), age: 0,
+          });
+        }
+      // Lava hissing on water makes white steam, acid grey fumes (Smoke in C4Material.cpp's reactions), volcanoes thick smoke.
+      if (e.type === 'poof') {
+        if (Math.random() < 1 / 3) this.fire.puff(e.x, e.y - 2, 3, 0xd8d8d8);
+        continue;
+      }
+      if (e.type === 'corrode') {
+        if (Math.random() < 1 / 5) this.fire.puff(e.x, e.y - 2, 3 + Math.random() * 3, 0x708060);
+        continue;
+      }
+      if (e.type === 'volcano') {
+        for (let n = 1 + Math.floor(Math.random() * 3); n >= 0; n--) this.fire.puff(e.x + (Math.random() - 0.5) * 20, e.y - 10, 8 + Math.random() * 8, 0x584838);
         continue;
       }
       if (e.type !== 'explosion') continue;
