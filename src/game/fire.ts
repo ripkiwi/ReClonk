@@ -4,7 +4,7 @@
 // things that touch them; water and a clonk's home base put it out.
 // See licenses/clonk_engine_license.txt.
 
-import { Mat } from '../landscape/materials';
+import { MATERIALS } from '../landscape/materials';
 import { Clonk } from '../objects/clonk';
 import { CLONK } from '../objects/defs';
 import { FIRE } from '../objects/fire';
@@ -15,6 +15,9 @@ import type { World } from './world';
 
 export type Burnable = Clonk | Item | Plant | Structure;
 
+/** Every 35 ticks burning things set fire to what they touch. */
+export const FIRE_SPREAD_INTERVAL = FIRE.contactInterval;
+
 /** Where it is, for water and contact checks: its centre, or the centre of whatever it's in. */
 export function fireCenter(o: Burnable): { x: number; y: number } {
   if (o instanceof Plant) return o.center;
@@ -24,7 +27,7 @@ export function fireCenter(o: Burnable): { x: number; y: number } {
 }
 
 /** Is the point inside its shape? */
-function contains(o: Burnable, px: number, py: number): boolean {
+export function contains(o: Burnable, px: number, py: number): boolean {
   if (o instanceof Plant) return o.contains(px, py);
   if (o instanceof Structure) return o.inside(px, py);
   const w = o instanceof Clonk ? CLONK.width : o.def.graphic.facet.w;
@@ -58,9 +61,10 @@ function area(o: Burnable): number {
   return o.def.width * o.def.height;
 }
 
+/** In water, or anything else that puts fires out (the material's Extinguisher). */
 function inWater(world: World, o: Burnable): boolean {
   const p = fireCenter(o);
-  return world.land.get(Math.round(p.x), Math.round(p.y)) === Mat.Water;
+  return !!MATERIALS[world.land.get(Math.round(p.x), Math.round(p.y))].extinguisher;
 }
 
 /**

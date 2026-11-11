@@ -264,7 +264,7 @@ export class WorldView {
       const p = list[i];
       if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
       if (p.mat === Mat.Snow) snow = true;
-      else if (Math.abs(p.xdir) + Math.abs(p.ydir) >= 1) {
+      else if (p.mat === Mat.Water && Math.abs(p.xdir) + Math.abs(p.ydir) >= 1) {
         g.moveTo(p.x - p.xdir, p.y - p.ydir).lineTo(p.x, p.y);
         rain = true;
       }
@@ -273,7 +273,13 @@ export class WorldView {
     for (let i = 0; i < list.length; i++) {
       const p = list[i];
       if (p.mat === Mat.Snow || p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
-      if (Math.abs(p.xdir) + Math.abs(p.ydir) < 1) g.rect(Math.floor(p.x), Math.floor(p.y), 1, 1).fill(MATERIALS[p.mat].colors[2]);
+      const fast = Math.abs(p.xdir) + Math.abs(p.ydir) >= 1;
+      if (p.mat === Mat.Water && fast) continue;
+      // Flying lava glows (Lava.c4m PXSGfx, 6 px); other drops show their own colour.
+      if (p.mat === Mat.Lava || p.mat === Mat.DuroLava) {
+        g.circle(p.x, p.y, 3).fill({ color: 0xff8010, alpha: 0.35 });
+        g.circle(p.x, p.y, 1.4).fill(0xfff060);
+      } else g.rect(Math.floor(p.x), Math.floor(p.y), fast ? 2 : 1, fast ? 2 : 1).fill(MATERIALS[p.mat].colors[2]);
     }
     if (!snow) return;
     for (let i = 0; i < list.length; i++) {
@@ -671,6 +677,19 @@ export class WorldView {
             color: 0x9a7040, alpha: 0.9, life: 14, age: 0, gravity: 0.08,
           });
         }
+        continue;
+      }
+      // Lava hissing on water makes white steam, acid grey fumes (Smoke in C4Material.cpp's reactions), volcanoes thick smoke.
+      if (e.type === 'poof') {
+        if (Math.random() < 1 / 3) this.fire.puff(e.x, e.y - 2, 3, 0xd8d8d8);
+        continue;
+      }
+      if (e.type === 'corrode') {
+        if (Math.random() < 1 / 5) this.fire.puff(e.x, e.y - 2, 3 + Math.random() * 3, 0x708060);
+        continue;
+      }
+      if (e.type === 'volcano') {
+        for (let n = 1 + Math.floor(Math.random() * 3); n >= 0; n--) this.fire.puff(e.x + (Math.random() - 0.5) * 20, e.y - 10, 8 + Math.random() * 8, 0x584838);
         continue;
       }
       if (e.type !== 'explosion') continue;
