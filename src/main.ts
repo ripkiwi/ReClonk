@@ -10,10 +10,12 @@ import { newSeed, roundResults, startRound, type Round } from './game/round';
 import type { ScenarioDef } from './game/scenarios';
 import { loadSettings, setKeyLabels } from './input/bindings';
 import { TEXMAP, TUNNEL } from './landscape/materials';
+import { SPELLS } from './game/magic';
 import { ELEVATOR_CASE, FLAG, ITEMS, STRUCTURES } from './objects/defs';
 import { GRASS, PLANTS } from './objects/vegetation';
 import { CONTENT_BASE, loadAssets } from './render/assets';
 import { FIRE_PARTICLES } from './render/fireView';
+import { MAGIC_SPRITES } from './render/worldView';
 import { fitStage, h, setCssImages } from './ui/dom';
 import { GameScreen } from './ui/gameScreen';
 import { Menu, type CrewOutcome } from './ui/menu';
@@ -29,9 +31,9 @@ async function loadFont(): Promise<void> {
 }
 
 /** Clonk names to hire from, one per line (the original's Names.txt). */
-async function loadNames(): Promise<string[]> {
+async function loadNames(file = 'Names.txt'): Promise<string[]> {
   try {
-    const res = await fetch(`${CONTENT_BASE}Names.txt`);
+    const res = await fetch(`${CONTENT_BASE}${file}`);
     if (!res.ok) return [];
     return (await res.text())
       .split(/\r?\n/)
@@ -76,7 +78,7 @@ async function start(): Promise<void> {
   document.getElementById('app')!.appendChild(app.canvas);
 
   const sounds = new Sounds();
-  const [assets, names] = await Promise.all([
+  const [assets, names, sorcererNames] = await Promise.all([
     loadAssets(
       TEXMAP.map((t) => t.texture).concat(TUNNEL.texture),
       [
@@ -94,9 +96,12 @@ async function start(): Promise<void> {
         GRASS.file,
         FIRE_PARTICLES.fire.file,
         FIRE_PARTICLES.fire2.file,
+        MAGIC_SPRITES.bridge,
+        ...Object.values(SPELLS).map((s) => s.icon),
       ],
     ),
     loadNames(),
+    loadNames('sorcerer/Names.txt'),
     loadFont(),
     sounds.load(),
   ]);
@@ -122,7 +127,7 @@ async function start(): Promise<void> {
 
   const play = (scenario: ScenarioDef, profile: Profile): void => {
     music.game();
-    game = new GameScreen({ app, assets, sounds, ui, settings }, startRound(scenario, profile, names, scenario.newMapEachRound ? newSeed() : scenario.seed), finish);
+    game = new GameScreen({ app, assets, sounds, ui, settings }, startRound(scenario, profile, names, scenario.newMapEachRound ? newSeed() : scenario.seed, sorcererNames), finish);
   };
 
   const finish = (round: Round): void => {
@@ -157,7 +162,7 @@ async function start(): Promise<void> {
     });
   };
 
-  const menu = new Menu({ root: ui, sounds, music, storage: store, store: profiles, settings, names, onPlay: play });
+  const menu = new Menu({ root: ui, sounds, music, storage: store, store: profiles, settings, names, sorcererNames, onPlay: play });
   loading.remove();
   music.menu();
   menu.show('main');

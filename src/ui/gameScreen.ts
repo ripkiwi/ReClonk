@@ -34,6 +34,7 @@ const CHOPS = ['Chop1', 'Chop2', 'Chop3', 'Chop4'] as const;
 const TREE_DOWN = ['TreeDown1', 'TreeDown2', 'TreeDown3'] as const;
 const ROCK_HITS = ['RockHit1', 'RockHit2', 'RockHit3'] as const;
 const WOOD_HITS = ['WoodHit1', 'WoodHit2', 'WoodHit3'] as const;
+const CRYSTAL_HITS = ['Crystal1', 'Crystal2', 'Crystal3'] as const;
 /** The original's DeathAnnounce messages. */
 const DEATH_MESSAGES = ['%s is dead.', '%s has\ndeceased.', '%s\nrests in peace.'];
 /** How long the round goes on after it's decided before the results show: 3.5 seconds. */
@@ -186,6 +187,13 @@ export class GameScreen {
       // Big things catch fire with a whoosh (FnFxFireStart: shape over 500), and water hisses as it puts a fire out.
       else if (e.type === 'inflame' && e.loud) this.env.sounds.play('Inflame', volumeAt(e.x, e.y));
       else if (e.type === 'extinguish' && e.hiss) this.env.sounds.play('Pshshsh', volumeAt(e.x, e.y));
+      // Spells sound like their scripts: most go off with Magic1, the wind howls, lightning thunders by itself.
+      else if (e.type === 'magic') {
+        const v = volumeAt(e.clonk.x, e.clonk.y);
+        if (e.spell === 'wind') this.env.sounds.play('Wind2', v);
+        else if (e.spell === 'heal') this.env.sounds.play('Energy', v);
+        else if (e.spell !== 'lightning') this.env.sounds.play('Magic1', v);
+      } else if (e.type === 'charge') this.env.sounds.play('Electric', volumeAt(e.clonk.x, e.clonk.y) * 0.8);
       // Lava boiling water away hisses one time in three, acid sizzles one time in 20 (C4Material.cpp's reactions).
       else if (e.type === 'poof' && Math.random() < 1 / 3 && hissed < 2) {
         hissed++;
@@ -196,7 +204,7 @@ export class GameScreen {
       } else if (e.type === 'volcano') this.env.sounds.play(Math.random() < 0.5 ? 'VolcanoCast' : pick(LAVA), volumeAt(e.x, e.y));
       else if (e.type === 'itemHit') {
         const id = e.item.def.id;
-        const set = id === 'wood' ? WOOD_HITS : id === 'rock' || id === 'gold' || e.item.def.fuse ? ROCK_HITS : null;
+        const set = id === 'crystal' ? CRYSTAL_HITS : id === 'wood' ? WOOD_HITS : id === 'rock' || id === 'gold' || e.item.def.fuse ? ROCK_HITS : null;
         if (set) this.env.sounds.play(pick(set), volumeAt(e.item.x, e.item.y) * 0.5);
       }
     }

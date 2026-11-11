@@ -1,5 +1,6 @@
 import { Rng } from '../core/rng';
 import type { ControlStyle } from '../objects/clonk';
+import { CLONK_KINDS, type ClonkKind } from '../objects/defs';
 import { rankForExperience } from './ranks';
 
 export type { ControlStyle };
@@ -26,6 +27,13 @@ export interface CrewMember {
   deaths?: number;
   /** Enemy clonks it knocked out, over all rounds. */
   kills?: number;
+  /** What kind of clonk it is. Missing means an ordinary clonk. */
+  kind?: ClonkKind;
+}
+
+/** A crew member's kind: an ordinary clonk unless it says otherwise. */
+export function kindOf(m: Pick<CrewMember, 'kind'>): ClonkKind {
+  return m.kind && m.kind in CLONK_KINDS ? m.kind : 'clonk';
 }
 
 /** A player profile, like the original's .c4p player file. */
@@ -90,17 +98,18 @@ function pickName(names: readonly string[], crew: CrewMember[], rng: Rng): strin
 /** Menu-side randomness for names and portraits; not part of the deterministic simulation. */
 const menuRng = (): Rng => new Rng((Math.random() * 0x100000000) >>> 0);
 
-export function hireClonk(profile: Profile, names: readonly string[], rng: Rng = menuRng()): CrewMember {
+export function hireClonk(profile: Profile, names: readonly string[], rng: Rng = menuRng(), kind: ClonkKind = 'clonk'): CrewMember {
   const member: CrewMember = {
     id: newId('clonk'),
     name: pickName(names, profile.crew, rng),
     experience: 0,
     rank: 0,
     rounds: 0,
-    portrait: 1 + rng.int(5),
+    portrait: 1 + rng.int(CLONK_KINDS[kind].portraits.count),
     controlCount: 0,
     hired: Date.now(),
     participates: true,
+    ...(kind !== 'clonk' ? { kind } : {}),
   };
   profile.crew.push(member);
   return member;
@@ -135,14 +144,14 @@ export function deleteProfile(store: ProfileStore, id: string): void {
 }
 
 /**
- * The crew member who goes next (C4ObjectInfoList::GetIdle): the most
+ * The crew member of a kind who goes next (C4ObjectInfoList::GetIdle): the most
  * experienced one who takes part and isn't busy (already in the round, or
  * died in it). Undefined if there's nobody left, and a new clonk has to be recruited.
  */
-export function idleMember(profile: Profile, busy: ReadonlySet<string> = new Set()): CrewMember | undefined {
+export function idleMember(profile: Profile, busy: ReadonlySet<string> = new Set(), kind: ClonkKind = 'clonk'): CrewMember | undefined {
   let best: CrewMember | undefined;
   for (const m of profile.crew) {
-    if (m.participates === false || busy.has(m.id)) continue;
+    if (m.participates === false || busy.has(m.id) || kindOf(m) !== kind) continue;
     if (!best || m.experience > best.experience) best = m;
   }
   return best;
@@ -152,14 +161,16 @@ export function idleMember(profile: Profile, busy: ReadonlySet<string> = new Set
  * Who of the crew goes into a round of `crewSize` clonks, best first. If
  * there are fewer, the round recruits new clonks for the rest.
  */
-export function crewForRound(profile: Profile, crewSize: number): CrewMember[] {
+export function crewForRound(profile: Profile, crewSize: number, sorcerers = 0): CrewMember[] {
   const picked: CrewMember[] = [];
   const busy = new Set<string>();
-  for (let i = 0; i < crewSize; i++) {
-    const m = idleMember(profile, busy);
-    if (!m) break;
-    picked.push(m);
-    busy.add(m.id);
+  for (const [kind, n] of [['clonk', crewSize], ['sorcerer', sorcerers]] as const) {
+    for (let i = 0; i < n; i++) {
+      const m = idleMember(profile, busy, kind);
+      if (!m) break;
+      picked.push(m);
+      busy.add(m.id);
+    }
   }
   return picked;
 }

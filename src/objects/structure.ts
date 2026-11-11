@@ -1,4 +1,5 @@
 import { CONSTRUCTION, ELEVATOR_CASE, GATE, type GateDef, type StructureDef } from './defs';
+import type { ItemId } from '../landscape/materials';
 import type { FireState } from './fire';
 import { maskRect, SolidMask } from './solidMask';
 
@@ -128,6 +129,8 @@ export class Structure {
   fire: FireState | null = null;
   /** Burned (BurnTo): a black ruin that burns away, or that clonks can build back up into the real thing. */
   burned = false;
+  /** Material brought to the site so far, for the Construction Material rule (the original's Component list). */
+  components: Partial<Record<ItemId, number>> = {};
   /** Burned away completely: only its basement is left. */
   gone = false;
 

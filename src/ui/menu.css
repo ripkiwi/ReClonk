@@ -462,6 +462,7 @@ button {
 }
 .hud-energy .bar > div { position: absolute; inset: 0 auto 0 0; background: #3fbf4a; border-radius: 3px; }
 .hud-energy .bar > div.low { background: #d8402c; }
+.hud-energy.hud-magic .bar > div { background: #4a7cff; }
 .hud-slot {
   width: 40px;
   height: 40px;
@@ -710,6 +711,7 @@ button {
 .idl-pic { display: block; flex: none; margin: auto 0; background-repeat: no-repeat; image-rendering: pixelated; }
 .idl-tile.zero .idl-pic { opacity: 0.45; }
 .idl-tile.zero .idl-count { color: #999; }
+.idl-tile.later { opacity: 0.35; filter: grayscale(1); cursor: default; }
 .idl-tile.sel { background: #d4d0c8; }
 .idl-tile.sel:focus { background: #0a246a; color: #fff; }
 .idl-tile.sel:focus .idl-count { color: #fff; }

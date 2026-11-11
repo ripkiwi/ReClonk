@@ -1,8 +1,10 @@
 import { crewCount, ITEM_IDS, LIMITS, SHOP_IDS, type ScenarioDef } from '../game/scenarios';
-import type { ShopId } from '../game/world';
+import { SPELL_IDS, SPELLS, LATER_SPELLS, type SpellId } from '../game/magic';
+import { LATER_RULES, RULE_IDS, RULES } from '../game/rules';
+import { isCrewId, type ShopId } from '../game/world';
 import { MAX_MAP_PLAYER_EXTEND, type SVal } from '../landscape/mapCreator';
 import { MATERIALS, Mat, TEXMAP, texIndex, TUNNEL, type ItemId, type TexEntry } from '../landscape/materials';
-import { ITEMS } from '../objects/defs';
+import { CLONK_KINDS, ITEMS } from '../objects/defs';
 import { PLANT_IDS, PLANTS, type PlantId } from '../objects/vegetation';
 import { CONTENT_BASE } from '../render/assets';
 import { bigButton, h } from './dom';
@@ -55,14 +57,16 @@ const ITEM_SHEETS: Record<ItemId, [number, number]> = {
   wood: [64, 71],
   conkit: [88, 60],
   meteor: [128, 128],
+  crystal: [64, 74],
   flag: [208, 128],
 };
 const itemPicture = (id: ItemId): Picture => ({ file: ITEMS[id].graphic.file, sheet: ITEM_SHEETS[id], ...ITEMS[id].picture });
 const plantPicture = (id: PlantId): Picture => ({ file: PLANTS[id].file, sheet: PLANTS[id].sheet, ...PLANTS[id].picture });
 
-const PICTURES: Record<ItemId | 'clonk' | 'hut' | 'melee' | 'grass', Picture> = {
+const PICTURES: Record<ItemId | 'clonk' | 'sorcerer' | 'hut' | 'melee' | 'grass', Picture> = {
   ...(Object.fromEntries((Object.keys(ITEM_SHEETS) as ItemId[]).map((id) => [id, itemPicture(id)])) as Record<ItemId, Picture>),
   clonk: { file: 'clonk/Graphics.png', sheet: [256, 280], x: 192, y: 100, w: 32, h: 40 },
+  sorcerer: { file: 'sorcerer/Graphics.png', sheet: [256, 348], x: 192, y: 100, w: 32, h: 40 },
   hut: { file: 'structures/Hut2.png', sheet: [100, 66], x: 0, y: 0, w: 60, h: 50 },
   melee: { file: 'goals/Melee.png', sheet: [64, 64], x: 0, y: 0, w: 64, h: 64 },
   grass: { file: 'vegetation/Grass.png', sheet: [120, 30], x: 40, y: 0, w: 40, h: 30 },
@@ -127,7 +131,12 @@ interface IdEntry {
   get(): number;
   set(v: number): void;
   max: number;
+  /** Not in the game yet: shown greyed, and can't be switched on. */
+  later?: boolean;
 }
+
+/** A whole picture file as an ID list icon (rules, spells). */
+const wholePicture = (file: string, size: number, px: number): HTMLElement => picture({ file, sheet: [size, size], x: 0, y: 0, w: size, h: size }, px);
 
 /**
  * The original's ID list (C4IdListCtrl): object pictures with their count
@@ -162,6 +171,7 @@ function idList(entries: IdEntry[], o: { x: number; y: number; w: number; hgt: n
       const n = e.get();
       tiles[i].count.textContent = fmt(n);
       tiles[i].tile.classList.toggle('zero', n === 0);
+      tiles[i].tile.classList.toggle('later', !!e.later);
       tiles[i].tile.classList.toggle('sel', i === selected);
     });
   };
@@ -172,6 +182,7 @@ function idList(entries: IdEntry[], o: { x: number; y: number; w: number; hgt: n
   };
   const change = (d: number): void => {
     const e = entries[selected];
+    if (e.later) return;
     e.set(Math.max(0, Math.min(e.max, Math.round((e.get() + d) * 10) / 10)));
     refresh();
     o.onChange();
@@ -314,7 +325,7 @@ function spin(x: number, y: number, w: number, lim: { min: number; max: number; 
 }
 
 const ITEM_NAMES: [ItemId, string][] = ITEM_IDS.map((id) => [id, ITEMS[id].name]);
-const FOR_SALE: [ShopId, string, Picture][] = SHOP_IDS.map((id) => [id, id === 'clonk' ? 'Clonk' : ITEMS[id].name, PICTURES[id]]);
+const FOR_SALE: [ShopId, string, Picture][] = SHOP_IDS.map((id) => [id, isCrewId(id) ? CLONK_KINDS[id].name : ITEMS[id].name, PICTURES[id]]);
 /** Textures a material layer can use: everything but sky and basements. */
 const LAYER_TEXTURES = TEXMAP.filter((t) => t.mat !== Mat.Basement && t.name !== 'Sky' && !(t.name.endsWith('-Liquid') && TEXMAP.some((u) => u.name === t.name.replace('-Liquid', '-Smooth'))));
 const GROUNDS = ['Earth', 'Earth-Rough', 'Earth-Smooth2', 'Earth-Ridge', 'Sand', 'Sand-Smooth3', 'Ashes-Rough'];
@@ -355,13 +366,23 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
   };
 
   // ---- Game
-  const description = h('textarea', { class: 'pp-desc', maxLength: 400, style: at(199, 19, 186, 76), oninput: () => (d.description = description.value) });
+  const description = h('textarea', { class: 'pp-desc', maxLength: 400, style: at(6, 133, 186, 62), oninput: () => (d.description = description.value) });
   description.value = d.description;
   const goalNote = h('div', { class: 'pp-hint', style: at(6, 53, 186, 20) });
   const showGoal = (): void => {
     goalNote.textContent = d.goal === 'melee' && d.opponents === 0 ? 'Melee needs computer crews to fight.' : d.goal === 'melee' ? 'The last crew standing wins.' : '';
   };
   showGoal();
+  const ruleNote = h('div', { class: 'pp-hint', style: at(199, 124, 186, 76) });
+  function showRules(): void {
+    const on = RULE_IDS.filter((id) => d.rules.includes(id));
+    const needsBase = on.some((id) => id === 'captureTheFlag' || id === 'lossOfBase') && !d.homeBase;
+    ruleNote.replaceChildren(
+      ...(on.length ? on.map((id) => h('div', {}, h('b', {}, `${RULES[id].name}: `), RULES[id].description)) : ['No rules. Point at one to read what it does.']),
+      ...(needsBase ? [h('div', { style: { color: '#a02010' } }, 'Without a home base (Equipment, Buildings) everyone is out at once.')] : []),
+    );
+  }
+  showRules();
   const gamePage = h(
     'div',
     { class: 'pp-page' },
@@ -370,8 +391,30 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
       { x: 6, y: 19, w: 171, hgt: 30, label: 'Goals:', format: (n) => (n ? 'on' : 'off'), onChange: showGoal },
     ),
     goalNote,
-    h('div', { class: 'pp-label', style: at(199, 9, 186) }, 'Description:'),
+    h('div', { class: 'pp-label', style: at(6, 123, 186) }, 'Description:'),
     description,
+    // The original's Rules list. The rules we can't play yet are greyed, with what they wait for.
+    ...idList(
+      [
+        ...RULE_IDS.map((id) => ({
+          name: `${RULES[id].name}: ${RULES[id].description}`,
+          icon: () => wholePicture(RULES[id].icon, 64, 28),
+          get: () => (d.rules.includes(id) ? 1 : 0),
+          set: (v: number) => (d.rules = RULE_IDS.filter((r) => (r === id ? v > 0 : d.rules.includes(r)))),
+          max: 1,
+        })),
+        ...LATER_RULES.map((r) => ({
+          name: `${r.name}: comes later, it needs ${r.needs}`,
+          icon: () => wholePicture(r.icon, 64, 28),
+          get: () => 0,
+          set: () => {},
+          max: 0,
+          later: true,
+        })),
+      ],
+      { x: 199, y: 19, w: 171, hgt: 102, label: 'Rules:', format: (n) => (n ? 'on' : 'off'), onChange: showRules },
+    ),
+    ruleNote,
     h('div', { class: 'pp-label', style: at(6, 86, 120) }, 'Computer crews:'),
     spin(6, 96, 30, LIMITS.opponents, () => d.opponents, (v) => {
       d.opponents = v;
@@ -386,8 +429,8 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
   // ---- Equipment
   // Gold and the shop only matter with a home base.
   const baseOnly: HTMLElement[] = [
-    h('div', { class: 'pp-label', style: at(6, 25, 45) }, 'Wealth:'),
-    spin(6, 35, 35, LIMITS.wealth, () => d.base.wealth, (v) => (d.base.wealth = v), 'Gold in the home base at the start'),
+    h('div', { class: 'pp-label', style: at(6, 16, 45) }, 'Wealth:'),
+    spin(6, 26, 35, LIMITS.wealth, () => d.base.wealth, (v) => (d.base.wealth = v), 'Gold in the home base at the start'),
     ...idList(
       FOR_SALE.map(([id, name, pic]) => ({
         name: `${name} for sale in the home base`,
@@ -396,9 +439,10 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         set: (v: number) => (d.base.stock[id] = v),
         max: LIMITS.stock.max,
       })),
-      { x: 206, y: 116, w: 170, hgt: 58, label: 'Home base material:', onChange: () => {} },
+      { x: 206, y: 118, w: 170, hgt: 58, label: 'Home base material:', onChange: () => {} },
     ),
   ];
+  const knows = (id: SpellId): boolean => !d.magic.length || d.magic.includes(id);
   const showBase = (): void => baseOnly.forEach((e) => e.classList.toggle('off', !d.homeBase));
   showBase();
   const equipPage = h(
@@ -406,8 +450,28 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     { class: 'pp-page' },
     h('div', { class: 'pp-hint', style: at(6, 5, 380) }, 'Values for every crew, the computer crews too.'),
     ...idList(
-      [{ name: 'Clonks in the crew', icon: () => picture(PICTURES.clonk, 30), get: () => d.crewSize, set: (v) => (d.crewSize = Math.max(1, v)), max: LIMITS.crewSize.max }],
-      { x: 6, y: 66, w: 170, hgt: 30, label: 'Crew:', onChange: () => {} },
+      [
+        { name: 'Clonks in the crew', icon: () => picture(PICTURES.clonk, 30), get: () => d.crewSize, set: (v) => (d.crewSize = Math.max(1, v)), max: LIMITS.crewSize.max },
+        { name: 'Sorcerers in the crew: they cast spells with magic energy from crystals', icon: () => picture(PICTURES.sorcerer, 30), get: () => d.sorcerers, set: (v) => (d.sorcerers = v), max: LIMITS.sorcerers.max },
+      ],
+      { x: 66, y: 26, w: 110, hgt: 30, label: 'Crew:', onChange: () => {} },
+    ),
+    // The original's Magic list: the spells sorcerers know. At least one stays on.
+    ...idList(
+      [
+        ...SPELL_IDS.map((id) => ({
+          name: `${SPELLS[id].name} (${SPELLS[id].value} magic energy): ${SPELLS[id].description}`,
+          icon: () => wholePicture(SPELLS[id].icon, SPELLS[id].iconSize, 28),
+          get: () => (knows(id) ? 1 : 0),
+          set: (v: number) => {
+            const next = SPELL_IDS.filter((sp) => (sp === id ? v > 0 : knows(sp)));
+            if (next.length) d.magic = next.length === SPELL_IDS.length ? [] : next;
+          },
+          max: 1,
+        })),
+        ...LATER_SPELLS.map((name) => ({ name: `${name}: comes later`, icon: () => h('span', { class: 'idl-pic', style: { width: '28px', height: '28px', lineHeight: '28px', textAlign: 'center' } }, '?'), get: () => 0, set: () => {}, max: 0, later: true })),
+      ],
+      { x: 6, y: 72, w: 370, hgt: 30, label: 'Magic:', title: 'The spells sorcerers can cast', format: (n) => (n ? 'on' : 'off'), onChange: () => {} },
     ),
     ...idList(
       [{
@@ -420,7 +484,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         },
         max: 1,
       }],
-      { x: 206, y: 65, w: 170, hgt: 30, label: 'Buildings:', onChange: () => {} },
+      { x: 206, y: 26, w: 170, hgt: 30, label: 'Buildings:', onChange: showRules },
     ),
     ...idList(
       ITEM_NAMES.map(([id, name]) => ({
@@ -430,7 +494,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         set: (v: number) => (d.startItems = v ? [id] : []),
         max: 1,
       })),
-      { x: 6, y: 116, w: 170, hgt: 58, label: 'Material:', title: 'What each clonk carries at the start (one object)', onChange: () => {} },
+      { x: 6, y: 118, w: 170, hgt: 58, label: 'Material:', title: 'What each clonk carries at the start (one object)', onChange: () => {} },
     ),
     ...baseOnly,
   );

@@ -3,7 +3,7 @@
 // See licenses/clonk_engine_license.txt.
 
 import type { Landscape } from '../landscape/landscape';
-import { CLONK, ENERGY_UNIT, type ActionDef } from './defs';
+import { CLONK, CLONK_KINDS, ENERGY_UNIT, MAGIC_UNIT, type ActionDef, type ClonkKind } from './defs';
 import type { FireState } from './fire';
 import { GameObject } from './gameObject';
 import { experienceForRank, rankForExperience } from '../game/ranks';
@@ -36,6 +36,8 @@ export interface ControlState {
   pressedRight: boolean;
   pressedThrow: boolean;
   pressedDig: boolean;
+  /** Open the spell menu (the original's magic key). Only sorcerers have one. */
+  pressedMagic: boolean;
   /** Dig pressed twice in quick succession: use what the clonk carries (the original's double dig). */
   pressedUse: boolean;
   /** Down pressed twice in quick succession. */
@@ -61,7 +63,7 @@ export type CrewCommand =
 export const NO_CONTROL: ControlState = {
   left: false, right: false, up: false, down: false,
   pressedUp: false, pressedDown: false, pressedLeft: false, pressedRight: false,
-  pressedThrow: false, pressedDig: false, pressedUse: false, doubleDown: false, crew: null, commands: 0,
+  pressedThrow: false, pressedDig: false, pressedMagic: false, pressedUse: false, doubleDown: false, crew: null, commands: 0,
 };
 
 /** What the world does for a clonk when the player asks for it. */
@@ -95,6 +97,8 @@ export interface CrewInfo {
   kills?: number;
   controlCount: number;
   portrait: number;
+  /** What kind of clonk it is; missing means an ordinary clonk. */
+  kind?: ClonkKind;
 }
 
 /** Command direction: where the player wants the clonk to go, as a unit-ish vector. */
@@ -158,6 +162,12 @@ export class Clonk extends GameObject {
   menu: number | null = null;
   /** Selected line of the construction kit's build menu, or null when it's closed. */
   buildMenu: number | null = null;
+  /** Magic energy for spells, in 1/1000 points (see MAGIC_UNIT). Sorcerers start with none. */
+  magicEnergy = 0;
+  /** Selected line of the spell menu, or null when it's closed. */
+  spellMenu: number | null = null;
+  /** The spell that goes off when the casting animation reaches its fifth frame (the original's idCurSpell). */
+  casting: string | null = null;
   /** The building it's working on (Build) or holding on to (Push). */
   workOn: Structure | null = null;
   /** The tree it's chopping (Chop). */
@@ -188,9 +198,66 @@ export class Clonk extends GameObject {
     y: number,
     /** Player that owns this clonk (shirt colour, control). */
     readonly owner: number,
+    /** An ordinary clonk or a sorcerer. */
+    readonly kind: ClonkKind = 'clonk',
   ) {
     super(x, y);
+    this.action = this.def.actions.Walk;
     this.setAction('Jump');
+  }
+
+  /** The definition of its kind: price, physicals, actions, graphics. */
+  get def(): typeof CLONK {
+    return CLONK_KINDS[this.kind];
+  }
+  /** Full magic energy (Physical Magic): 100 points for a sorcerer, none for a clonk. */
+  get maxMagic(): number {
+    return this.def.physical.magic;
+  }
+  /**
+   * Change magic energy by whole points (DoMagicEnergy). Unless `partial`,
+   * nothing changes if it doesn't all fit or there isn't enough. Returns false then.
+   */
+  doMagicEnergy(points: number, partial = false): boolean {
+    let change = points * MAGIC_UNIT;
+    const room = this.maxMagic - this.magicEnergy;
+    if (change > room) {
+      if (!partial || room <= 0) return false;
+      change = room;
+    }
+    if (change < -this.magicEnergy) {
+      if (!partial || this.magicEnergy <= 0) return false;
+      change = -this.magicEnergy;
+    }
+    this.magicEnergy += change;
+    return true;
+  }
+  /** In the casting animation, on the ground or in the air. */
+  get doesMagic(): boolean {
+    return this.action.name === 'Magic' || this.action.name === 'JumpMagic';
+  }
+  /** Can it start a spell right now (MagiClonk.c4d ReadyToMagic)? */
+  get readyToMagic(): boolean {
+    if (!this.alive || this.contained || !this.maxMagic) return false;
+    if (this.doesMagic) return this.phase > 5;
+    return ['Walk', 'Jump', 'Swim', 'KneelDown', 'KneelUp', 'FlatUp'].includes(this.action.name);
+  }
+  /**
+   * Start the casting animation (SetMagicAction): Magic on the ground,
+   * JumpMagic in the air. While kneeling the spell waits for the clonk to get up.
+   */
+  startMagic(): void {
+    if (this.doesMagic) {
+      // Already casting: back to the start, with two frames' head start.
+      this.phase = 2;
+      return;
+    }
+    const a = this.action.name;
+    if (a === 'Jump') this.setAction('JumpMagic');
+    else if (a === 'Walk') {
+      this.comDir = STOP;
+      this.setAction('Magic', 0, 0);
+    }
   }
 
   private get rank(): number {
@@ -202,7 +269,7 @@ export class Clonk extends GameObject {
   }
   /** Fighting strength, trained towards the maximum at rank 20 like climbing. */
   get fight(): number {
-    return trained(P.fight, this.rank);
+    return trained(this.def.physical.fight, this.rank);
   }
 
   /** Give the clonk its crew identity, starting with full energy for its rank. */
@@ -251,7 +318,7 @@ export class Clonk extends GameObject {
   // ---------------------------------------------------------------- actions
 
   setAction(name: string, xdir?: number, ydir?: number): void {
-    const a = CLONK.actions[name];
+    const a = this.def.actions[name];
     if (!a) return;
     if (a !== this.action) {
       this.action = a;
@@ -914,6 +981,8 @@ export class Clonk extends GameObject {
     this.alive = false;
     this.menu = null;
     this.buildMenu = null;
+    this.spellMenu = null;
+    this.casting = null;
     this.goTo = null;
     this.fightTarget = null;
     this.comDir = STOP;
@@ -945,7 +1014,7 @@ export class Clonk extends GameObject {
 
 /** True if the player does something with a clonk that's walking over to the leader (down doesn't count: it's the gather key). */
 function takesOver(c: ControlState): boolean {
-  return c.left || c.right || c.up || c.pressedThrow || c.pressedDig || c.pressedUse;
+  return c.left || c.right || c.up || c.pressedThrow || c.pressedDig || c.pressedUse || c.pressedMagic;
 }
 
 /** Which surface an action holds on to. */

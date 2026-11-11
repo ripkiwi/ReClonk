@@ -35,6 +35,12 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `structures/Hut2Burned.png`, `structures/Tower2Burned.png`, `structures/ElevatorBurned.png` | `Objects.c4d/Structures.c4d/Hut2.c4d`, `Tower2.c4d`, `Elevator.c4d` `/Burned.c4d/Graphics.png` (burned buildings) |
 | `effects/Fire.png`, `effects/Fire2.png` | `Objects.c4d/Effects.c4d/Particles.c4d/Fire.c4d`, `Fire2.c4d` `/Graphics.png` (fire particles) |
 | `sound/Fire.wav`, `Inflame.wav`, `Pshshsh.wav` | `Sound.c4g/` (**renamed to lower-case `.wav`** where the original was `.WAV`) |
+| `sorcerer/Graphics.png`, `Overlay.png`, `Names.txt`, `portraits/Portrait1-2.png` | `Objects.c4d/Crew.c4d/Sorcerer.c4d/Graphics.png`, `Overlay.png`, `ClonkNames.txt`, `Portrait1-2.png` (the sorcerer) |
+| `items/Crystal.png` | `Objects.c4d/Items.c4d/Materials.c4d/Crystal.c4d/Graphics.png` |
+| `magic/Wind.png`, `Earthquake.png`, `Extinguish.png`, `Lightning.png`, `Heal.png`, `Firefist.png`, `Meteor.png` | `Objects.c4d/Magic.c4d/<spell>.c4d/Graphics.png` (spell pictures) |
+| `magic/GravityDown.png`, `GravityUp.png`, `Bridge.png`, `BridgeSegment.png`, `Firetail.png` | `Objects.c4d/Magic.c4d/GravitationDown.c4d`, `GravitationUp.c4d`, `ForceFieldBrigde.c4d` and its segment, `Firefist.c4d/Firetail.c4d` `/Graphics.png` |
+| `rules/*.png` | `Objects.c4d/Rules.c4d/<rule>.c4d/Graphics.png` (rule pictures in the scenario properties) |
+| `sound/Magic1.wav`, `Electric.wav`, `Crystal1-3.wav`, `Wind2.wav`, `Energy.wav` | `Sound.c4g/` |
 | `sound/Corrode.wav`, `Lava1-3.wav` | `Sound.c4g/` (**renamed to lower-case `.wav`** where the original was `.WAV`) |
 | `sound/VolcanoCast.wav` | `Objects.c4d/Effects.c4d/Volcano.c4d/VolcanoCast.wav` |
 | `goals/Melee.png` | `Objects.c4d/Goals.c4d/Melee.c4d/Graphics.png` (goal picture in the scenario properties) |
