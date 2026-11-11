@@ -4,7 +4,7 @@ import { LATER_RULES, RULE_IDS, RULES } from '../game/rules';
 import { shopEntry, type ShopId } from '../game/world';
 import { MAX_MAP_PLAYER_EXTEND, type SVal } from '../landscape/mapCreator';
 import { MATERIALS, Mat, TEXMAP, texIndex, TUNNEL, type ItemId, type TexEntry } from '../landscape/materials';
-import { ITEMS } from '../objects/defs';
+import { ITEMS, STRUCTURES } from '../objects/defs';
 import { PLANT_IDS, PLANTS, type PlantId } from '../objects/vegetation';
 import { VEHICLES, type VehicleId } from '../objects/vehicle';
 import { CONTENT_BASE } from '../render/assets';
@@ -69,12 +69,14 @@ const vehiclePicture = (id: VehicleId): Picture => ({
 });
 const plantPicture = (id: PlantId): Picture => ({ file: PLANTS[id].file, sheet: PLANTS[id].sheet, ...PLANTS[id].picture });
 
-const PICTURES: Record<ItemId | VehicleId | 'clonk' | 'sorcerer' | 'hut' | 'melee' | 'grass', Picture> = {
+const PICTURES: Record<ItemId | VehicleId | 'clonk' | 'sorcerer' | 'hut' | 'elevator' | 'tower' | 'melee' | 'grass', Picture> = {
   ...(Object.fromEntries((Object.keys(ITEM_SHEETS) as ItemId[]).map((id) => [id, itemPicture(id)])) as Record<ItemId, Picture>),
   ...(Object.fromEntries((Object.keys(VEHICLES) as VehicleId[]).map((id) => [id, vehiclePicture(id)])) as Record<VehicleId, Picture>),
   clonk: { file: 'clonk/Graphics.png', sheet: [256, 280], x: 192, y: 100, w: 32, h: 40 },
   sorcerer: { file: 'sorcerer/Graphics.png', sheet: [256, 348], x: 192, y: 100, w: 32, h: 40 },
   hut: { file: 'structures/Hut2.png', sheet: [100, 66], x: 0, y: 0, w: 60, h: 50 },
+  elevator: { file: 'structures/Elevator.png', sheet: [84, 56], x: 0, y: 0, w: 28, h: 56 },
+  tower: { file: 'structures/Tower2.png', sheet: [192, 79], x: 144, y: 0, w: 48, h: 64 },
   melee: { file: 'goals/Melee.png', sheet: [64, 64], x: 0, y: 0, w: 64, h: 64 },
   grass: { file: 'vegetation/Grass.png', sheet: [120, 30], x: 40, y: 0, w: 40, h: 30 },
   // The flag's front-end picture (PictureFE): its cloth is already coloured in.
@@ -133,72 +135,265 @@ function swatch(t: TexEntry, size: number): HTMLCanvasElement {
 
 /** One entry of an ID list: an object (or material) with a count. */
 interface IdEntry {
+  /** "Name: what it does". The part before the colon is the name in the menus. */
   name: string;
   icon(): HTMLElement;
   get(): number;
   set(v: number): void;
   max: number;
-  /** Not in the game yet: shown greyed, and can't be switched on. */
+  /** Not in the game yet: shown greyed in the Add menu, and can't be added. */
   later?: boolean;
 }
 
 /** A whole picture file as an ID list icon (rules, spells). */
 const wholePicture = (file: string, size: number, px: number): HTMLElement => picture({ file, sheet: [size, size], x: 0, y: 0, w: size, h: size }, px);
 
+/** "Name: what it does" split in two. */
+function nameAndText(e: IdEntry): [string, string] {
+  const i = e.name.indexOf(': ');
+  return i < 0 ? [e.name, ''] : [e.name.slice(0, i), e.name.slice(i + 2)];
+}
+
+/** The Add menu's view, kept between openings like the original kept it in its config. */
+let selectView: 'symbols' | 'details' = 'symbols';
+
+/** The dialog paper a popup goes on, and how much it is scaled on screen. */
+function paperOf(el: HTMLElement): { paper: HTMLElement; scale: number } | null {
+  const paper = el.closest<HTMLElement>('.paper');
+  if (!paper) return null;
+  return { paper, scale: paper.getBoundingClientRect().width / (paper.offsetWidth || 1) };
+}
+
 /**
- * The original's ID list (C4IdListCtrl): object pictures with their count
- * underneath in a white box, and buttons on the right that raise and lower
- * the count of the selected one. Click a picture to select it; + and - keys
- * and double clicks work too, Shift changes by 10.
+ * The original's object selection dialog (C4IdSelectDlg), opened by the Add
+ * button of an ID list: every object of the list's kind, as symbols or in
+ * details. Click objects to pick them (click again to drop), OK adds one of
+ * each; a double click adds that one at once.
  */
-function idList(entries: IdEntry[], o: { x: number; y: number; w: number; hgt: number; label: string; title?: string; format?: (n: number) => string; onChange(): void }): HTMLElement[] {
-  const fmt = o.format ?? ((n: number) => `${n}x`);
-  let selected = 0;
-  const tiles = entries.map((e, i) => {
-    const count = h('span', { class: 'idl-count' });
-    const tile = h('button', {
-      class: 'idl-tile',
-      title: e.name,
-      onclick: () => select(i),
-      ondblclick: () => change(1),
-      onkeydown: (ev: KeyboardEvent) => {
-        const step = ev.shiftKey ? 10 : 1;
-        if (ev.key === '+' || ev.key === '=') change(step);
-        else if (ev.key === '-') change(-step);
-        else if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') select(Math.min(entries.length - 1, selected + 1), true);
-        else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') select(Math.max(0, selected - 1), true);
-        else return;
-        ev.preventDefault();
-      },
-    }, e.icon(), count);
-    return { tile, count };
-  });
-  const refresh = (): void => {
-    entries.forEach((e, i) => {
-      const n = e.get();
-      tiles[i].count.textContent = fmt(n);
-      tiles[i].tile.classList.toggle('zero', n === 0);
-      tiles[i].tile.classList.toggle('later', !!e.later);
-      tiles[i].tile.classList.toggle('sel', i === selected);
-    });
+function selectDialog(anchor: HTMLElement, category: string, entries: IdEntry[], onAdd: (picked: number[]) => void, onClose: () => void): void {
+  const host = paperOf(anchor);
+  if (!host) return;
+  const picked = new Set<number>();
+  const shade = h('div', { class: 'ids-shade' });
+  const list = h('div', { class: 'ids-list', tabIndex: 0 });
+  const close = (): void => {
+    shade.remove();
+    removeEventListener('keydown', keys, true);
+    onClose();
   };
-  const select = (i: number, focus = false): void => {
+  const ok = (): void => {
+    const chosen = [...picked];
+    close();
+    if (chosen.length) onAdd(chosen);
+  };
+  const keys = (ev: KeyboardEvent): void => {
+    if (ev.key === 'Escape') close();
+    else if (ev.key === 'Enter') ok();
+    else return;
+    ev.preventDefault();
+    ev.stopPropagation();
+  };
+  const fill = (): void => {
+    list.className = `ids-list ${selectView}`;
+    list.replaceChildren(
+      ...(selectView === 'details'
+        ? [h('div', { class: 'ids-row ids-head' }, h('span', {}, 'Name'), h('span', {}, 'Description'))]
+        : []),
+      ...entries.map((e, i) => {
+        const [name, text] = nameAndText(e);
+        const n = e.get();
+        const row = h(
+          'div',
+          {
+            class: `ids-row${e.later ? ' later' : ''}${picked.has(i) ? ' sel' : ''}`,
+            title: e.later ? e.name : `${e.name}${n ? ` (in the list: ${n})` : ''}`,
+            onclick: () => {
+              if (e.later) return;
+              if (picked.has(i)) picked.delete(i);
+              else picked.add(i);
+              fill();
+            },
+            ondblclick: () => {
+              if (e.later) return;
+              picked.clear();
+              picked.add(i);
+              ok();
+            },
+          },
+          h('span', { class: 'ids-name' }, e.icon(), h('span', {}, name)),
+          ...(selectView === 'details' ? [h('span', { class: 'ids-text' }, text)] : []),
+        );
+        return row;
+      }),
+    );
+  };
+  const radio = (v: typeof selectView, label: string): HTMLLabelElement => {
+    const input = h('input', { type: 'radio', name: 'ids-view', checked: selectView === v, onchange: () => { selectView = v; fill(); } });
+    return h('label', { class: 'pp-check' }, input, label);
+  };
+  const dialog = h(
+    'div',
+    { class: 'ids', role: 'dialog' },
+    h('div', { class: 'ids-title' }, `Object selection: ${category}`),
+    list,
+    h(
+      'div',
+      { class: 'ids-side' },
+      h('button', { class: 'pp-button', onclick: ok }, 'OK'),
+      h('button', { class: 'pp-button', onclick: close }, 'Cancel'),
+      h('div', { class: 'ids-view' }, h('div', {}, 'View:'), radio('symbols', 'Symbols'), radio('details', 'Details')),
+    ),
+  );
+  shade.append(dialog);
+  shade.addEventListener('pointerdown', (ev) => ev.target === shade && close());
+  addEventListener('keydown', keys, true);
+  fill();
+  host.paper.append(shade);
+  list.focus();
+}
+
+/** The original's right-click menu on an ID list: + and − the selected object, Add... and Delete. */
+function contextMenu(ev: MouseEvent, items: { label: string; disabled?: boolean; run(): void }[]): void {
+  const host = paperOf(ev.currentTarget as HTMLElement);
+  if (!host) return;
+  ev.preventDefault();
+  const r = host.paper.getBoundingClientRect();
+  const menu = h('div', {
+    class: 'idl-menu',
+    style: { left: `${(ev.clientX - r.left) / host.scale}px`, top: `${(ev.clientY - r.top) / host.scale}px` },
+  });
+  const close = (): void => {
+    menu.remove();
+    removeEventListener('pointerdown', outside, true);
+  };
+  const outside = (e: PointerEvent): void => {
+    if (!menu.contains(e.target as Node)) close();
+  };
+  for (const it of items) {
+    if (it.label === '-') menu.append(h('hr'));
+    else menu.append(h('button', { disabled: !!it.disabled, onclick: () => { close(); it.run(); } }, it.label));
+  }
+  addEventListener('pointerdown', outside, true);
+  host.paper.append(menu);
+}
+
+/**
+ * The original's ID list (C4IdListCtrl with C4IdCtrlButtons): only the objects
+ * in the list, as pictures with their count underneath, and three buttons on
+ * the right. + and − raise and lower the count of the selected one (at 0 it
+ * leaves the list), the third opens the object selection (Add...) to put more
+ * objects in. + with nothing selected opens it too. Right click for the menu;
+ * keys: + and −, Insert adds, Delete removes, Shift changes by 10.
+ */
+function idList(entries: IdEntry[], o: { x: number; y: number; w: number; hgt: number; label: string; category?: string; title?: string; format?: (n: number) => string; onChange(): void }): HTMLElement[] {
+  const fmt = o.format ?? ((n: number) => `${n}x`);
+  const category = o.category ?? o.label.replace(/:$/, '');
+  let selected = -1;
+  let open = false;
+  const box = h('div', {
+    class: 'idl',
+    tabIndex: 0,
+    style: at(o.x, o.y, o.w, o.hgt),
+    title: o.title ?? '',
+    onkeydown: (ev: KeyboardEvent) => {
+      const step = ev.shiftKey ? 10 : 1;
+      const vis = shown();
+      const pos = vis.indexOf(selected);
+      if (ev.key === '+' || ev.key === '=') plus(step);
+      else if (ev.key === '-') change(-step);
+      else if (ev.key === 'Insert') add();
+      else if (ev.key === 'Delete' || ev.key === 'Backspace') remove();
+      else if ((ev.key === 'ArrowRight' || ev.key === 'ArrowDown') && vis.length) select(vis[Math.min(vis.length - 1, pos + 1)]);
+      else if ((ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') && vis.length) select(vis[Math.max(0, pos - 1)]);
+      else return;
+      ev.preventDefault();
+    },
+    oncontextmenu: (ev: MouseEvent) => {
+      box.focus();
+      const name = selected >= 0 ? nameAndText(entries[selected])[0] : '';
+      contextMenu(ev, [
+        { label: `+ ${name}`, disabled: selected < 0, run: () => change(1) },
+        { label: `− ${name}`, disabled: selected < 0, run: () => change(-1) },
+        { label: '-', run: () => {} },
+        { label: 'Add...', run: add },
+        { label: 'Delete', disabled: selected < 0, run: remove },
+      ]);
+    },
+  });
+  /** The entries in the list: the ones with a count. */
+  const shown = (): number[] => entries.flatMap((e, i) => (!e.later && e.get() > 0 ? [i] : []));
+  const refresh = (): void => {
+    const vis = shown();
+    if (!vis.includes(selected)) selected = -1;
+    box.replaceChildren(
+      ...vis.map((i) => {
+        const e = entries[i];
+        return h(
+          'div',
+          {
+            class: `idl-tile${i === selected ? ' sel' : ''}`,
+            title: e.name,
+            onpointerdown: (ev: PointerEvent) => ev.button !== 1 && select(i),
+            ondblclick: () => change(1),
+          },
+          e.icon(),
+          h('span', { class: 'idl-count' }, fmt(e.get())),
+        );
+      }),
+      ...(vis.length ? [] : [h('div', { class: 'idl-empty' }, 'Empty: + adds')]),
+    );
+  };
+  // Selecting only moves the highlight, so a double click lands on the same tile.
+  const select = (i: number): void => {
     selected = i;
-    if (focus) tiles[i].tile.focus();
-    refresh();
+    const vis = shown();
+    [...box.querySelectorAll('.idl-tile')].forEach((t, k) => t.classList.toggle('sel', vis[k] === i));
   };
   const change = (d: number): void => {
     const e = entries[selected];
-    if (e.later) return;
+    if (!e) return;
     e.set(Math.max(0, Math.min(e.max, Math.round((e.get() + d) * 10) / 10)));
     refresh();
     o.onChange();
   };
-  // Hold a button to keep counting.
+  const remove = (): void => {
+    const e = entries[selected];
+    if (!e) return;
+    e.set(0);
+    refresh();
+    o.onChange();
+  };
+  const add = (): void => {
+    if (open) return;
+    open = true;
+    selectDialog(box, category, entries, (picked) => {
+      for (const i of picked) {
+        const e = entries[i];
+        e.set(Math.min(e.max, e.get() + 1));
+      }
+      selected = picked.filter((i) => entries[i].get() > 0).pop() ?? selected;
+      refresh();
+      o.onChange();
+    }, () => {
+      open = false;
+      box.focus();
+    });
+  };
+  /** + raises the selected count; with nothing selected it opens the object selection. */
+  const plus = (step: number): boolean => {
+    if (selected < 0) {
+      add();
+      return false;
+    }
+    change(step);
+    return true;
+  };
+  // Hold + or − to keep counting.
   const hold = (d: number): ((ev: PointerEvent) => void) => (ev) => {
     ev.preventDefault();
+    box.focus();
     const step = ev.shiftKey ? d * 10 : d;
-    change(step);
+    if (d > 0 ? !plus(step) : (change(step), selected < 0)) return;
     let timer = window.setTimeout(function again() {
       change(step);
       timer = window.setTimeout(again, 70);
@@ -212,12 +407,12 @@ function idList(entries: IdEntry[], o: { x: number; y: number; w: number; hgt: n
     addEventListener('pointercancel', stop);
   };
   refresh();
-  const box = h('div', { class: 'idl', style: at(o.x, o.y, o.w, o.hgt), title: o.title ?? '' }, ...tiles.map((t) => t.tile));
   const buttons = h(
     'div',
     { class: 'idl-btns', style: at(o.x + o.w, o.y, 15, o.hgt) },
-    h('button', { title: 'More (Shift: 10 more)', onpointerdown: hold(1) }, '+'),
-    h('button', { title: 'Fewer (Shift: 10 fewer)', onpointerdown: hold(-1) }, '−'),
+    h('button', { title: 'More of the selected object (Shift: 10 more). With nothing selected: add objects.', onpointerdown: hold(1) }, '+'),
+    h('button', { title: 'Fewer of the selected object (Shift: 10 fewer). At none it leaves the list.', onpointerdown: hold(-1) }, '−'),
+    h('button', { class: 'idl-add', title: `Add... (${category})`, onclick: () => add() }, h('span', { class: 'idl-box' })),
   );
   return [h('div', { class: 'pp-label', style: at(o.x, o.y - 10, o.w + 15) }, o.label), box, buttons];
 }
@@ -440,7 +635,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     spin(6, 26, 35, LIMITS.wealth, () => d.base.wealth, (v) => (d.base.wealth = v), 'Gold in the home base at the start'),
     ...idList(
       FOR_SALE.map(([id, name, pic]) => ({
-        name: `${name} for sale in the home base`,
+        name: `${name}: for sale in the home base`,
         icon: () => picture(pic, id === 'clonk' ? 26 : 22),
         get: () => d.base.stock[id] ?? 0,
         set: (v: number) => (d.base.stock[id] = v),
@@ -458,8 +653,8 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     h('div', { class: 'pp-hint', style: at(6, 5, 380) }, 'Values for every crew, the computer crews too.'),
     ...idList(
       [
-        { name: 'Clonks in the crew', icon: () => picture(PICTURES.clonk, 30), get: () => d.crewSize, set: (v) => (d.crewSize = Math.max(1, v)), max: LIMITS.crewSize.max },
-        { name: 'Sorcerers in the crew: they cast spells with magic energy from crystals', icon: () => picture(PICTURES.sorcerer, 30), get: () => d.sorcerers, set: (v) => (d.sorcerers = v), max: LIMITS.sorcerers.max },
+        { name: 'Clonk: an ordinary clonk of the crew', icon: () => picture(PICTURES.clonk, 30), get: () => d.crewSize, set: (v) => (d.crewSize = Math.max(1, v)), max: LIMITS.crewSize.max },
+        { name: 'Sorcerer: a clonk of the crew who can cast spells with magic energy from crystals', icon: () => picture(PICTURES.sorcerer, 30), get: () => d.sorcerers, set: (v) => (d.sorcerers = v), max: LIMITS.sorcerers.max },
       ],
       { x: 66, y: 26, w: 110, hgt: 30, label: 'Crew:', onChange: () => {} },
     ),
@@ -467,7 +662,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     ...idList(
       [
         ...SPELL_IDS.map((id) => ({
-          name: `${SPELLS[id].name} (${SPELLS[id].value} magic energy): ${SPELLS[id].description}`,
+          name: `${SPELLS[id].name}: ${SPELLS[id].value} magic energy. ${SPELLS[id].description}`,
           icon: () => wholePicture(SPELLS[id].icon, SPELLS[id].iconSize, 28),
           get: () => (knows(id) ? 1 : 0),
           set: (v: number) => {
@@ -490,12 +685,21 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
           showBase();
         },
         max: 1,
-      }],
+      },
+      // Built in the round, but a scenario can't start with them yet: greyed in the Add menu.
+      ...(['elevator', 'tower'] as const).map((id) => ({
+        name: `${STRUCTURES[id].name}: comes later, a crew can build one but can't start with one yet`,
+        icon: () => picture(PICTURES[id], 30),
+        get: () => 0,
+        set: () => {},
+        max: 0,
+        later: true,
+      }))],
       { x: 206, y: 26, w: 170, hgt: 30, label: 'Buildings:', onChange: showRules },
     ),
     ...idList(
       ITEM_NAMES.map(([id, name]) => ({
-        name: `Each clonk carries: ${name}`,
+        name: `${name}: each clonk carries one at the start`,
         icon: () => picture(PICTURES[id], 22),
         get: () => (d.startItems.includes(id) ? 1 : 0),
         set: (v: number) => (d.startItems = v ? [id] : []),
@@ -653,18 +857,18 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         set: (v: number) => (l.inEarth[id] = v),
         max: LIMITS.share.max,
       })),
-      { x: 205, y: 15, w: 170, hgt: 58, label: 'Objects in earth types:', onChange: changed },
+      { x: 205, y: 15, w: 170, hgt: 58, label: 'Objects in earth types:', category: 'In earth', onChange: changed },
     ),
     ...inEarthLevel,
     ...idList(
       ITEM_NAMES.map(([id, name]) => ({
-        name: `${name} lying on the ground, per 1000 pixels of map width`,
+        name: `${name}: lying on the ground, per 1000 pixels of map width`,
         icon: () => picture(PICTURES[id], 22),
         get: () => l.onSurface[id] ?? 0,
         set: (v: number) => (l.onSurface[id] = v),
         max: LIMITS.objects.max,
       })),
-      { x: 205, y: 104, w: 170, hgt: 58, label: 'Objects on the surface:', title: 'Per 1000 pixels of map width', format: String, onChange: changed },
+      { x: 205, y: 104, w: 170, hgt: 58, label: 'Objects on the surface:', category: 'On the surface', title: 'Per 1000 pixels of map width', format: String, onChange: changed },
     ),
     ...idList(
       [
@@ -676,14 +880,14 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
           max: LIMITS.share.max,
         })),
         {
-          name: 'Grass along the earth surface',
+          name: 'Grass: along the earth surface',
           icon: () => picture(PICTURES.grass, 24),
           get: () => (l.grass ? 1 : 0),
           set: (v: number) => (l.grass = v > 0),
           max: 1,
         },
       ],
-      { x: 5, y: 122, w: 170, hgt: 30, label: 'Vegetation types:', title: 'Trees and bushes by share, and grass on or off', onChange: changed },
+      { x: 5, y: 122, w: 170, hgt: 30, label: 'Vegetation types:', category: 'Vegetation', title: 'Trees and bushes by share, and grass on or off', onChange: changed },
     ),
     ...vegetationLevel,
   );

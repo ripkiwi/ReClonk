@@ -729,6 +729,81 @@ button {
   cursor: pointer;
 }
 .idl-btns button:active { border-color: #404040 #fff #fff #404040; }
+.idl:focus-visible { box-shadow: 0 0 0 1px var(--ink); outline: none; }
+.idl-tile { user-select: none; }
+.idl:focus .idl-tile.sel { background: #0a246a; color: #fff; }
+.idl:focus .idl-tile.sel .idl-count { color: #fff; }
+.idl-empty { margin: auto; font-size: 10px; font-style: italic; color: #999; pointer-events: none; }
+/* The original's third button: a grey box, for Add... */
+.idl-btns .idl-add { display: flex; align-items: center; justify-content: center; }
+.idl-box {
+  width: 9px;
+  height: 7px;
+  border: 1px solid #202020;
+  border-radius: 1px;
+  background: linear-gradient(135deg, #b8b8b8, #585858);
+  box-shadow: 1px 1px 0 #303030;
+}
+/* The ID list's right-click menu. */
+.idl-menu {
+  position: absolute;
+  z-index: 20;
+  min-width: 120px;
+  padding: 2px;
+  border: 1px solid;
+  border-color: #fff #404040 #404040 #fff;
+  background: #d4d0c8;
+  box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+}
+.idl-menu button { display: block; width: 100%; padding: 3px 14px; border: none; background: none; text-align: left; font: inherit; color: #000; cursor: pointer; white-space: nowrap; }
+.idl-menu button:hover:not(:disabled) { background: #0a246a; color: #fff; }
+.idl-menu button:disabled { color: #888; cursor: default; }
+.idl-menu hr { margin: 2px 1px; border: none; border-top: 1px solid #808080; border-bottom: 1px solid #fff; }
+/* The original's object selection dialog (C4IdSelectDlg). */
+.ids-shade { position: absolute; inset: 0; z-index: 15; background: rgba(40, 25, 10, 0.25); }
+.ids {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 520px;
+  height: 340px;
+  border: 1px solid;
+  border-color: #fff #404040 #404040 #fff;
+  background: #d4d0c8;
+  box-shadow: 3px 3px 6px rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+  color: #000;
+}
+.ids-title { height: 18px; padding: 0 6px; line-height: 18px; background: linear-gradient(90deg, #0a246a, #a6caf0); color: #fff; font-weight: bold; }
+.ids-list {
+  position: absolute;
+  left: 8px;
+  top: 26px;
+  right: 92px;
+  bottom: 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  border: 1px solid;
+  border-color: #808080 #fff #fff #808080;
+  background: #fff;
+  outline: none;
+}
+.ids-list.symbols { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 2px; padding: 4px; }
+.ids-list.symbols .ids-row { width: 78px; height: 70px; overflow: hidden; }
+.ids-list.symbols .ids-name { flex-direction: column; justify-content: flex-end; height: 100%; text-align: center; }
+.ids-list.symbols .ids-name > span:last-child { line-height: 1.1; padding-bottom: 2px; }
+.ids-list.details .ids-row { display: grid; grid-template-columns: 150px 1fr; gap: 6px; padding: 1px 4px; align-items: center; }
+.ids-list.details .ids-name .idl-pic { transform: scale(0.75); }
+.ids-head { position: sticky; top: 0; background: #d4d0c8 !important; color: #000 !important; border-bottom: 1px solid #808080; cursor: default !important; }
+.ids-row { cursor: pointer; user-select: none; }
+.ids-row.sel { background: #0a246a; color: #fff; }
+.ids-row.later { opacity: 0.4; filter: grayscale(1); cursor: default; }
+.ids-name { display: flex; align-items: center; gap: 4px; }
+.ids-text { font-size: 11px; line-height: 1.25; }
+.ids-side { position: absolute; right: 8px; top: 26px; bottom: 8px; width: 76px; display: flex; flex-direction: column; gap: 5px; }
+.ids-view { margin-top: auto; display: flex; flex-direction: column; gap: 2px; }
 .scen-list > li { flex-wrap: wrap; column-gap: 6px; }
 .scen-list > li.scen-group {
   cursor: default;
