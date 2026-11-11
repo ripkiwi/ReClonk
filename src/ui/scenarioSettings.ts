@@ -1,11 +1,12 @@
 import { crewCount, ITEM_IDS, LIMITS, SHOP_IDS, type ScenarioDef } from '../game/scenarios';
 import { SPELL_IDS, SPELLS, LATER_SPELLS, type SpellId } from '../game/magic';
 import { LATER_RULES, RULE_IDS, RULES } from '../game/rules';
-import { isCrewId, type ShopId } from '../game/world';
+import { shopEntry, type ShopId } from '../game/world';
 import { MAX_MAP_PLAYER_EXTEND, type SVal } from '../landscape/mapCreator';
 import { MATERIALS, Mat, TEXMAP, texIndex, TUNNEL, type ItemId, type TexEntry } from '../landscape/materials';
-import { CLONK_KINDS, ITEMS } from '../objects/defs';
+import { ITEMS } from '../objects/defs';
 import { PLANT_IDS, PLANTS, type PlantId } from '../objects/vegetation';
+import { VEHICLES, type VehicleId } from '../objects/vehicle';
 import { CONTENT_BASE } from '../render/assets';
 import { bigButton, h } from './dom';
 import { mapPreview } from './preview';
@@ -61,6 +62,11 @@ const ITEM_SHEETS: Record<ItemId, [number, number]> = {
   flag: [208, 128],
 };
 const itemPicture = (id: ItemId): Picture => ({ file: ITEMS[id].graphic.file, sheet: ITEM_SHEETS[id], ...ITEMS[id].picture });
+const vehiclePicture = (id: VehicleId): Picture => ({
+  file: VEHICLES[id].graphic.file,
+  sheet: VEHICLES[id].graphic.sheet,
+  ...VEHICLES[id].picture,
+});
 const plantPicture = (id: PlantId): Picture => ({ file: PLANTS[id].file, sheet: PLANTS[id].sheet, ...PLANTS[id].picture });
 
 const PICTURES: Record<ItemId | VehicleId | 'clonk' | 'sorcerer' | 'hut' | 'melee' | 'grass', Picture> = {
@@ -326,7 +332,7 @@ function spin(x: number, y: number, w: number, lim: { min: number; max: number; 
 }
 
 const ITEM_NAMES: [ItemId, string][] = ITEM_IDS.map((id) => [id, ITEMS[id].name]);
-const FOR_SALE: [ShopId, string, Picture][] = SHOP_IDS.map((id) => [id, isCrewId(id) ? CLONK_KINDS[id].name : ITEMS[id].name, PICTURES[id]]);
+const FOR_SALE: [ShopId, string, Picture][] = SHOP_IDS.map((id) => [id, shopEntry(id).name, PICTURES[id]]);
 /** Textures a material layer can use: everything but sky and basements. */
 const LAYER_TEXTURES = TEXMAP.filter((t) => t.mat !== Mat.Basement && t.name !== 'Sky' && !(t.name.endsWith('-Liquid') && TEXMAP.some((u) => u.name === t.name.replace('-Liquid', '-Smooth'))));
 const GROUNDS = ['Earth', 'Earth-Rough', 'Earth-Smooth2', 'Earth-Ridge', 'Sand', 'Sand-Smooth3', 'Ashes-Rough'];

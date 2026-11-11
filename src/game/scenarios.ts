@@ -52,19 +52,12 @@ export interface ScenarioDef {
 }
 
 /**
- * The home base start of the original Gold Mine: 50 gold, flints, construction
- * kits and clonks to buy. The original sells a catapult and lorries instead of
- * a boat, a balloon and a blimp; those come once there are lorries and catapults.
+ * The home base starts with the original Gold Mine stock, plus vehicles and
+ * sorcerer supplies so both features are available in the first scenario.
  */
 export const DEFAULT_BASE: BaseSettings = {
   wealth: 50,
-  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, boat: 2, balloon: 1, blimp: 1, clonk: 3 },
- * kits and clonks to buy. A sorcerer and crystals for its magic energy are our
- * addition, so there's a way to get one in the first scenario.
- */
-export const DEFAULT_BASE: BaseSettings = {
-  wealth: 50,
-  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, crystal: 5, clonk: 3, sorcerer: 1 },
+  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, boat: 2, balloon: 1, blimp: 1, crystal: 5, clonk: 3, sorcerer: 1 },
 };
 
 /** The trees of the original Gold Mine and Minor Melee (Vegetation=TRE1=1;TRE2=2;TRE3=1;TRE4=1, VegetationLevel=100). */

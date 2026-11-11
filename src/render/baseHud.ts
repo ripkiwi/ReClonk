@@ -1,11 +1,12 @@
 import { Container, Graphics, Sprite, Text, type TextStyleOptions } from 'pixi.js';
 import { TICKS_PER_SECOND } from '../core/loop';
 import { SPELLS, spellList } from '../game/magic';
-import { isCrewId, shopEntry, type World } from '../game/world';
+import { isCrewId, isVehicleId, shopEntry, type World } from '../game/world';
 import type { Clonk, ControlStyle } from '../objects/clonk';
 import { buildingKeys } from '../input/bindings';
 import { LAYOUTS, type KeyLayout } from '../input/keyboard';
 import { BUILD_PLANS, CLONK, CLONK_KINDS, ENERGY_UNIT, ITEMS, MAGIC_UNIT, STRUCTURES } from '../objects/defs';
+import { VEHICLES } from '../objects/vehicle';
 import { frame, type GameAssets } from './assets';
 
 const style = (size: number, fill = '#ffffff'): TextStyleOptions => ({

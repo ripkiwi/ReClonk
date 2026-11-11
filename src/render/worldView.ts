@@ -33,6 +33,7 @@ interface VehicleSprites {
   /** The balloon's flag in its owner's colour. */
   flag: Sprite | null;
   front: Sprite;
+  sail: Sprite | null;
 }
 
 interface StructureSprites {
@@ -238,6 +239,7 @@ export class WorldView {
     this.updateItems();
     this.updateVehicles();
     this.updateClonks();
+    this.layer.addChild(this.vehicleFront);
     this.updateBridges();
     this.updateMarks(cursor);
     this.updatePxs(viewW, viewH);
@@ -581,6 +583,86 @@ export class WorldView {
     }
   }
 
+  private updateVehicles(): void {
+    const seen = new Set<Vehicle>();
+    for (const v of this.world.vehicles) {
+      if (v.removed) continue;
+      seen.add(v);
+      let s = this.vehicleSprites.get(v);
+      if (!s) {
+        s = {
+          body: new Sprite(),
+          flag: v.def.id === 'balloon' ? new Sprite() : null,
+          front: new Sprite(),
+          sail: v.def.id === 'boat' ? new Sprite() : null,
+        };
+        s.body.anchor.set(0.5);
+        s.front.visible = false;
+        this.vehicleLayer.addChild(s.body);
+        if (s.flag) this.vehicleLayer.addChild(s.flag);
+        if (s.sail) this.vehicleLayer.addChild(s.sail);
+        this.vehicleFront.addChild(s.front);
+        this.vehicleSprites.set(v, s);
+      }
+
+      const def = v.def;
+      const file = v.burned ? def.burned.file : def.graphic.file;
+      const sheet = this.assets.items[file];
+      const bodySheet = !v.burned && def.id === 'balloon' && v.owner >= 0 ? colorByOwner(sheet).body : sheet;
+      const facet = def.graphic.facet;
+      if (v.burned) {
+        s.body.texture = frame(sheet, 0, 0, def.width, def.height);
+      } else if (def.id === 'blimp' && v.action === 'Turn') {
+        const index = Math.min(BLIMP.turnFrames - 1, Math.floor(v.actTime / BLIMP.turnDelay));
+        s.body.texture = frame(bodySheet, index * def.width, def.height, def.width, def.height);
+      } else if (def.id === 'blimp' && v.action === 'FloatPropel') {
+        const index = Math.floor(v.actTime / BLIMP.propel) % BLIMP.propel;
+        s.body.texture = frame(bodySheet, index * def.width, 0, def.width, def.height);
+      } else {
+        s.body.texture = frame(bodySheet, facet.x, facet.y, facet.w, facet.h);
+      }
+      s.body.position.set(v.x, v.y);
+      s.body.scale.x = -v.dir;
+      if (s.flag) {
+        const flag = BALLOON_FLAG;
+        const flagSheet = v.owner >= 0 ? colorByOwner(sheet).overlay : sheet;
+        const phase = Math.floor(this.world.tick / flag.delay) % flag.length;
+        const row = v.owner >= 0 ? v.flagDir : 0;
+        s.flag.visible = v.owner >= 0;
+        s.flag.texture = frame(flagSheet, flag.x + phase * flag.w, flag.y + row * flag.h, flag.w, flag.h);
+        s.flag.position.set(v.left + flag.at.x, v.top + flag.at.y);
+        s.flag.tint = this.colorOf(v.owner);
+      }
+      if (s.sail) {
+        s.sail.visible = isSailing(v.action);
+        if (s.sail.visible) {
+          const index = Math.min(SAIL.frames - 1, Math.floor(v.actTime / 2));
+          s.sail.texture = frame(this.assets.items[SAIL.file], index * 36, 0, 36, 44);
+          s.sail.anchor.set(0.5);
+          s.sail.position.set(v.x, v.y - 20);
+          s.sail.scale.x = -v.dir;
+        }
+      }
+
+      const topFace = def.topFace;
+      s.front.visible = v.hasMask && !!topFace;
+      if (topFace) {
+        s.front.texture = frame(sheet, topFace.x, topFace.y, topFace.w, topFace.h);
+        s.front.position.set(v.left + topFace.at.x, v.top + topFace.at.y);
+        s.front.scale.x = -v.dir;
+      }
+    }
+
+    for (const [v, s] of this.vehicleSprites) {
+      if (seen.has(v)) continue;
+      s.body.destroy();
+      s.flag?.destroy();
+      s.front.destroy();
+      s.sail?.destroy();
+      this.vehicleSprites.delete(v);
+    }
+  }
+
   /** Trees sway in their animation strips and grow stretched from the bottom; felled ones lie tilted over their root. */
   private updatePlants(): void {
     const tex = this.assets.items;
@@ -805,6 +887,8 @@ export class WorldView {
             color: Math.random() < 0.5 ? 0xff5a00 : 0xffb020, alpha: 0.9, life: 20 + Math.floor(Math.random() * 30), age: 0,
           });
         }
+        continue;
+      }
       // Lava hissing on water makes white steam, acid grey fumes (Smoke in C4Material.cpp's reactions), volcanoes thick smoke.
       if (e.type === 'poof') {
         if (Math.random() < 1 / 3) this.fire.puff(e.x, e.y - 2, 3, 0xd8d8d8);

@@ -69,7 +69,7 @@ export type WorldEvent =
   /** A fireball left a flame behind. */
   | { type: 'flame'; x: number; y: number; tick: number }
   /** A flag went up on a building: it's now `player`'s home base (the Trumpet). */
-  | { type: 'newBase'; structure: Structure; player: number; tick: number };
+  | { type: 'newBase'; structure: Structure; player: number; tick: number }
   /** Lava and water boiled each other away (Pshshsh, smoke). */
   | { type: 'poof'; x: number; y: number; tick: number }
   /** Acid ate a pixel (smoke, now and then the Corrode sound). */
@@ -93,12 +93,11 @@ export interface PlayerMessage {
 }
 
 /** What a home base can sell: items, vehicles, and clonks for the crew. */
-export type ShopId = ItemId | VehicleId | 'clonk';
+export type ShopId = ItemId | VehicleId | ClonkKind;
 
 export function isVehicleId(id: string): id is VehicleId {
   return id in VEHICLES;
-/** What a home base can sell: items, and clonks for the crew. */
-export type ShopId = ItemId | ClonkKind;
+}
 
 /** True for the clonks a base sells. */
 export function isCrewId(id: ShopId): id is ClonkKind {
@@ -107,8 +106,7 @@ export function isCrewId(id: ShopId): id is ClonkKind {
 
 /** Name and price of something in the shop. */
 export function shopEntry(id: ShopId): { name: string; value: number } {
-  return id === 'clonk' ? CLONK : isVehicleId(id) ? VEHICLES[id] : ITEMS[id];
-  return isCrewId(id) ? CLONK_KINDS[id] : ITEMS[id];
+  return isCrewId(id) ? CLONK_KINDS[id] : isVehicleId(id) ? VEHICLES[id] : ITEMS[id];
 }
 
 /** A player's money and what their home base has in stock to buy. */
@@ -392,16 +390,14 @@ export class World {
       // Whether a dig might be the first press of a double dig at a tree.
       if (mine) c.atTree = c.action.procedure === 'walk' && !!this.choppableAt(c);
       if (mine && c.buildMenu !== null) this.buildMenuControl(c, mine);
-      else if (mine && c.alive && c.action.procedure === 'push' && c.vehicle) {
+      else if (mine && c.spellMenu !== null) this.spellMenuControl(c, mine);
+      else if (mine?.pressedMagic && c.buildMenu === null && openSpellMenu(this, c)) {
+        // The spell menu is open, or the clonk said why not.
+      } else if (mine && c.alive && c.action.procedure === 'push' && c.vehicle) {
         vehicleControl(this, c, mine, () =>
           c.control({ ...NO_CONTROL, pressedThrow: true }, { throwItem: (item, xdir, ydir) => throwItem(item, xdir, ydir, c), tryEnter: () => false, useItem: () => false, grabOrBuild: () => false }),
         );
       } else if (mine && c.alive && c.action.procedure === 'push') pushControl(this, c, mine);
-      if (mine && c.spellMenu !== null) this.spellMenuControl(c, mine);
-      else if (mine?.pressedMagic && c.buildMenu === null && openSpellMenu(this, c)) {
-        // The spell menu is open, or the sorcerer said why not.
-      } else if (mine && c.buildMenu !== null) this.buildMenuControl(c, mine);
-      else if (mine && c.alive && c.action.procedure === 'push') pushControl(this, c, mine);
       else if (mine || c.goTo !== null) {
         // Moving on stops building.
         if (mine && (c.action.procedure === 'build' || c.action.procedure === 'chop') && stopsWork(mine)) c.letGo();
@@ -1189,7 +1185,6 @@ export class World {
     const def = shopEntry(id);
     if ((p.stock[id] ?? 0) <= 0) return this.say(c.owner, `No ${def.name} left`);
     if (p.wealth < def.value) return this.say(c.owner, `Not enough gold for ${def.name}`);
-    if (id === 'clonk') return this.buyClonk(c, p);
     if (isVehicleId(id)) return this.buyVehicle(c, p, id);
     if (isCrewId(id)) return this.buyClonk(c, p, id);
     if (c.contents.length >= CLONK.maxContents) return this.say(c.owner, 'Hands full: sell or drop it first');
