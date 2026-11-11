@@ -239,7 +239,7 @@ describe('Buildings on fire', () => {
     expect(world.land.get(hut.x, hut.basement!.y + 1)).toBe(Mat.Basement);
   });
 
-  it('a burned hut that was put out can be built back up into a hut, flag and all', () => {
+  it('a burned hut that was put out can be built back up into a hut; its flag lies where it fell', () => {
     const world = flatWorld();
     const hut = buildOnSurface(world, 'hut', 100, 0);
     incinerate(world, hut, null, true);
@@ -251,8 +251,10 @@ describe('Buildings on fire', () => {
     until(world, () => !hut.burned, 2000);
     expect(hut.burned).toBe(false);
     expect(hut.complete).toBe(true);
-    expect(hut.hasFlag).toBe(true);
-    expect(hut.base).toBe(0);
+    // The flag came off as a loose object (unless the builder picked it up); it doesn't magically go back up.
+    expect(hut.hasFlag).toBe(false);
+    const flag = world.items.find((i) => i.def.id === 'flag')!;
+    expect(flag.owner).toBe(0);
   });
 
   it('a T-flint going off in a hut hurts the building too', () => {

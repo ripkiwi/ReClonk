@@ -71,7 +71,7 @@ function inWater(world: World, o: Burnable): boolean {
  * Set it alight (C4Object::Incinerate, FnFxFireStart). Living things only
  * burn while they're alive. In water nothing catches fire, but a blast still
  * turns it into its burned self. Trees turn into dead trees, buildings into
- * burned ones: their flag falls off, everyone inside comes out, and lifts and
+ * burned ones: their flag falls off (a loose flag anyone can take), everyone inside comes out, and lifts and
  * gates are gone. Returns false if it didn't catch fire.
  */
 export function incinerate(world: World, o: Burnable, by: Clonk | null, blasted = false): boolean {
@@ -111,19 +111,26 @@ function burnStructure(world: World, s: Structure): void {
   s.gates = [];
   s.liftCase?.floor.remove(land);
   s.liftCase = null;
-  if (s.base >= 0) {
-    s.flagOwner = s.base;
-    s.base = -1;
-  }
+  if (s.base >= 0) dropFlag(world, s);
 }
 
-/** A clonk built a burned building back up (ConstructTo): it's the real one again, flag and all. */
+/**
+ * The flag comes off its building (detached from FlyBase) and falls where it
+ * flew. It's a loose flag now: anyone can pick it up and sell it in their own
+ * base, or carry it into a building without a flag to make it its owner's base.
+ */
+export function dropFlag(world: World, s: Structure): Item {
+  const flag = world.spawnItem('flag', s.x + s.def.flagVertex.x, s.y + s.def.flagVertex.y, 0, -1);
+  flag.owner = s.base;
+  s.base = -1;
+  return flag;
+}
+
+/** A clonk built a burned building back up (ConstructTo): it's the real one again, but without a flag until someone brings one. */
 export function rebuilt(s: Structure): void {
   s.burned = false;
   s.fire = null;
   s.damage = 0;
-  if (s.flagOwner >= 0) s.base = s.flagOwner;
-  s.flagOwner = -1;
 }
 
 /** Put the fire out (C4Object::Extinguish). */

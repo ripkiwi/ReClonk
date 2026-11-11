@@ -38,8 +38,10 @@ export interface ItemDef {
   contactIncinerate?: number;
   /** Blast damage that sets it alight (DefCore BlastIncinerate). */
   blastIncinerate?: number;
-  /** Image in the content pack and the in-game frame inside it. */
-  graphic: { file: string; facet: Facet };
+  /** Image in the content pack and the in-game frame inside it; an overlay gets tinted in its owner's colour (DefCore ColorByOwner). */
+  graphic: { file: string; facet: Facet; overlay?: string };
+  /** Floats up in water instead of sinking (DefCore Float). */
+  float?: boolean;
   /** Its picture in the same file, for menus and the scenario settings (DefCore Picture). */
   picture: Facet;
 }
@@ -93,6 +95,17 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   meteor: {
     id: 'meteor', name: 'Meteor', value: 10, mass: 10, vertices: itemVertex, explodeOnHit: 10, explodeRandom: 12,
     graphic: { file: 'items/Meteor.png', facet: { x: 0, y: 0, w: 6, h: 5 } }, picture: { x: 8, y: 0, w: 120, h: 120 },
+  },
+  // Flag.c4d: put it on a building and it's your home base. When the base burns
+  // it falls off, and anyone can pick it up and sell it for 100 gold.
+  flag: {
+    id: 'flag', name: 'Flag', value: 100, rebuy: true, mass: 2, float: true,
+    vertices: [
+      { x: -1, y: 5, cnat: CNAT.None, friction: 50 },
+      { x: -1, y: -6, cnat: CNAT.None, friction: 50 },
+    ],
+    graphic: { file: 'items/Flag.png', facet: { x: 0, y: 0, w: 24, h: 12 }, overlay: 'items/FlagOverlay.png' },
+    picture: { x: 144, y: 0, w: 64, h: 64 },
   },
 };
 

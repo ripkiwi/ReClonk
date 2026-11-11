@@ -114,8 +114,17 @@ export class BaseHud {
           icon.position.set(2, 10);
         } else {
           const g = ITEMS[id].graphic;
-          icon = new Sprite(frame(this.assets.items[g.file], g.facet.x, g.facet.y, g.facet.w, g.facet.h));
-          icon.scale.set(4);
+          icon = new Container();
+          // Owner-coloured things (the flag) show their picture with the cloth in the player's colour.
+          const f = g.overlay ? ITEMS[id].picture : g.facet;
+          icon.addChild(new Sprite(frame(this.assets.items[g.file], f.x, f.y, f.w, f.h)));
+          if (g.overlay) {
+            const cloth = new Sprite(frame(this.assets.items[g.overlay], f.x, f.y, f.w, f.h));
+            cloth.tint = this.color;
+            icon.addChild(cloth);
+          }
+          const k = Math.min(4, 28 / Math.max(f.w, f.h));
+          icon.scale.set(k);
           icon.position.set(8, 8);
         }
         // Long names go on two lines.
