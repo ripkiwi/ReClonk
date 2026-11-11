@@ -226,6 +226,35 @@ describe('Buildings on fire', () => {
     expect(c.contained).toBeNull();
   });
 
+  it('a burning hut sinks as it burns: once a fifth of it is gone, a clonk standing in its middle catches fire', () => {
+    const world = flatWorld();
+    const hut = buildOnSurface(world, 'hut', 100, 0);
+    const c = standing(world, hut.x);
+    const atDoor = standing(world, hut.x - 10);
+    incinerate(world, hut, null, true);
+    // At first its centre is above the clonk's head (the hut is 50 pixels tall, a clonk 20).
+    run(world, 150);
+    expect(c.fire).toBeNull();
+    // Its shape burns down from the top, so its centre comes down into the clonk: the next check (every 35 ticks) lights it.
+    until(world, () => !!c.fire, 200);
+    expect(c.fire).not.toBeNull();
+    expect(hut.con).toBeLessThan(CONSTRUCTION.fullCon * 0.81);
+    // A clonk at the door, away from the middle, doesn't catch fire from the hut.
+    expect(atDoor.fire).toBeNull();
+  });
+
+  it('a clonk who keeps standing in a burning hut catches fire again after it is put out', () => {
+    const world = flatWorld();
+    const hut = buildOnSurface(world, 'hut', 100, 0);
+    const c = standing(world, hut.x);
+    incinerate(world, hut, null, true);
+    until(world, () => !!c.fire, 400);
+    expect(c.fire).not.toBeNull();
+    extinguish(world, c);
+    until(world, () => !!c.fire, FIRE.contactInterval + 1);
+    expect(c.fire).not.toBeNull();
+  });
+
   it('a burning building burns away in 1000 ticks; its basement stays', () => {
     const world = flatWorld();
     const hut = buildOnSurface(world, 'hut', 100, 0);
