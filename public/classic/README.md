@@ -41,6 +41,8 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `magic/GravityDown.png`, `GravityUp.png`, `Bridge.png`, `BridgeSegment.png`, `Firetail.png` | `Objects.c4d/Magic.c4d/GravitationDown.c4d`, `GravitationUp.c4d`, `ForceFieldBrigde.c4d` and its segment, `Firefist.c4d/Firetail.c4d` `/Graphics.png` |
 | `rules/*.png` | `Objects.c4d/Rules.c4d/<rule>.c4d/Graphics.png` (rule pictures in the scenario properties) |
 | `sound/Magic1.wav`, `Electric.wav`, `Crystal1-3.wav`, `Wind2.wav`, `Energy.wav` | `Sound.c4g/` |
+| `sound/Corrode.wav`, `Lava1-3.wav` | `Sound.c4g/` (**renamed to lower-case `.wav`** where the original was `.WAV`) |
+| `sound/VolcanoCast.wav` | `Objects.c4d/Effects.c4d/Volcano.c4d/VolcanoCast.wav` |
 | `goals/Melee.png` | `Objects.c4d/Goals.c4d/Melee.c4d/Graphics.png` (goal picture in the scenario properties) |
 | `materials/*.png` | `Material.c4g/` textures |
 | `sky/Clouds1.jpg` | `planet/Graphics.c4g/Clouds1.jpg` |

@@ -29,6 +29,7 @@ const HURTS = ['Hurt1', 'Hurt2', 'Hurt3'] as const;
 const KIMES = ['Kime1', 'Kime2', 'Kime3'] as const;
 const PUNCHES = ['Punch1', 'Punch2', 'Punch3'] as const;
 const THUNDER = ['Thunder1', 'Thunder2', 'Thunder3'] as const;
+const LAVA = ['Lava1', 'Lava2', 'Lava3'] as const;
 const CHOPS = ['Chop1', 'Chop2', 'Chop3', 'Chop4'] as const;
 const TREE_DOWN = ['TreeDown1', 'TreeDown2', 'TreeDown3'] as const;
 const ROCK_HITS = ['RockHit1', 'RockHit2', 'RockHit3'] as const;
@@ -151,6 +152,9 @@ export class GameScreen {
     // Quieter the further away from the clonk it happens.
     const volumeAt = (x: number, y: number): number =>
       near ? Math.max(0.15, 1 - Math.hypot(x - near.x, y - near.y) / 500) : 1;
+    // Hundreds of pixels can react at once: a couple of sounds a tick is enough.
+    let hissed = 0;
+    let sizzled = 0;
     for (const e of events) {
       if (e.type === 'explosion') this.env.sounds.play(BLASTS[Math.floor(Math.random() * BLASTS.length)], volumeAt(e.x, e.y));
       else if (e.type === 'collect' && e.clonk === near) this.env.sounds.play('Grab', 0.8);
@@ -190,6 +194,14 @@ export class GameScreen {
         else if (e.spell === 'heal') this.env.sounds.play('Energy', v);
         else if (e.spell !== 'lightning') this.env.sounds.play('Magic1', v);
       } else if (e.type === 'charge') this.env.sounds.play('Electric', volumeAt(e.clonk.x, e.clonk.y) * 0.8);
+      // Lava boiling water away hisses one time in three, acid sizzles one time in 20 (C4Material.cpp's reactions).
+      else if (e.type === 'poof' && Math.random() < 1 / 3 && hissed < 2) {
+        hissed++;
+        this.env.sounds.play('Pshshsh', volumeAt(e.x, e.y) * 0.6);
+      } else if (e.type === 'corrode' && Math.random() < 1 / 20 && sizzled < 1) {
+        sizzled++;
+        this.env.sounds.play('Corrode', volumeAt(e.x, e.y) * 0.6);
+      } else if (e.type === 'volcano') this.env.sounds.play(Math.random() < 0.5 ? 'VolcanoCast' : pick(LAVA), volumeAt(e.x, e.y));
       else if (e.type === 'itemHit') {
         const id = e.item.def.id;
         const set = id === 'crystal' ? CRYSTAL_HITS : id === 'wood' ? WOOD_HITS : id === 'rock' || id === 'gold' || e.item.def.fuse ? ROCK_HITS : null;
@@ -204,6 +216,8 @@ export class GameScreen {
     let fire = 0;
     for (const p of this.round.world.plants) if (p.fire) fire = Math.max(fire, volumeAt(p.x, p.bottom));
     for (const st of this.round.world.structures) if (st.fire) fire = Math.max(fire, volumeAt(st.x, st.y));
+    // Burning oil crackles too (Flame.c4d's Burn action sound).
+    for (const f of this.round.world.flames) fire = Math.max(fire, volumeAt(f.x, f.y));
     this.env.sounds.loop('Fire', fire * 0.7);
     // A burning fuse hisses (the T-flint's Activated action sound).
     let fusing = 0;

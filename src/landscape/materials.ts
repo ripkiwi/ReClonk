@@ -23,6 +23,16 @@ export const enum Mat {
   Ice = 8,
   /** Falls instead of rain below 0 degrees, melts above 5. */
   Snow = 9,
+  /** Burns: fire, blasts and lava set it alight, and it burns away from the top. */
+  Oil = 10,
+  /** Eats earth, sand, ice, snow, water and oil, and hurts clonks swimming in it. */
+  Acid = 11,
+  /** Sets things alight, boils water away and hardens into ashes from the top. */
+  Lava = 12,
+  /** Lava that never hardens. */
+  DuroLava = 13,
+  /** What lava hardens into: diggable, like earth. */
+  Ashes = 14,
 }
 
 /** Density at or above which a material blocks movement (C4M_Solid in the original). */
@@ -66,19 +76,35 @@ export interface Material {
   aboveTemp?: { temp: number; to: Mat; dir: 0 | 1 };
   /** Loose pixels that land in this material turn into it (InMatConvert: snow in water). */
   inMatConvert?: { mat: Mat; to: Mat };
+  /** Pixels converted at once by a temperature change, plus one (TempConvStrength; 3 if missing). */
+  tempConvStrength?: number;
+  /** Burns (Inflammable): fire and lava light it, and flames eat it up. */
+  inflammable?: boolean;
+  /** Sets inflammable things alight (Incindiary): lava. */
+  incindiary?: boolean;
+  /** Puts fires out and boils away against incindiary materials, taking them along (Extinguisher). */
+  extinguisher?: boolean;
+  /** Percent chance to eat a neighbouring pixel, and energy it takes from clonks in it, times 15 (Corrosive). */
+  corrosive?: number;
+  /** Percent chance a corrosive material eats it (Corrode). */
+  corrode?: number;
+  /** Turns into this when it touches an incindiary material (Snow's Reaction: Convert to Water). */
+  incindiaryConvert?: Mat;
+  /** Filled in below: it reacts with something when it can't flow on. */
+  reactive?: boolean;
 }
 
-/** Pixels converted at once by a temperature change (TempConvStrength). */
+/** Pixels converted at once by a temperature change (TempConvStrength) of water, ice and snow. */
 export const TEMP_CONV_STRENGTH = 3;
 
 export const MATERIALS: readonly Material[] = [
   { name: 'Sky', density: 0, digFree: false, blastFree: false, colors: [0, 0, 0], texture: 'SMOOTH', shape: 0 },
   {
-    name: 'Earth', density: SOLID, digFree: true, blastFree: true,
+    name: 'Earth', density: SOLID, digFree: true, blastFree: true, corrode: 75,
     colors: [0x7f5f3f, 0x936f4b, 0xab7f5b], texture: 'SMOOTH', shape: 2,
   },
   {
-    name: 'Sand', density: SOLID, digFree: true, blastFree: true,
+    name: 'Sand', density: SOLID, digFree: true, blastFree: true, corrode: 30,
     colors: [0xe0c88c, 0xe0d488, 0xece894], texture: 'SMOOTH2', shape: 2,
   },
   {
@@ -96,14 +122,14 @@ export const MATERIALS: readonly Material[] = [
   {
     name: 'Water', density: LIQUID, digFree: false, blastFree: false,
     colors: [0x07238c, 0x07238c, 0x07238c], texture: 'LIQUID', shape: 0,
-    windDrift: 30, belowTemp: { temp: -10, to: Mat.Ice, dir: 0 },
+    windDrift: 30, belowTemp: { temp: -10, to: Mat.Ice, dir: 0 }, extinguisher: true, corrode: 100,
   },
   {
     name: 'Basement', density: SOLID, digFree: false, blastFree: false,
     colors: [0x5a5a5a, 0x6e6e6e, 0x828282], texture: 'Rock', shape: 0,
   },
   {
-    name: 'Ice', density: SOLID, digFree: true, blastFree: true, maxSlide: 1,
+    name: 'Ice', density: SOLID, digFree: true, blastFree: true, maxSlide: 1, corrode: 60,
     colors: [0x006ebe, 0x007cfc, 0x0096fa], texture: 'Sponge', shape: 1,
     aboveTemp: { temp: 10, to: Mat.Water, dir: 1 },
   },
@@ -111,8 +137,56 @@ export const MATERIALS: readonly Material[] = [
     name: 'Snow', density: SOLID, digFree: true, blastFree: true, instable: true, maxSlide: 1, windDrift: 70,
     colors: [0xe6e6e6, 0xf0f0f0, 0xfafafa], texture: 'Spots', shape: 2,
     aboveTemp: { temp: 5, to: Mat.Water, dir: 0 }, inMatConvert: { mat: Mat.Water, to: Mat.Water },
+    corrode: 60, incindiaryConvert: Mat.Water,
+  },
+  {
+    // The original's Oil.c4m lists only 8 of its 9 colour values; the last one is taken as 38.
+    name: 'Oil', density: LIQUID, digFree: false, blastFree: false,
+    colors: [0x202020, 0x232326, 0x262626], texture: 'LIQUID', shape: 0,
+    windDrift: 30, inflammable: true, corrode: 100,
+  },
+  {
+    name: 'Acid', density: LIQUID, digFree: false, blastFree: false,
+    colors: [0x00be00, 0x00c800, 0x00d200], texture: 'LIQUID', shape: 0,
+    windDrift: 30, corrosive: 75,
+  },
+  {
+    // Below 100 degrees (always, in any climate) it hardens into ashes from the top, 13 pixels a pass.
+    name: 'Lava', density: LIQUID, digFree: false, blastFree: false,
+    colors: [0xf5c80f, 0xf8dc12, 0xfbf00f], texture: 'LIQUID', shape: 0,
+    windDrift: 40, incindiary: true, belowTemp: { temp: 100, to: Mat.Ashes, dir: 0 }, tempConvStrength: 12,
+  },
+  {
+    name: 'DuroLava', density: LIQUID, digFree: false, blastFree: false,
+    colors: [0xf5c80f, 0xfbf00f, 0xf8dc12], texture: 'LIQUID', shape: 0,
+    windDrift: 40, incindiary: true,
+  },
+  {
+    name: 'Ashes', density: SOLID, digFree: true, blastFree: true, maxSlide: 1, windDrift: 60, corrode: 75,
+    colors: [0x5a4e28, 0x52504e, 0x64605a], texture: 'SMOOTH3', shape: 2,
   },
 ];
+
+/**
+ * What happens when material `a` (moving: a loose pixel, or a liquid that
+ * can't flow on) meets material `b`, like the original's reaction map
+ * (C4MaterialMap::CrossMapMaterials): only against something at least as dense.
+ */
+export type Reaction = 'poof' | 'incinerate' | 'corrode' | 'convert' | null;
+
+export function reaction(a: Mat, b: Mat): Reaction {
+  const ma = MATERIALS[a];
+  const mb = MATERIALS[b];
+  // Snow touching lava melts (Snow.c4m's own Reaction, which ignores density).
+  if (ma.incindiaryConvert !== undefined && mb.incindiary) return 'convert';
+  if (!mb.density || ma.density > mb.density) return null;
+  if ((ma.incindiary && mb.extinguisher) || (ma.extinguisher && mb.incindiary)) return 'poof';
+  if ((ma.incindiary && mb.inflammable) || (ma.inflammable && mb.incindiary)) return 'incinerate';
+  if (ma.corrosive && mb.corrode) return 'corrode';
+  return null;
+}
+
+for (const m of MATERIALS as Material[]) m.reactive = !!(m.corrosive || m.incindiary || m.extinguisher || m.inflammable);
 
 /** Background shown where the landscape is empty underground (dug tunnels). */
 export const TUNNEL = { colors: [0x523212, 0x5c421e, 0x6a4824] as [number, number, number], texture: 'SMOOTH2' };
@@ -141,12 +215,23 @@ export const TEXMAP: readonly TexEntry[] = [
   entry('Sky', Mat.Sky, 'SMOOTH'),
   entry('Tunnel-Smooth', Mat.Sky, 'SMOOTH2', 2),
   entry('Tunnel-Rough', Mat.Sky, 'ROUGH', 2),
+  entry('DuroLava-Smooth', Mat.DuroLava, 'LIQUID'),
   entry('Water-Liquid', Mat.Water, 'LIQUID'),
+  entry('Oil-Liquid', Mat.Oil, 'LIQUID'),
+  entry('Acid-Liquid', Mat.Acid, 'LIQUID'),
+  entry('Lava-Liquid', Mat.Lava, 'LIQUID'),
+  entry('DuroLava-Liquid', Mat.DuroLava, 'LIQUID'),
   entry('Water-Smooth', Mat.Water, 'LIQUID'),
+  entry('Oil-Smooth', Mat.Oil, 'LIQUID'),
+  entry('Acid-Smooth', Mat.Acid, 'LIQUID'),
+  entry('Lava-Smooth', Mat.Lava, 'LIQUID'),
   entry('Earth-Ridge', Mat.Earth, 'RIDGE'),
   entry('Earth-Smooth', Mat.Earth, 'SMOOTH'),
   entry('Earth-Rough', Mat.Earth, 'ROUGH'),
   entry('Earth-Smooth2', Mat.Earth, 'SMOOTH2'),
+  entry('Ashes-Smooth3', Mat.Ashes, 'SMOOTH3'),
+  entry('Ashes-Rough', Mat.Ashes, 'ROUGH'),
+  entry('Ashes-Ridge', Mat.Ashes, 'RIDGE'),
   entry('Granite-Rough', Mat.Granite, 'ROUGH'),
   entry('Granite-Ridge', Mat.Granite, 'RIDGE'),
   entry('Granite-Rock', Mat.Granite, 'Rock'),

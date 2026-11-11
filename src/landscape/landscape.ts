@@ -3,11 +3,19 @@
 // ExecuteScan, DoScan). See licenses/clonk_engine_license.txt.
 
 import { Rng } from '../core/rng';
-import { DEFAULT_TEX, LIQUID, MATERIALS, Mat, SOLID, TEMP_CONV_STRENGTH } from './materials';
+import { DEFAULT_TEX, LIQUID, MATERIALS, Mat, SOLID, TEMP_CONV_STRENGTH, reaction } from './materials';
 import { PxsSystem } from './pxs';
 
 /** How far a liquid pixel looks sideways for somewhere lower to flow to. */
 const LIQUID_SLIDE = 12;
+
+/** Something the landscape did that makes smoke or a sound: lava boiling water away, acid eating. */
+export interface LandFx {
+  type: 'poof' | 'corrode';
+  x: number;
+  y: number;
+}
+
 
 /** An axis-aligned pixel rectangle, inclusive on all edges. Empty when x0 > x1. */
 export class Rect {
@@ -62,6 +70,14 @@ export class Landscape {
   bottomOpen = false;
   /** 1 where an empty pixel shows tunnel background instead of sky. */
   readonly tunnel: Uint8Array;
+  /**
+   * The step each pixel last changed in (paint() for a new map doesn't count).
+   * Liquids only react where something just changed, like the original's mass
+   * movers, which only exist where the landscape moved: a lake of acid left
+   * alone stays put, one that's disturbed eats on.
+   */
+  private readonly changedAt: Int32Array;
+  private stepNo = 1;
   /** Pixels changed since the renderer last looked. */
   readonly dirty = new Rect();
   /** Where liquids may still move; the simulation only scans this area. */
@@ -75,6 +91,13 @@ export class Landscape {
   wind = 0;
   /** Loose pixels of material in flight: rain, snow, earth shaken free. */
   readonly pxs = new PxsSystem(this);
+  /**
+   * Sets burning oil alight at a spot, if no flame is there yet (the world's
+   * flames; C4Landscape::Incinerate creates a FLAM). Returns whether it did.
+   */
+  ignite: ((x: number, y: number) => boolean) | null = null;
+  /** Smoke and sounds from reactions since the world last looked. */
+  readonly fx: LandFx[] = [];
   /** Column the temperature scan looks at next, and how many columns it scans per tick. */
   private scanX = 0;
   private readonly scanSpeed: number;
@@ -86,6 +109,7 @@ export class Landscape {
     this.cells = new Uint8Array(width * height);
     this.tex = new Uint8Array(width * height);
     this.tunnel = new Uint8Array(width * height);
+    this.changedAt = new Int32Array(width * height);
     this.dirty.addRect(0, 0, width - 1, height - 1);
     this.active.addRect(0, 0, width - 1, height - 1);
     this.scanSpeed = Math.max(2, Math.min(15, Math.trunc(width / 500)));
@@ -123,6 +147,7 @@ export class Landscape {
     if (this.cells[i] === m) return;
     this.cells[i] = m;
     this.tex[i] = DEFAULT_TEX[m];
+    this.changedAt[i] = this.stepNo;
     this.dirty.add(x, y);
     this.active.add(x, y, LIQUID_SLIDE + 1);
   }
@@ -196,6 +221,7 @@ export class Landscape {
    * Scans bottom-up; horizontal direction alternates by tick so flows stay symmetric.
    */
   step(tick: number, rng: Rng): void {
+    this.stepNo++;
     const area = this.active;
     area.clamp(this.width, this.height);
     if (area.empty) return;
@@ -230,9 +256,15 @@ export class Landscape {
           continue;
         }
         const target = this.findFlow(x, y, rng);
-        if (target < 0) continue;
+        if (target < 0) {
+          if (!mat.reactive || !this.recentlyChanged(x, y)) continue;
+          // Stuck: react with what's below or beside it (C4MassMover::Corrosion), and get used up.
+          if (this.react(x, y, 0, 1, m, rng) || this.react(x, y, -1, 0, m, rng) || this.react(x, y, 1, 0, m, rng)) this.extractMaterial(x, y);
+          continue;
+        }
         cells[idx] = Mat.Sky;
         cells[target] = m;
+        this.changedAt[idx] = this.changedAt[target] = this.stepNo;
         this.tex[target] = this.tex[idx];
         this.tex[idx] = 0;
         moved.add(target);
@@ -255,6 +287,13 @@ export class Landscape {
     const conv = MATERIALS[m].inMatConvert;
     if (conv && this.get(x, y + 1) === conv.mat) {
       this.set(x, y, conv.to);
+      return;
+    }
+    // Snow on lava melts and drips onto it.
+    const melt = MATERIALS[m].incindiaryConvert;
+    if (melt !== undefined && (MATERIALS[this.get(x, y + 1)].incindiary || MATERIALS[this.get(x - 1, y)].incindiary || MATERIALS[this.get(x + 1, y)].incindiary)) {
+      this.set(x, y, Mat.Sky);
+      this.pxs.create(melt, x, y);
       return;
     }
     if (y === this.height - 1 && this.bottomOpen) {
@@ -354,6 +393,121 @@ export class Landscape {
     return false;
   }
 
+  /** Did this pixel or one next to it change in this step or the last one? */
+  private recentlyChanged(x: number, y: number): boolean {
+    const since = this.stepNo - 1;
+    const w = this.width;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < w && ny < this.height && this.changedAt[ny * w + nx] >= since) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * A liquid pixel at x, y that can't flow on meets the pixel at x+dx, y+dy
+   * (the meeMassMove reactions of C4Material.cpp). Returns true if it was used
+   * up: lava and water boil each other away, acid eats the other pixel, oil
+   * next to lava catches fire.
+   */
+  private react(x: number, y: number, dx: number, dy: number, m: Mat, rng: Rng): boolean {
+    const tx = x + dx;
+    const ty = y + dy;
+    if (!this.inBounds(tx, ty)) return false;
+    const t = this.get(tx, ty);
+    switch (reaction(m, t)) {
+      case 'poof':
+        this.extractMaterial(tx, ty);
+        this.fx.push({ type: 'poof', x, y });
+        return true;
+      case 'incinerate':
+        return this.incinerate(x, y);
+      case 'corrode':
+        if (rng.int(100) < (MATERIALS[m].corrosive ?? 0) && rng.int(100) < (MATERIALS[t].corrode ?? 0)) {
+          this.set(tx, ty, Mat.Sky);
+          this.fx.push({ type: 'corrode', x, y });
+          return true;
+        }
+        return false;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * A loose pixel of `m` lands on the pixel at x, y (the meePXSMove
+   * reactions). Returns true if it's used up and shouldn't be put into the
+   * landscape: it boiled away, or ate the pixel it hit.
+   */
+  landReaction(m: Mat, x: number, y: number, rng: Rng): boolean {
+    const t = this.get(x, y);
+    switch (reaction(m, t)) {
+      case 'poof':
+        if (!this.inBounds(x, y)) return false;
+        this.extractMaterial(x, y);
+        this.fx.push({ type: 'poof', x, y });
+        return true;
+      case 'corrode':
+        if (!this.inBounds(x, y)) return false;
+        if (rng.int(100) < (MATERIALS[m].corrosive ?? 0) && rng.int(100) < (MATERIALS[t].corrode ?? 0)) {
+          this.set(x, y, Mat.Sky);
+          this.fx.push({ type: 'corrode', x, y });
+          return true;
+        }
+        return false;
+      default:
+        return false;
+    }
+  }
+
+  /** Set fire to inflammable material here (C4Landscape::Incinerate): oil gets a flame. */
+  incinerate(x: number, y: number): boolean {
+    if (!MATERIALS[this.get(x, y)].inflammable || !this.inBounds(x, y)) return false;
+    return this.ignite?.(x, y) ?? false;
+  }
+
+  /**
+   * Take one pixel of material away from the top of its patch (C4Landscape::
+   * ExtractMaterial with FindMatTop), so a lake loses its surface and not
+   * the pixel deep down. Returns the material, or Sky if there was none.
+   */
+  extractMaterial(x: number, y: number): Mat {
+    const m = this.get(x, y);
+    if (m === Mat.Sky || !this.inBounds(x, y)) return Mat.Sky;
+    const slide = Math.min(MATERIALS[m].maxSlide ?? this.width, this.width);
+    for (;;) {
+      let left = true;
+      let right = true;
+      let moved = false;
+      for (let c = 0; c <= slide && (left || right); c++) {
+        if (left) {
+          if (this.get(x - c, y) !== m) left = false;
+          else if (this.get(x - c, y - 1) === m && y > 0) {
+            x -= c;
+            y--;
+            moved = true;
+            break;
+          }
+        }
+        if (right) {
+          if (this.get(x + c, y) !== m) right = false;
+          else if (this.get(x + c, y - 1) === m && y > 0) {
+            x += c;
+            y--;
+            moved = true;
+            break;
+          }
+        }
+      }
+      if (!moved) break;
+    }
+    this.set(x, y, Mat.Sky);
+    return m;
+  }
+
   /**
    * An earthquake shakes a round area: everything diggable in it comes loose
    * and falls (C4Landscape::ShakeFree).
@@ -380,8 +534,8 @@ export class Landscape {
    * freezes over from the top and thaws from below, a bit more every pass.
    */
   scanTemperature(temp: number): void {
-    // Nothing can freeze or melt between -10 and 5 degrees.
-    if (temp >= -10 && temp <= 5) return;
+    // Only when some material would change at this temperature (lava always hardens).
+    if (!MATERIALS.some((m) => (m.belowTemp && temp < m.belowTemp.temp) || (m.aboveTemp && temp > m.aboveTemp.temp))) return;
     for (let n = 0; n < this.scanSpeed; n++) {
       const x = this.scanX;
       let last = -1;
@@ -406,7 +560,7 @@ export class Landscape {
     if (to === null) return 0;
     const h = this.height;
     const inside = (y: number): boolean => y >= 0 && y <= h - 1;
-    const strength = TEMP_CONV_STRENGTH;
+    const strength = mat.tempConvStrength ?? TEMP_CONV_STRENGTH;
     let left = strength;
     const ydir = dir === 0 ? 1 : -1;
     // Changes spread from the left: a column only changes once the one left of it has.
