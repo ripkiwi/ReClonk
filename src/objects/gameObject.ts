@@ -2,6 +2,7 @@
 // See licenses/clonk_engine_license.txt.
 
 import type { Landscape } from '../landscape/landscape';
+import type { Structure } from './structure';
 import {
   CNAT,
   MAX_SPEED,
@@ -38,8 +39,8 @@ export abstract class GameObject {
   r = 0;
   rdir = 0;
   removed = false;
-  /** The clonk carrying this object, if any. Contained objects don't move on their own. */
-  container: GameObject | null = null;
+  /** The clonk carrying this object, the lorry or the building it's in, if any. Contained objects don't move on their own. */
+  container: GameObject | Structure | null = null;
   /** Which side the object is held to while moving (bottom when walking). */
   tAttach: number = CNAT.None;
 

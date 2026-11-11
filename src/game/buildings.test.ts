@@ -53,7 +53,7 @@ describe('Construction kits', () => {
     expect(c.buildMenu).toBe(0);
     tap(world, RIGHT);
     expect(BUILD_PLANS[c.buildMenu!]).toBe('elevator');
-    tap(world, { pressedUp: true });
+    tap(world, { pressedThrow: true });
     expect(c.buildMenu).toBeNull();
     const s = world.structures[0];
     expect(s.def.id).toBe('elevator');
@@ -75,7 +75,7 @@ describe('Construction kits', () => {
     expect(world.land.get(c.x, GROUND)).toBe(Mat.Earth);
     expect(siteProblem(world, 'elevator', c.x, c.y + 10)).toBeNull();
     // Without a second press it digs as usual.
-    tap(world, { pressedDown: true });
+    tap(world, { pressedDig: true });
     tap(world, DIG);
     run(world, 30);
     expect(world.land.get(c.x, GROUND + 2)).toBe(Mat.Sky);

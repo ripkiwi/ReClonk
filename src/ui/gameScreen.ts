@@ -92,7 +92,7 @@ export class GameScreen {
       // Click picks a clonk, Shift-click adds it to the group or takes it out.
       onCrew: (index, add) => this.keyboard.command(add ? { type: 'toggle', index } : { type: 'pick', index }),
     }, (owner) => colors.get(owner) ?? color);
-    this.baseHud = new BaseHud(round.world, assets, LOCAL_PLAYER, style, false, color, layout);
+    this.baseHud = new BaseHud(round.world, assets, LOCAL_PLAYER, style, color, layout);
     app.stage.addChild(this.baseHud.root);
     this.announce = h('div', { class: 'announce' });
     env.ui.append(this.announce);

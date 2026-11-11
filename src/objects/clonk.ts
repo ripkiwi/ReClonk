@@ -61,6 +61,9 @@ export type CrewCommand =
   | { type: 'pick'; index: number }
   | { type: 'toggle'; index: number };
 
+/** The menus of a building a clonk is in. */
+export type BuildingMenu = 'buy' | 'sell' | 'get';
+
 export const NO_CONTROL: ControlState = {
   left: false, right: false, up: false, down: false,
   pressedUp: false, pressedDown: false, pressedLeft: false, pressedRight: false,
@@ -161,8 +164,10 @@ export class Clonk extends GameObject {
   alive = true;
   /** The building the clonk is inside, if any. Contained clonks are hidden and don't move. */
   contained: Structure | null = null;
-  /** Selected line of the open buy menu, or null when it's closed. */
+  /** Selected item of the open building menu, or null when it's closed. */
   menu: number | null = null;
+  /** Which building menu is open: buy (C4MN_Buy), sell (C4MN_Sell) or get something out (C4MN_Get). */
+  menuKind: BuildingMenu = 'buy';
   /** Selected line of the construction kit's build menu, or null when it's closed. */
   buildMenu: number | null = null;
   /** Magic energy for spells, in 1/1000 points (see MAGIC_UNIT). Sorcerers start with none. */

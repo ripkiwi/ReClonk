@@ -187,7 +187,7 @@ describe('Buying clonks', () => {
     run(world, 1, { up: true, pressedUp: true });
     for (let i = 0; i < index; i++) run(world, 1, { pressedRight: true });
     run(world, 1, { pressedThrow: true });
-    run(world, 1, { pressedDown: true });
+    run(world, 1, { pressedDig: true });
   }
 
   it('the shop sells clonks for 25 gold', () => {

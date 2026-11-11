@@ -272,17 +272,7 @@ export function keyHelp(style: ControlStyle, k: KeyLayout): [keys: string, actio
     add(crew ? `${crew} or 1–9` : '1–9', `${k.crewPrev.length ? 'previous / ' : ''}next clonk, pick a clonk`);
     add(list(k.crewAll), `whole crew (${first(k.down)} ${first(k.down)} gathers them)`);
   }
+  // Object menus work like the original's: the direction keys move, throw picks, dig closes.
+  add(`${first(k.throw)} / ${first(k.dig)}`, 'in a menu: pick / close');
   return rows;
-}
-
-/** Key names for the hints inside buildings. */
-export function buildingKeys(k: KeyLayout): { choose: string; buy: string; sell: string; up: string; down: string } {
-  const short = (codes: readonly string[]): string => codes.slice(0, 2).map(keyName).join('/');
-  return {
-    choose: pairs(k.left.slice(0, 2), k.right.slice(0, 2)).replaceAll(' / ', '/'),
-    buy: `${short(k.up)} or ${first(k.throw)}`,
-    sell: first(k.throw),
-    up: short(k.up),
-    down: short(k.down),
-  };
 }

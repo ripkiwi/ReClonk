@@ -463,16 +463,24 @@ button {
 .hud-energy .bar > div { position: absolute; inset: 0 auto 0 0; background: #3fbf4a; border-radius: 3px; }
 .hud-energy .bar > div.low { background: #d8402c; }
 .hud-energy.hud-magic .bar > div { background: #4a7cff; }
-.hud-slot {
-  width: 40px;
-  height: 40px;
-  border-radius: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  background: rgba(0, 0, 0, 0.35);
-  display: grid;
-  place-items: center;
+/* What the leader carries, bottom left, at the original's 35 px times the world's zoom. */
+.hud-contents {
+  --zoom: 2;
+  position: absolute;
+  left: calc(2px * var(--zoom));
+  bottom: calc(2px * var(--zoom));
+  display: flex;
 }
-.hud-slot canvas { width: 32px; height: 32px; image-rendering: pixelated; }
+.hud:has(.hud-help) .hud-contents { bottom: 40px; }
+.hud-item { position: relative; width: calc(35px * var(--zoom)); height: calc(35px * var(--zoom)); }
+.hud-item canvas { width: 100%; height: 100%; }
+.hud-item span {
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  font-family: var(--title-font);
+  font-size: calc(9px * var(--zoom));
+}
 .hud-menu {
   position: absolute;
   right: 10px;

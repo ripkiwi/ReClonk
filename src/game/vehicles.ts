@@ -10,6 +10,7 @@ import type { Item } from '../objects/item';
 import { CLONK } from '../objects/defs';
 import { CNAT, contactCheck, FLOAT_ACCEL, physical, round } from '../objects/physics';
 import { BLIMP, STOP, type Dir, type Vehicle, type VehicleAction } from '../objects/vehicle';
+import { menuMove } from './menus';
 import type { World } from './world';
 
 /** Float friction on xdir in liquids (C4Movement FloatFriction). */
@@ -622,30 +623,26 @@ function putOrGet(world: World, c: Clonk, v: Vehicle): void {
 }
 
 /**
- * The Get menu (C4MN_Get): left/right choose, up or throw takes one into the
- * clonk's hands, down or dig closes it.
+ * The Get menu (C4MN_Get, C4Menu::Control): the arrow keys choose, throw
+ * takes one into the clonk's hands, dig closes it.
  */
 function loadMenuControl(world: World, c: Clonk, v: Vehicle, ctl: ControlState): void {
   const list = loadList(v);
   c.comDir = STOP;
-  if (!list.length) {
+  if (!list.length || ctl.pressedDig) {
     c.loadMenu = null;
     return;
   }
-  const n = list.length;
-  let i = Math.min(c.loadMenu ?? 0, n - 1);
-  if (ctl.pressedLeft) i = (i + n - 1) % n;
-  if (ctl.pressedRight) i = (i + 1) % n;
+  const i = menuMove(c.loadMenu ?? 0, list.length, ctl);
   c.loadMenu = i;
-  if (ctl.pressedUp || ctl.pressedThrow) {
-    c.loadMenu = null;
-    if (c.contents.length >= CLONK.maxContents) return world.say(c.owner, 'Hands full: put it in first');
-    const it = [...v.contents].reverse().find((o) => o.def.id === list[i].id)!;
-    takeOut(v, it);
-    it.container = c;
-    c.contents.push(it);
-    world.events.push({ type: 'collect', clonk: c, item: it, tick: world.tick });
-  } else if (ctl.pressedDown || ctl.pressedDig) c.loadMenu = null;
+  if (!ctl.pressedThrow) return;
+  c.loadMenu = null;
+  if (c.contents.length >= CLONK.maxContents) return world.say(c.owner, 'Hands full: put it in first');
+  const it = [...v.contents].reverse().find((o) => o.def.id === list[i].id)!;
+  takeOut(v, it);
+  it.container = c;
+  c.contents.push(it);
+  world.events.push({ type: 'collect', clonk: c, item: it, tick: world.tick });
 }
 
 /** Sailboat ControlUpdate / ControlLeft / ControlRight. */

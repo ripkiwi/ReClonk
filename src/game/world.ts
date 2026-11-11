@@ -2,7 +2,7 @@ import { Rng } from '../core/rng';
 import type { GeneratedMap } from '../landscape/generate';
 import type { Landscape } from '../landscape/landscape';
 import { MATERIALS, type ItemId } from '../landscape/materials';
-import { Clonk, NO_CONTROL, type ControlState, type CrewCommand, type CrewInfo } from '../objects/clonk';
+import { Clonk, NO_CONTROL, type BuildingMenu, type ControlState, type CrewCommand, type CrewInfo } from '../objects/clonk';
 import { BASE, BASEMENT, BUILD_PLANS, CLONK, CLONK_KINDS, ITEMS, STRUCTURES, type ClonkKind } from '../objects/defs';
 import type { GameObject } from '../objects/gameObject';
 import { Item } from '../objects/item';
@@ -17,6 +17,7 @@ import { Vehicle, VEHICLES, type VehicleId } from '../objects/vehicle';
 import { grabVehicle, stepVehicle, takeOut, vehicleAt, vehicleBottom, vehicleControl } from './vehicles';
 import { MagicState, openSpellMenu, spellList, startSpell, stepMagic, stepSorcerer, type SpellId } from './magic';
 import { stepRules, takeFlag, type RuleId } from './rules';
+import { menuMove } from './menus';
 import type { Weather } from './weather';
 
 export type WorldEvent =
@@ -107,6 +108,24 @@ export function isCrewId(id: ShopId): id is ClonkKind {
 /** Name and price of something in the shop. */
 export function shopEntry(id: ShopId): { name: string; value: number } {
   return isCrewId(id) ? CLONK_KINDS[id] : isVehicleId(id) ? VEHICLES[id] : ITEMS[id];
+}
+
+/** One item of a building menu: what it is, how many there are, and what it costs or fetches. */
+export interface MenuEntry {
+  id: ShopId;
+  count: number;
+  value: number;
+}
+
+/** Group things by kind, in the order they first appear (C4ObjectListIterator). */
+export function groupItems(items: readonly Item[]): { id: ItemId; count: number }[] {
+  const out: { id: ItemId; count: number }[] = [];
+  for (const it of items) {
+    const e = out.find((o) => o.id === it.def.id);
+    if (e) e.count++;
+    else out.push({ id: it.def.id, count: 1 });
+  }
+  return out;
 }
 
 /** A player's money and what their home base has in stock to buy. */
@@ -876,10 +895,9 @@ export class World {
 
   /**
    * Up while pushing a vehicle whose centre is in a doorway: the clonk goes
-   * in and takes it along (ObjectComEnter). In its own base the gold in it is
-   * sold (BASEFUNC_AutoSellContents sells the gold in the base's contents'
-   * contents too). The original's lorry empties itself into any building
-   * (Lorry.c4d Entrance); our buildings don't keep things, so the rest stays in.
+   * in and takes it along (ObjectComEnter). A lorry empties itself into the
+   * building (Lorry.c4d Entrance), and a home base sells the gold at once
+   * (BASEFUNC_AutoSellContents).
    */
   private pushEnter(c: Clonk): boolean {
     const v = c.vehicle;
@@ -892,21 +910,71 @@ export class World {
     v.mask = null;
     v.xdir = v.ydir = 0;
     v.setPosition(s.x, s.y);
-    for (const it of v.contents) it.setPosition(s.x, s.y);
-    if (s.base !== c.owner) return true;
-    const gold = v.contents.filter((it) => it.def.id === 'gold');
-    if (!gold.length) return true;
-    const p = this.players.get(c.owner);
-    if (!p) return true;
-    let earned = 0;
-    for (const it of gold) {
+    if (!v.contents.length) return true;
+    const n = v.contents.length;
+    for (const it of [...v.contents]) {
       takeOut(v, it);
+      this.store(s, it);
+    }
+    const sold = this.autoSell(s);
+    const name = v.def.name.toLowerCase();
+    if (sold.count && sold.count === n) this.say(c.owner, `Sold ${sold.count} gold from the ${name} for ${sold.earned} gold`);
+    else if (sold.count) this.say(c.owner, `Emptied the ${name}: sold ${sold.count} gold for ${sold.earned}, the rest is stored`);
+    else this.say(c.owner, `Emptied the ${name} into the ${s.def.name.toLowerCase()}`);
+    return true;
+  }
+
+  /** Keep a thing in a building. */
+  store(s: Structure, it: Item): void {
+    it.container = s;
+    it.xdir = it.ydir = it.rdir = 0;
+    it.setPosition(s.x, s.y);
+    s.contents.push(it);
+  }
+
+  /** Take a thing out of whatever holds it: a clonk's hands, a lorry or a building. */
+  private release(it: Item): void {
+    const h = it.container;
+    if (h instanceof Vehicle) takeOut(h, it);
+    else if (h) {
+      const list = (h as Clonk | Structure).contents;
+      const i = list.indexOf(it);
+      if (i >= 0) list.splice(i, 1);
+    }
+    it.container = null;
+  }
+
+  /**
+   * A home base sells the gold kept in it right away (C4Object::ExecBase with
+   * BASEFUNC_AutoSellContents; the original sells gold, it's the only thing
+   * with that flag). Returns how many it sold and for how much.
+   */
+  autoSell(s: Structure): { count: number; earned: number } {
+    const p = s.base >= 0 ? this.players.get(s.base) : undefined;
+    if (!p) return { count: 0, earned: 0 };
+    let count = 0;
+    let earned = 0;
+    for (const it of [...s.contents]) {
+      if (it.def.id !== 'gold') continue;
+      this.release(it);
       it.removed = true;
+      count++;
       earned += it.def.value;
     }
     p.wealth = Math.min(BASE.maxWealth, p.wealth + earned);
-    this.say(c.owner, `Sold ${gold.length} gold from the ${v.def.name.toLowerCase()} for ${earned} gold`);
-    return true;
+    return { count, earned };
+  }
+
+  /** Everything burning or gone: what's kept inside falls out of the door (FnFxFireStart ejects contents). */
+  ejectContents(s: Structure): void {
+    const p = s.exitPoint();
+    for (const it of [...s.contents]) {
+      this.release(it);
+      it.setPosition(p.x, p.y + 6);
+      it.xdir = (this.rng.int(21) - 10) / 10;
+      it.ydir = -1;
+      it.noCollect = NO_COLLECT_TICKS;
+    }
   }
 
   /** Go into a building. Returns false if the door stays shut. */
@@ -918,6 +986,7 @@ export class World {
     }
     c.contained = s;
     c.menu = null;
+    c.menuKind = 'buy';
     c.buildMenu = null;
     c.comDir = { x: 0, y: 0 };
     c.xdir = c.ydir = 0;
@@ -1114,6 +1183,12 @@ export class World {
       takeOut(v, item);
       if (v.contained) return blastBurn(this, v.contained, item.def.fuse?.explode ?? 20, this.thrower(item));
     }
+    // Kept in a building: the walls hold the blast, the building takes it.
+    if (item.container instanceof Structure) {
+      const s = item.container;
+      this.release(item);
+      return blastBurn(this, s, item.def.fuse?.explode ?? 20, this.thrower(item));
+    }
     const holder = item.container instanceof Clonk ? item.container : null;
     if (holder) holder.contents.splice(holder.contents.indexOf(item), 1);
     item.container = null;
@@ -1132,32 +1207,26 @@ export class World {
     if (by && freed && by.doExperience(freed * EXPERIENCE.blastedLoose)) this.promoted(by);
   }
 
-  /** The spell menu: left/right choose, up or throw casts, down, dig or the magic key closes it. */
+  /** The spell menu (C4Menu::Control): the arrow keys choose, throw casts, dig or the magic key closes it. */
   private spellMenuControl(c: Clonk, ctl: ControlState): void {
     const list = spellList(this);
-    const n = list.length;
-    let i = Math.min(c.spellMenu ?? 0, n - 1);
-    if (ctl.pressedLeft) i = (i + n - 1) % n;
-    if (ctl.pressedRight) i = (i + 1) % n;
+    const i = menuMove(c.spellMenu ?? 0, list.length, ctl);
     c.spellMenu = i;
     c.comDir = { x: 0, y: 0 };
-    if (ctl.pressedUp || ctl.pressedThrow) {
+    if (ctl.pressedThrow) {
       c.spellMenu = null;
       startSpell(this, c, list[i]);
-    } else if (ctl.pressedDown || ctl.pressedDig || ctl.pressedMagic) c.spellMenu = null;
+    } else if (ctl.pressedDig || ctl.pressedMagic) c.spellMenu = null;
   }
 
-  /** The build menu: left/right choose, up or throw builds here, down or dig closes it. */
+  /** The build menu (C4Menu::Control): the arrow keys choose, throw builds here, dig closes it. */
   private buildMenuControl(c: Clonk, ctl: ControlState): void {
-    const n = BUILD_PLANS.length;
-    let i = c.buildMenu ?? 0;
-    if (ctl.pressedLeft) i = (i + n - 1) % n;
-    if (ctl.pressedRight) i = (i + 1) % n;
+    const i = menuMove(c.buildMenu ?? 0, BUILD_PLANS.length, ctl);
     c.buildMenu = i;
-    if (ctl.pressedUp || ctl.pressedThrow) {
+    if (ctl.pressedThrow) {
       c.buildMenu = null;
       this.placeSite(c, BUILD_PLANS[i]);
-    } else if (ctl.pressedDown || ctl.pressedDig) c.buildMenu = null;
+    } else if (ctl.pressedDig) c.buildMenu = null;
   }
 
   /**
@@ -1182,37 +1251,109 @@ export class World {
   }
 
   /**
-   * Controls while inside a building, like C4Object::ContainedControl:
-   * down leaves, up opens the buy menu in your own base, throw sells what you carry.
-   * In the buy menu: left/right choose, up or throw buys, down closes it.
+   * Controls while inside a building, like C4Object::ContainedControl: down
+   * leaves, throw puts in what the clonk carries, up opens the buy menu and
+   * dig the sell menu in your own base, left or right the menu of what's kept
+   * here (Take, Take2). In another building dig and throw with empty hands
+   * open that menu too.
    */
   private containedControl(c: Clonk, ctl: ControlState): void {
+    if (c.menu !== null) return this.buildingMenuControl(c, ctl);
+    const s = c.contained!;
     const own = this.inOwnBase(c);
-    if (c.menu !== null) {
-      const list = this.shopList(c.owner);
-      if (!own || list.length === 0) {
-        c.menu = null;
-        return;
-      }
-      if (ctl.pressedLeft) c.menu = (c.menu + list.length - 1) % list.length;
-      if (ctl.pressedRight) c.menu = (c.menu + 1) % list.length;
-      c.menu = Math.min(c.menu, list.length - 1);
-      if (ctl.pressedUp || ctl.pressedThrow) this.buy(c, list[c.menu]);
-      else if (ctl.pressedDown) c.menu = null;
-      return;
-    }
     if (ctl.pressedDown) this.exit(c);
     else if (ctl.pressedUp) {
-      if (!own) this.say(c.owner, c.contained!.hasFlag ? 'Not your base' : 'No flag here: nothing to buy');
-      else if (this.shopList(c.owner).length === 0) this.say(c.owner, 'Nothing to buy');
-      else c.menu = 0;
-    } else if (ctl.pressedThrow) {
+      if (own) this.openMenu(c, 'buy');
+      else this.say(c.owner, s.hasFlag ? 'Not your base: nothing to buy' : 'No flag here: nothing to buy');
+    } else if (ctl.pressedDig) this.openMenu(c, own ? 'sell' : 'get');
+    else if (ctl.pressedLeft || ctl.pressedRight) this.openMenu(c, 'get');
+    else if (ctl.pressedThrow) {
       const item = c.carrying;
-      if (!item) return;
-      if (own) this.sell(c, item);
-      else if (item.def.id === 'flag') this.plantFlag(c, item);
-      else this.say(c.owner, 'Sell things in a building with your flag');
+      if (!item) return this.openMenu(c, 'get');
+      // A flag goes up on a building that has none (C4Object::ExecBase).
+      if (item.def.id === 'flag' && !s.hasFlag && s.def.canBeBase) return this.plantFlag(c, item);
+      this.putInto(c, item);
     }
+  }
+
+  /** Throw inside a building: what the clonk carries goes in (C4CMD_Throw while contained). */
+  private putInto(c: Clonk, item: Item): void {
+    const s = c.contained!;
+    this.release(item);
+    this.store(s, item);
+    const sold = this.autoSell(s);
+    if (sold.count) this.say(c.owner, `Sold ${item.def.name} for ${sold.earned} gold`);
+  }
+
+  private openMenu(c: Clonk, kind: BuildingMenu): void {
+    c.menuKind = kind;
+    c.menu = 0;
+  }
+
+  /**
+   * What the open building menu shows (C4ObjectMenu::DoRefillInternal): the
+   * buy menu has the home base material, the sell and get menus what's kept
+   * in the building.
+   */
+  menuList(c: Clonk): MenuEntry[] {
+    const s = c.contained;
+    if (!s || c.menu === null) return [];
+    if (c.menuKind === 'buy') {
+      const p = this.players.get(s.base);
+      return this.shopList(s.base).map((id) => ({ id, count: p?.stock[id] ?? 0, value: shopEntry(id).value }));
+    }
+    return groupItems(s.contents).map((e) => ({ ...e, value: ITEMS[e.id].value }));
+  }
+
+  /**
+   * An open building menu (C4Menu::Control): the arrow keys move through the
+   * items, throw picks one (the menu stays open, it's permanent), dig closes
+   * it. It closes by itself if the base isn't yours any more.
+   */
+  private buildingMenuControl(c: Clonk, ctl: ControlState): void {
+    if (c.menuKind !== 'get' && !this.inOwnBase(c)) {
+      c.menu = null;
+      return;
+    }
+    if (ctl.pressedDig) {
+      c.menu = null;
+      return;
+    }
+    const list = this.menuList(c);
+    c.menu = menuMove(c.menu ?? 0, list.length, ctl);
+    if (!ctl.pressedThrow || !list.length) return;
+    const e = list[c.menu];
+    if (c.menuKind === 'buy') this.buy(c, e.id);
+    else if (c.menuKind === 'sell') this.sellFromBase(c, e.id as ItemId);
+    else this.getFrom(c, e.id as ItemId);
+    c.menu = Math.min(c.menu, Math.max(0, this.menuList(c).length - 1));
+  }
+
+  /** Sell one of these from the base's contents (C4Command::Sell, SellFromBase). */
+  private sellFromBase(c: Clonk, id: ItemId): void {
+    const s = c.contained!;
+    const item = [...s.contents].reverse().find((it) => it.def.id === id);
+    if (item) this.sell(c, item);
+  }
+
+  /**
+   * Take one of these into the clonk's hands (C4MN_Get, C4Command::Get). With
+   * full hands the clonk puts down what it holds in exchange.
+   */
+  private getFrom(c: Clonk, id: ItemId): void {
+    const s = c.contained!;
+    const item = [...s.contents].reverse().find((it) => it.def.id === id);
+    if (!item) return;
+    if (c.contents.length >= CLONK.maxContents) {
+      const held = c.carrying!;
+      if (held.def.id === id) return this.say(c.owner, `Already carrying ${held.def.name}`);
+      this.release(held);
+      this.store(s, held);
+    }
+    this.release(item);
+    item.container = c;
+    c.contents.push(item);
+    this.events.push({ type: 'collect', clonk: c, item, tick: this.tick });
   }
 
   /**
@@ -1225,8 +1366,7 @@ export class World {
     if (!s.def.canBeBase || !s.complete) return this.say(c.owner, 'No flag can go on this building');
     if (s.hasFlag) return this.say(c.owner, 'There is a flag here already');
     if (!this.players.has(flag.owner)) return this.say(c.owner, 'Nobody owns this flag: sell it');
-    const i = c.contents.indexOf(flag);
-    if (i >= 0) c.contents.splice(i, 1);
+    this.release(flag);
     flag.removed = true;
     s.base = flag.owner;
     s.owner = flag.owner;
@@ -1236,6 +1376,9 @@ export class World {
     else this.say(c.owner, `That flag isn't yours: the ${s.def.name.toLowerCase()} is now their base`);
     // The owner's clonks inside are home now; anyone else has to leave (BASEFUNC_RejectEntrance).
     for (const o of this.clonks) if (o.contained === s && this.hostile(s.base, o.owner)) this.exit(o);
+    // Gold kept in it is sold now.
+    const sold = this.autoSell(s);
+    if (sold.count) this.say(flag.owner, `Sold ${sold.count} gold kept in the ${s.def.name.toLowerCase()} for ${sold.earned} gold`);
   }
 
   /** What the player's home base can sell, in a fixed order. */
@@ -1247,8 +1390,7 @@ export class World {
   private sell(c: Clonk, item: Item): void {
     const p = this.players.get(c.owner);
     if (!p) return;
-    const i = c.contents.indexOf(item);
-    if (i >= 0) c.contents.splice(i, 1);
+    this.release(item);
     item.removed = true;
     p.wealth = Math.min(BASE.maxWealth, p.wealth + item.def.value);
     if (item.def.rebuy) p.stock[item.def.id] = (p.stock[item.def.id] ?? 0) + 1;
@@ -1263,14 +1405,19 @@ export class World {
     if (p.wealth < def.value) return this.say(c.owner, `Not enough gold for ${def.name}`);
     if (isVehicleId(id)) return this.buyVehicle(c, p, id);
     if (isCrewId(id)) return this.buyClonk(c, p, id);
-    if (c.contents.length >= CLONK.maxContents) return this.say(c.owner, 'Hands full: sell or drop it first');
     p.wealth -= def.value;
     p.stock[id]! -= 1;
     const item = this.spawnItem(id, c.x, c.y);
     item.owner = c.owner;
-    item.container = c;
-    c.contents.push(item);
-    this.say(c.owner, `Bought ${def.name} for ${def.value} gold`);
+    // The original buys into the base (Buy2Base); with empty hands the clonk takes it straight away.
+    if (c.contents.length < CLONK.maxContents) {
+      item.container = c;
+      c.contents.push(item);
+      this.say(c.owner, `Bought ${def.name} for ${def.value} gold`);
+    } else {
+      this.store(c.contained!, item);
+      this.say(c.owner, `Bought ${def.name} for ${def.value} gold: it's kept in the ${c.contained!.def.name.toLowerCase()}`);
+    }
   }
 
   /**

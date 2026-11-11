@@ -1,6 +1,7 @@
 import { CONSTRUCTION, ELEVATOR_CASE, GATE, type GateDef, type StructureDef } from './defs';
 import type { ItemId } from '../landscape/materials';
 import type { FireState } from './fire';
+import type { Item } from './item';
 import { maskRect, SolidMask } from './solidMask';
 
 /** A building's stone basement: solid landscape under it, and what was there before. */
@@ -133,6 +134,8 @@ export class Structure {
   components: Partial<Record<ItemId, number>> = {};
   /** Burned away completely: only its basement is left. */
   gone = false;
+  /** What's kept inside: put in by clonks, emptied out of a lorry, or bought (the original's Contents). */
+  contents: Item[] = [];
 
   constructor(
     readonly def: StructureDef,

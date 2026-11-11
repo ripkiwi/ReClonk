@@ -170,6 +170,8 @@ describe('Flag removeable', () => {
     expect(thief.contained).toBe(mine);
     const wealth = world.players.get(0)!.wealth;
     run(world, 1, { pressedThrow: true });
+    run(world, 1, { pressedDig: true });
+    run(world, 1, { pressedThrow: true });
     expect(flag.removed).toBe(true);
     expect(world.players.get(0)!.wealth).toBe(wealth + 100);
     expect(eliminatedIn(world, 40)).toEqual([1]);

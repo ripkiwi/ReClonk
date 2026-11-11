@@ -81,7 +81,7 @@ export function expBar(exp: number): { bar: HTMLElement; fill: HTMLElement; text
 }
 
 /** Draw an item's sprite into a small canvas, for HUD slots. */
-export function drawItem(canvas: HTMLCanvasElement, def: ItemDef | undefined, assets: GameAssets, tint?: number): void {
+export function drawItem(canvas: HTMLCanvasElement, def: ItemDef | undefined, assets: GameAssets, tint?: number, picture = false): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -89,10 +89,12 @@ export function drawItem(canvas: HTMLCanvasElement, def: ItemDef | undefined, as
   const g = def.graphic;
   const source = assets.items[g.file]?.source.resource as CanvasImageSource | undefined;
   if (!source) return;
-  ctx.imageSmoothingEnabled = false;
-  // Things with an owner-coloured overlay (the flag) show their picture: the lying-down frame is too small to see.
-  const f = g.overlay ? def.picture : g.facet;
-  const s = g.overlay ? Math.min(canvas.width / f.w, canvas.height / f.h) : Math.floor(Math.min(canvas.width / f.w, canvas.height / f.h));
+  // The picture (DefCore Picture) is drawn scaled down, smoothly; the tiny in-game frame in whole pixels.
+  // Things with an owner-coloured overlay (the flag) always show their picture: the lying-down frame is too small to see.
+  const big = picture || !!g.overlay;
+  ctx.imageSmoothingEnabled = big;
+  const f = big ? def.picture : g.facet;
+  const s = big ? Math.min(canvas.width / f.w, canvas.height / f.h) : Math.floor(Math.min(canvas.width / f.w, canvas.height / f.h));
   const w = f.w * s;
   const hgt = f.h * s;
   const x = (canvas.width - w) / 2;
@@ -106,7 +108,7 @@ export function drawItem(canvas: HTMLCanvasElement, def: ItemDef | undefined, as
       t.width = canvas.width;
       t.height = canvas.height;
       const tc = t.getContext('2d')!;
-      tc.imageSmoothingEnabled = false;
+      tc.imageSmoothingEnabled = big;
       tc.drawImage(over, f.x, f.y, f.w, f.h, x, y, w, hgt);
       tc.globalCompositeOperation = 'multiply';
       tc.fillStyle = `#${(tint ?? 0xffffff).toString(16).padStart(6, '0')}`;

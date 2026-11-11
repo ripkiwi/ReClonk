@@ -121,7 +121,7 @@ describe('The sorcerer', () => {
 });
 
 describe('The spell menu', () => {
-  it('the magic key opens it; left and right choose, up casts, and the spell costs its value', () => {
+  it('the magic key opens it; the arrow keys choose, throw casts, and the spell costs its value', () => {
     const world = flatWorld();
     const got = watch(world);
     const s = sorcerer(world);
@@ -134,7 +134,7 @@ describe('The spell menu', () => {
     expect(spellList(world)[s.spellMenu!]).toBe('meteor');
     tap(world, { pressedRight: true });
     tap(world, { pressedRight: true });
-    tap(world, { pressedUp: true });
+    tap(world, { pressedThrow: true });
     expect(s.spellMenu).toBeNull();
     expect(s.casting).toBe('bridge');
     expect(s.doesMagic).toBe(true);
@@ -145,15 +145,20 @@ describe('The spell menu', () => {
     expect(s.magicEnergy).toBe((100 - SPELLS.bridge.value) * MAGIC_UNIT);
   });
 
-  it('the magic key, down or dig closes it without casting', () => {
+  it('the magic key or dig closes it without casting; down moves a row', () => {
     const world = flatWorld();
     const s = sorcerer(world);
-    for (const close of [MAGIC_KEY, { pressedDown: true }, { pressedDig: true }]) {
+    for (const close of [MAGIC_KEY, { pressedDig: true }]) {
       tap(world, MAGIC_KEY);
       expect(s.spellMenu).toBe(0);
       tap(world, close);
       expect(s.spellMenu).toBeNull();
     }
+    tap(world, MAGIC_KEY);
+    tap(world, { pressedDown: true });
+    expect(s.spellMenu).toBe(5);
+    tap(world, { pressedDown: true });
+    expect(s.spellMenu).toBe(0);
     expect(s.magicEnergy).toBe(100 * MAGIC_UNIT);
     expect(s.casting).toBeNull();
   });
