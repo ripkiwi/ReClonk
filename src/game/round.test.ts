@@ -41,8 +41,8 @@ function profile(crew = 2): Profile {
 const TAP_DIG = { pressedDig: true };
 
 describe('Scenarios', () => {
-  it('has the two default scenarios', () => {
-    expect(SCENARIOS.map((s) => s.title)).toEqual(['Gold Mine', 'Minor Melee']);
+  it('has the default scenarios', () => {
+    expect(SCENARIOS.map((s) => s.title)).toEqual(['Gold Mine', 'Minor Melee', 'Shark Lake']);
     expect(scenarioById('minor-melee')?.title).toBe('Minor Melee');
     expect(scenarioById('nope')).toBeUndefined();
   });
@@ -81,6 +81,44 @@ describe('Scenarios', () => {
       expect(loose.length).toBeGreaterThan(15);
       expect(m.land.isSolid(m.spawn.x, m.spawn.y + 11)).toBe(true);
     }
+  });
+
+  it('Shark Lake: an island for each crew with a lake between them, like the original', () => {
+    const s = scenarioById('shark-lake')!;
+    const l = s.landscape;
+    expect([l.mapWidth.std, l.mapHeight.std, l.amplitude.std, l.phase.std, l.period.std, l.liquidLevel.std]).toEqual([64, 60, 45, 43, 9, 55]);
+    expect([s.crewSize, s.opponents, s.goal, s.homeBase, s.base.wealth]).toEqual([5, 1, 'melee', true, 100]);
+    for (const seed of [1, 2, 3]) {
+      const round = startRound(s, profile(), NAMES, seed);
+      const { world } = round;
+      expect([world.land.width, world.land.height]).toEqual([1280, 600]);
+      // One hut with a flag for each crew, and no spare hut.
+      const huts = world.structures;
+      expect(huts.map((h) => h.base)).toEqual([0, 1]);
+      // Water all the way between the two bases.
+      const surface = (x: number): number => {
+        let y = 0;
+        while (world.land.get(x, y) === Mat.Sky) y++;
+        return world.land.get(x, y);
+      };
+      const between = Array.from({ length: 200 }, (_, i) => surface(Math.round(huts[0].x + (huts[1].x - huts[0].x) * (0.3 + (0.4 * i) / 200))));
+      expect(between.every((m) => m === Mat.Water)).toBe(true);
+      expect(world.clonks.filter((c) => c.owner === 0)).toHaveLength(5);
+      expect(world.clonks.filter((c) => c.owner === 1)).toHaveLength(5);
+    }
+  });
+
+  it('Shark Lake: the computer crew swims across the lake to attack', () => {
+    const round = startRound(scenarioById('shark-lake')!, profile(), NAMES, 7);
+    const { world } = round;
+    const home = world.structures.find((h) => h.base === 0)!;
+    let closest = Infinity;
+    for (let t = 0; t < 36 * 60; t++) {
+      world.step(new Map());
+      world.events.length = 0;
+      for (const c of world.clonks) if (c.owner === 1) closest = Math.min(closest, Math.abs(c.x - home.x));
+    }
+    expect(closest).toBeLessThan(80);
   });
 
   it('flints lying on the surface stay put until someone picks them up', () => {

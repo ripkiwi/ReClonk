@@ -139,7 +139,7 @@ describe('Scenario settings', () => {
   });
 
   it('the originals are untouched by all of this', () => {
-    expect(SCENARIOS.map((s) => s.id)).toEqual(['goldmine', 'minor-melee']);
+    expect(SCENARIOS.map((s) => s.id)).toEqual(['goldmine', 'minor-melee', 'shark-lake']);
     expect(scenarioById('goldmine')!.base).toEqual(DEFAULT_BASE);
     expect(DEFAULT_BASE).toEqual({ wealth: 50, stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, lorry: 2, boat: 2, balloon: 1, blimp: 1, clonk: 3, crystal: 5, sorcerer: 1 } });
   });

@@ -147,6 +147,57 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     // Minor Melee's Scenario.txt: always late spring, gusty winds.
     weather: { ...DEFAULT_WEATHER, climate: sval(19), startSeason: sval(23), yearSpeed: sval(0), wind: sval(1, 100, -100, 100) },
   },
+  {
+    // Melees.c4f/SharkLake.c4s, without its sharks (Animal=SHRK=5) for now.
+    id: 'shark-lake',
+    title: 'Shark Lake',
+    description:
+      'Since the direct way of attack is certainly not the most promising in this scenario, players need to develop new tactics for a successful raid. Each player has enough time to strengthen his base by building new structures. Sail boat and hot air balloon can be used to cross the lakes. A basic melee for up to four players.',
+    landscape: {
+      ...DEFAULT_LANDSCAPE,
+      mapWidth: sval(64, 0, 64, 250),
+      mapHeight: sval(60, 0, 40, 250),
+      amplitude: sval(45),
+      phase: sval(43),
+      period: sval(9),
+      random: sval(0),
+      liquid: 'Water-Smooth',
+      liquidLevel: sval(55),
+      mapPlayerExtend: true,
+      layers: LAYERS(7, 5),
+      // InEarth=ROCK=4;GOLD=4;FLNT=4 (its loam, bones and skulls aren't in the game yet).
+      inEarth: { rock: 4, gold: 4, flint: 4 },
+      inEarthLevel: sval(65),
+      // Vegetation=TRE1=2;TRE2=2;TRE3=2 (its shells and seaweed aren't in the game yet), and grass.
+      vegetation: { tree1: 2, tree2: 2, tree3: 2 },
+      vegetationLevel: sval(100),
+      grass: true,
+    },
+    seed: 2718,
+    newMapEachRound: true,
+    // Clonks=5, Crew=CLNK=5.
+    crewSize: 5,
+    sorcerers: 0,
+    magic: [],
+    rules: [],
+    startItems: [],
+    homeBase: true,
+    // Wealth=100; HomeBaseMaterial without its loam, metal and catapult.
+    base: { wealth: 100, stock: { conkit: 3, wood: 5, flint: 5, tflint: 5, lorry: 1, clonk: 5, boat: 2, balloon: 1 } },
+    opponents: 1,
+    goal: 'melee',
+    // Shark Lake's Scenario.txt: always summer, the odd shower, thunderstorm and meteorite, gusty winds.
+    weather: {
+      ...DEFAULT_WEATHER,
+      climate: sval(20),
+      startSeason: sval(50),
+      yearSpeed: sval(0),
+      rain: sval(0, 20),
+      lightning: sval(0, 10),
+      meteorite: sval(0, 20),
+      wind: sval(1, 100, -100, 100),
+    },
+  },
 ];
 
 export function scenarioById(id: string, own: readonly ScenarioDef[] = []): ScenarioDef | undefined {
