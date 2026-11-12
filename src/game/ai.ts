@@ -43,6 +43,8 @@ interface Mind {
   /** Which shore it's swimming for (0: not in the water), and ticks since it last stood on dry land. */
   swimSide: number;
   wet: number;
+  /** Where it was when it last checked it's getting closer to that shore. */
+  swimFrom: number;
 }
 
 /** How far a computer clonk looks for things to pick up. */
@@ -77,7 +79,7 @@ export class CrewAI implements Brain {
     const out: ControlState = { ...NO_CONTROL };
     let m = this.minds.get(c);
     if (!m) {
-      m = { target: null, retarget: 0, item: null, digTicks: 0, lastX: c.x, lastY: c.y, stuck: 0, detour: 0, detourSide: 0, skip: new Set(), want: false, escapes: 0, free: 0, digOut: 0, digTo: { x: c.x, y: c.y }, best: Infinity, slow: 0, loops: 0, aim: 0, rush: 0, swimSide: 0, wet: 0 };
+      m = { target: null, retarget: 0, item: null, digTicks: 0, lastX: c.x, lastY: c.y, stuck: 0, detour: 0, detourSide: 0, skip: new Set(), want: false, escapes: 0, free: 0, digOut: 0, digTo: { x: c.x, y: c.y }, best: Infinity, slow: 0, loops: 0, aim: 0, rush: 0, swimSide: 0, wet: 0, swimFrom: c.x };
       this.minds.set(c, m);
     }
     // Out of buildings: the fight is outside.
@@ -287,11 +289,18 @@ export class CrewAI implements Brain {
       m.wet = 0;
       m.swimSide = 0;
     } else if (m.swimSide && ++m.wet > 240) {
+      // Across a wide lake it keeps going while it gets on; it only turns
+      // back when that shore can't be reached or climbed.
+      const progress = (c.x - m.swimFrom) * m.swimSide;
       m.wet = 0;
-      m.swimSide = -m.swimSide;
-      m.detour = 60;
-      m.detourSide = m.swimSide;
+      m.swimFrom = c.x;
+      if (progress < 40) {
+        m.swimSide = -m.swimSide;
+        m.detour = 60;
+        m.detourSide = m.swimSide;
+      }
     }
+    if (!m.wet) m.swimFrom = c.x;
     if (m.stuck === 18 && proc === 'walk') out.pressedUp = true;
 
     // Going round in circles (climbing, falling, climbing...) without getting closer.

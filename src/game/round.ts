@@ -119,7 +119,7 @@ export function startRound(
     // With a home base the crew starts at its door; otherwise on the surface.
     const x0 = columns[n];
     const start = scenario.homeBase
-      ? setupDefaultBases(world, p.id, x0, scenario.base, !p.computer).home.exitPoint()
+      ? setupDefaultBases(world, p.id, x0, scenario.base, !p.computer && scenario.goal !== 'melee').home.exitPoint()
       : { x: x0, y: n === 0 && players.length === 1 ? map.spawn.y : groundAt(world, x0) - 10 };
     if (p.computer) world.brains.set(p.id, new CrewAI(world, p.id));
     kinds.forEach((kind, i) => {
