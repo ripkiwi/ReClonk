@@ -1,6 +1,7 @@
 import { rankName } from '../game/ranks';
 import type { CrewCursor, PlayerState } from '../game/world';
 import type { Clonk } from '../objects/clonk';
+import type { Item } from '../objects/item';
 import { CLONK, ENERGY_UNIT, ITEMS, MAGIC_UNIT } from '../objects/defs';
 import type { GameAssets } from '../render/assets';
 import { drawItem, expProgress, h, portrait, rankBadge } from './dom';
@@ -34,7 +35,8 @@ export class Hud {
   private readonly rank: HTMLElement;
   private readonly fill: HTMLElement;
   private readonly expText: HTMLElement;
-  private readonly slot: HTMLCanvasElement;
+  /** What the clonk carries, in the bottom left corner like the original (C4Viewport::DrawCursorInfo). */
+  private readonly contents: HTMLElement;
   private readonly energy: HTMLElement;
   private readonly energyText: HTMLElement;
   /** Magic energy, shown for sorcerers only. */
@@ -71,7 +73,7 @@ export class Hud {
     this.rank = h('div', { class: 'crew-rank' });
     this.fill = h('div');
     this.expText = h('div', { class: 'exp-text' });
-    this.slot = h('canvas', { width: 32, height: 32 });
+    this.contents = h('div', { class: 'hud-contents' });
     this.energy = h('div');
     this.energyText = h('span');
     this.magic = h('div');
@@ -101,9 +103,10 @@ export class Hud {
           h('div', { class: 'hud-energy', title: 'Energy' }, h('div', { class: 'bar' }, this.energy), this.energyText),
           this.magicRow,
         ),
-        h('div', { class: 'hud-side' }, h('div', { class: 'hud-slot', title: 'Carrying' }, this.slot), this.wealth),
+        h('div', { class: 'hud-side' }, this.wealth),
       ),
       this.crewBar,
+      this.contents,
       h('button', { class: 'hud-menu', onclick: () => actions.onMenu() }, 'Menu (Esc)'),
       keyHelp ? this.help : null,
     );
@@ -157,14 +160,34 @@ export class Hud {
       this.wealth.style.display = player ? '' : 'none';
       this.wealthText.textContent = String(wealth);
     }
-    const carried = c?.carrying;
-    // A flag shows its owner's colour, so a stolen one looks different.
-    const item = carried ? `${carried.def.id}:${carried.owner}` : undefined;
-    if (item !== s.item) {
-      s.item = item;
-      drawItem(this.slot, carried?.def, this.assets, carried ? this.colorOf(carried.owner) : undefined);
-      this.slot.parentElement!.title = c?.carrying ? `Carrying ${c.carrying.def.name}` : 'Empty hands';
+    this.updateContents(c);
+  }
+
+  /**
+   * What the clonk carries: its picture at the original's 35 px (times the
+   * world's zoom), bottom left, with "2x" when there's more than one of a kind
+   * (C4ObjectList::DrawIDList). Nothing when its hands are empty.
+   */
+  private updateContents(c: Clonk | undefined): void {
+    const zoom = Math.max(1, Math.round(innerHeight / 380));
+    // Things of a kind (and owner: a flag shows its owner's colour) go together.
+    const groups: { item: Item; count: number }[] = [];
+    for (const it of c?.contents ?? []) {
+      const g = groups.find((o) => o.item.def.id === it.def.id && o.item.owner === it.owner);
+      if (g) g.count++;
+      else groups.push({ item: it, count: 1 });
     }
+    const key = `${zoom}:${groups.map((g) => `${g.item.def.id}/${g.item.owner}=${g.count}`).join(',')}`;
+    if (key === this.shown.item) return;
+    this.shown.item = key;
+    this.contents.style.setProperty('--zoom', String(zoom));
+    this.contents.replaceChildren(
+      ...groups.map((g) => {
+        const pic = h('canvas', { width: 70, height: 70 });
+        drawItem(pic, g.item.def, this.assets, this.colorOf(g.item.owner), true);
+        return h('div', { class: 'hud-item', title: g.item.def.name }, pic, g.count > 1 ? h('span', {}, `${g.count}x`) : null);
+      }),
+    );
   }
 
   /** The crew bar: one portrait per clonk, the leader and the selected ones marked. */

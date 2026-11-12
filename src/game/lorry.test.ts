@@ -82,7 +82,7 @@ describe('Lorry', () => {
     // Rock first (it went in first), then gold.
     tap(world, { pressedRight: true });
     expect(c.loadMenu).toBe(1);
-    tap(world, UP);
+    tap(world, THROW);
     expect(c.loadMenu).toBeNull();
     expect(c.carrying?.def.id).toBe('gold');
     expect(c.carrying?.container).toBe(c);
@@ -122,7 +122,7 @@ describe('Lorry', () => {
     expect(world.messages.map((m) => m.text)).toContain('Lorry is full!');
   });
 
-  it('pushed into its own base, the gold in it is sold; it comes back out with the clonk', () => {
+  it('pushed into its own base, it empties itself: the gold is sold, the rest is kept; it comes back out with the clonk', () => {
     const world = flatWorld();
     const hut = world.addStructure('hut', 60, GROUND - 25, 0);
     const door = hut.exitPoint().x;
@@ -137,7 +137,8 @@ describe('Lorry', () => {
     expect(c.contained).toBe(hut);
     expect(lorry.contained).toBe(hut);
     expect(world.players.get(0)!.wealth).toBe(wealth + 30);
-    expect(lorry.contents.map((i) => i.def.id)).toEqual(['rock', 'rock']);
+    expect(lorry.contents).toHaveLength(0);
+    expect(hut.contents.map((i) => [i.def.id, i.container === hut])).toEqual([['rock', true], ['rock', true]]);
     run(world, 10);
     expect(lorry.contained).toBe(hut);
     // Down leaves, pushing it out again.
@@ -148,6 +149,22 @@ describe('Lorry', () => {
     run(world, 20, { right: true });
     expect(lorry.x).toBeGreaterThan(door + 5);
     expect(lorry.y + 10).toBe(GROUND);
+  });
+
+  it('empties into any building; the gold is kept there too when it is not a base', () => {
+    const world = flatWorld();
+    const hut = world.addStructure('hut', 60, GROUND - 25, -1);
+    const door = hut.exitPoint().x;
+    const { lorry, c } = pushing(world, door);
+    load(world, lorry, 'gold', 2);
+    load(world, lorry, 'rock', 1);
+    run(world, 20);
+    const wealth = world.players.get(0)!.wealth;
+    tap(world, UP);
+    expect(c.contained).toBe(hut);
+    expect(lorry.contents).toHaveLength(0);
+    expect(hut.contents.map((i) => i.def.id)).toEqual(['gold', 'gold', 'rock']);
+    expect(world.players.get(0)!.wealth).toBe(wealth);
   });
 
   it("can't be pushed into an enemy base", () => {

@@ -281,7 +281,7 @@ describe('Buying vehicles', () => {
     const b = world.vehicles[0];
     expect(b.def.id).toBe('blimp');
     expect(contactCheck(world.land, b.vertices, b.x, b.y).count).toBe(0);
-    tap(world, { down: true, pressedDown: true });
+    tap(world, { pressedDig: true });
     tap(world, { down: true, pressedDown: true });
     expect(c.contained).toBeNull();
     run(world, 20);
@@ -304,7 +304,7 @@ describe('Buying vehicles', () => {
       tap(world, { pressedThrow: true });
       const v = world.vehicles.at(-1)!;
       expect(v.def.id).toBe(id);
-      tap(world, { down: true, pressedDown: true });
+      tap(world, { pressedDig: true });
       tap(world, { down: true, pressedDown: true });
       run(world, 20);
       grab(world, c);

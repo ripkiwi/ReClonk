@@ -1,5 +1,6 @@
 // Pixi normally compiles shaders/uniform code with eval; the site's CSP forbids that,
 // so use Pixi's eval-free code paths instead.
+import { MENU_GRAPHICS } from './render/classicMenu';
 import 'pixi.js/unsafe-eval';
 import './ui/menu.css';
 import { Application } from 'pixi.js';
@@ -101,6 +102,7 @@ async function start(): Promise<void> {
         FIRE_PARTICLES.fire2.file,
         MAGIC_SPRITES.bridge,
         ...Object.values(SPELLS).map((s) => s.icon),
+        ...Object.values(MENU_GRAPHICS),
       ],
     ),
     loadNames(),

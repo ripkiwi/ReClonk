@@ -76,7 +76,7 @@ describe('Flags', () => {
     expect(thief.carrying).toBe(flag);
     // It still belongs to player 1: picking things up doesn't change their owner.
     expect(flag.owner).toBe(1);
-    // Back home, throw sells it.
+    // Back home, throw puts it in, and the sell menu sells it.
     const p = mine.exitPoint();
     thief.setPosition(p.x, p.y);
     run(world, 5);
@@ -84,6 +84,11 @@ describe('Flags', () => {
     expect(thief.contained).toBe(mine);
     run(world, 1, THROW);
     expect(thief.carrying).toBeUndefined();
+    expect(mine.contents).toEqual([flag]);
+    expect(me.wealth).toBe(10);
+    run(world, 1, { pressedDig: true });
+    expect(world.menuList(thief).map((e) => [e.id, e.value])).toEqual([['flag', 100]]);
+    run(world, 1, THROW);
     expect(me.wealth).toBe(110);
     expect(me.stock.flag).toBe(1);
     expect(world.messages.map((m) => m.text)).toContain('Sold Flag for 100 gold');
@@ -130,9 +135,9 @@ describe('Flags', () => {
     run(world, 1, UP);
     expect(c.contained).toBe(tower);
     run(world, 1, THROW);
+    // It's only kept there, like anything else.
     expect(tower.base).toBe(-1);
-    expect(c.carrying).toBe(flag);
-    expect(world.messages.map((m) => m.text)).toContain('No flag can go on this building');
+    expect(tower.contents).toEqual([flag]);
     free.base = 1;
     const d = atDoor(world, free, 1);
     const other = world.spawnItem('flag', d.x, d.y);
@@ -140,7 +145,10 @@ describe('Flags', () => {
     carry(d, other);
     run(world, 1, UP, 1);
     expect(d.contained).toBe(free);
-    // In your own base, throw sells it instead.
+    // In your own base it's kept, to be sold.
+    run(world, 1, THROW, 1);
+    expect(free.contents).toEqual([other]);
+    run(world, 1, { pressedDig: true }, 1);
     run(world, 1, THROW, 1);
     expect(world.players.get(1)!.wealth).toBe(110);
   });

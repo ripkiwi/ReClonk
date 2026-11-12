@@ -137,7 +137,7 @@ function burnVehicle(world: World, v: Vehicle): void {
 /**
  * A building becomes its burned ruin (ChangeDef to BurnTo, then FnFxFireStart
  * ejects contents and detaches attached objects): no door, no solid parts, no
- * elevator case or gates, and the flag falls off.
+ * elevator case or gates, what's kept inside falls out, and the flag falls off.
  */
 function burnStructure(world: World, s: Structure): void {
   const { land } = world;
@@ -152,6 +152,7 @@ function burnStructure(world: World, s: Structure): void {
   s.gates = [];
   s.liftCase?.floor.remove(land);
   s.liftCase = null;
+  world.ejectContents(s);
   if (s.base >= 0) dropFlag(world, s);
 }
 

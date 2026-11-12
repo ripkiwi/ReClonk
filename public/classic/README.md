@@ -56,6 +56,8 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `clonk/Rank.png` | `Objects.c4d/Crew.c4d/Clonk.c4d/Rank.png` |
 | `clonk/portraits/Portrait1-5.png` | `Objects.c4d/Crew.c4d/Clonk.c4d/Portrait1-5.png` |
 | `gui/MainMenu.jpg` | `planet/Graphics.c4g/LoaderGoldmine1.png` by Matthes Bender and Christopher Graulich, **scaled down to 1600 px wide and saved as JPEG** |
+| `gui/GUICaption.png`, `Control.png`, `Wealth.png`, `Magic.png`, `Arrow.png`, `Exit.png`, `Hand.png` | `planet/Graphics.c4g/` (in-game menu title bar, key caps, gold and magic symbols, arrows, exit door, hands) |
+| `gui/MenuFlag.png` | `planet/Graphics.c4g/Flag.png` (the flag in the buy and sell menu symbols) |
 | `gui/Startup*.png` | `planet/Graphics.c4g/Startup*.png` (menu backgrounds, buttons, dialog paper, control type icons) |
 | `fonts/Endeavour.ttf` | `planet/System.c4g/Endeavour.ttf` |
 | `Names.txt` | `planet/System.c4g/Names.txt`, **line endings and blank lines removed** |

@@ -5,6 +5,7 @@ import { Landscape } from '../landscape/landscape';
 import { Mat } from '../landscape/materials';
 import { NO_CONTROL, type ControlState } from '../objects/clonk';
 import { CLONK } from '../objects/defs';
+import { incinerate } from './fire';
 import { buildOnSurface, setupDefaultBases } from './homeBase';
 import { World } from './world';
 import { scenarioById } from './scenarios';
@@ -25,6 +26,7 @@ const UP = { up: true, pressedUp: true };
 const DOWN = { down: true, pressedDown: true };
 const THROW = { pressedThrow: true };
 const RIGHT = { right: true, pressedRight: true };
+const DIG = { pressedDig: true };
 
 /** A world with player 0, a hut at x=100 (with flag if `own`), and a clonk standing in its door. */
 function atHut(own = true, wealth = 25) {
@@ -102,41 +104,102 @@ describe('Buildings and home bases', () => {
     expect(player.wealth).toBe(5);
   });
 
-  it('buys a flint for 5 and a rock for 1, and sells the rock back for 1', () => {
-    const { world, player, clonk } = atHut(true, 10);
+  it('buys a flint for 5 and a rock for 1; throw puts things in, and the sell menu sells them back', () => {
+    const { world, player, hut, clonk } = atHut(true, 10);
     tap(world, UP);
     tap(world, UP); // open the buy menu
     expect(clonk.menu).toBe(0);
-    tap(world, UP); // flint
+    expect(clonk.menuKind).toBe('buy');
+    expect(world.menuList(clonk).map((e) => [e.id, e.count, e.value])).toEqual([['flint', 2, 5], ['rock', 5, 1]]);
+    tap(world, THROW); // flint
     expect(clonk.carrying?.def.id).toBe('flint');
     expect(player.wealth).toBe(5);
     expect(player.stock.flint).toBe(1);
+    expect(clonk.menu).toBe(0); // the menu stays open
 
     tap(world, RIGHT);
-    tap(world, UP); // hands full
-    expect(player.wealth).toBe(5);
-    tap(world, DOWN); // close menu
+    tap(world, THROW); // a rock: hands are full, so it's kept in the hut
+    expect(player.wealth).toBe(4);
+    expect(clonk.carrying?.def.id).toBe('flint');
+    expect(hut.contents.map((i) => i.def.id)).toEqual(['rock']);
+    tap(world, DIG); // close the menu
     expect(clonk.menu).toBeNull();
-    tap(world, THROW); // sell the flint
+
+    tap(world, THROW); // put the flint in
+    expect(clonk.carrying).toBeUndefined();
+    expect(hut.contents.map((i) => i.def.id)).toEqual(['rock', 'flint']);
+    expect(player.wealth).toBe(4);
+
+    tap(world, DIG); // the sell menu: what's kept in the base
+    expect(clonk.menuKind).toBe('sell');
+    expect(world.menuList(clonk).map((e) => [e.id, e.count, e.value])).toEqual([['rock', 1, 1], ['flint', 1, 5]]);
+    tap(world, THROW); // sell the rock
+    expect(player.wealth).toBe(5);
+    expect(player.stock.rock).toBe(5);
+    tap(world, THROW); // and the flint
     expect(player.wealth).toBe(10);
     expect(player.stock.flint).toBe(2);
+    expect(hut.contents).toHaveLength(0);
+    expect(world.menuList(clonk)).toEqual([]);
+  });
 
+  it('gold thrown into your base is sold at once', () => {
+    const { world, player, hut, clonk } = atHut(true, 0);
     tap(world, UP);
-    tap(world, RIGHT);
-    tap(world, THROW); // rock
-    expect(clonk.carrying?.def.id).toBe('rock');
-    expect(player.wealth).toBe(9);
-    tap(world, DOWN);
+    const gold = world.spawnItem('gold', clonk.x, clonk.y);
+    gold.container = clonk;
+    clonk.contents.push(gold);
     tap(world, THROW);
-    expect(player.wealth).toBe(10);
-    expect(clonk.carrying).toBeUndefined();
+    expect(player.wealth).toBe(5);
+    expect(hut.contents).toHaveLength(0);
+  });
+
+  it('any building keeps things; the get menu takes one out, swapping it for what the clonk holds', () => {
+    const { world, player, hut, clonk } = atHut(false, 0);
+    tap(world, UP);
+    world.give(clonk, 'rock');
+    tap(world, THROW);
+    world.give(clonk, 'gold');
+    tap(world, THROW);
+    // Not a base: gold isn't sold, there's no buying or selling.
+    expect(hut.contents.map((i) => i.def.id)).toEqual(['rock', 'gold']);
+    expect(player.wealth).toBe(0);
+    tap(world, UP);
+    expect(clonk.menu).toBeNull();
+    tap(world, DIG); // the get menu
+    expect(clonk.menuKind).toBe('get');
+    tap(world, THROW); // a rock
+    expect(clonk.carrying?.def.id).toBe('rock');
+    expect(hut.contents.map((i) => i.def.id)).toEqual(['gold']);
+    tap(world, THROW); // the gold, putting the rock down
+    expect(clonk.carrying?.def.id).toBe('gold');
+    expect(hut.contents.map((i) => i.def.id)).toEqual(['rock']);
+    tap(world, DIG);
+    expect(clonk.menu).toBeNull();
+    tap(world, DOWN);
+    expect(clonk.contained).toBeNull();
+    expect(clonk.carrying?.def.id).toBe('gold');
+  });
+
+  it('a burning building throws out what it keeps', () => {
+    const { world, hut, clonk } = atHut(false, 0);
+    tap(world, UP);
+    world.give(clonk, 'rock');
+    tap(world, THROW);
+    const rock = hut.contents[0];
+    incinerate(world, hut, null);
+    expect(hut.contents).toHaveLength(0);
+    expect(rock.container).toBeNull();
+    run(world, 30);
+    expect(rock.removed).toBe(false);
+    expect(Math.abs(rock.x - hut.exitPoint().x)).toBeLessThan(15);
   });
 
   it("can't buy without enough gold", () => {
     const { world, player, clonk } = atHut(true, 3);
     tap(world, UP);
     tap(world, UP);
-    tap(world, UP);
+    tap(world, THROW);
     expect(clonk.carrying).toBeUndefined();
     expect(player.wealth).toBe(3);
   });
