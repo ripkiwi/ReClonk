@@ -42,7 +42,7 @@ const TAP_DIG = { pressedDig: true };
 
 describe('Scenarios', () => {
   it('has the default scenarios', () => {
-    expect(SCENARIOS.map((s) => s.title)).toEqual(['Gold Mine', 'Minor Melee', 'Shark Lake']);
+    expect(SCENARIOS.map((s) => s.title)).toEqual(['Gold Mine', 'Minor Melee', 'Shark Lake', 'Lava Caves']);
     expect(scenarioById('minor-melee')?.title).toBe('Minor Melee');
     expect(scenarioById('nope')).toBeUndefined();
   });

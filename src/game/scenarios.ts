@@ -3,6 +3,7 @@ import { DEFAULT_LANDSCAPE, MAX_MAP_PLAYER_EXTEND, sval, type LandscapeDef, type
 import { PLANT_IDS } from '../objects/vegetation';
 import { SPELL_IDS, type SpellId } from './magic';
 import { RULE_IDS, type RuleId } from './rules';
+import { LAVA_CAVES_MAP } from './maps/lavaCaves';
 import { DEFAULT_WEATHER, type WeatherDef } from './weather';
 import type { Goal, ShopId } from './world';
 
@@ -198,6 +199,72 @@ export const SCENARIOS: readonly ScenarioDef[] = [
       wind: sval(1, 100, -100, 100),
     },
   },
+  {
+    // Worlds.c4f/Lavacaves.c4s, without its monsters, snakes and nests (no animals yet) and so without its goals.
+    id: 'lava-caves',
+    title: 'Lava Caves',
+    description:
+      'In these hot, lava flooded caves you will encounter monsters of various types. (Not yet: the monsters, and the goal of defeating them, come once the game has animals.)',
+    landscape: {
+      ...DEFAULT_LANDSCAPE,
+      // The map comes from its Landscape.txt map script, at this size and zoom.
+      mapScript: LAVA_CAVES_MAP,
+      mapWidth: sval(95, 0, 64, 250),
+      mapHeight: sval(60, 0, 40, 250),
+      mapZoom: sval(15, 0, 5, 15),
+      amplitude: sval(58),
+      phase: sval(67),
+      period: sval(7),
+      random: sval(6),
+      topOpen: false,
+      liquid: 'Water-Smooth',
+      liquidLevel: sval(52),
+      // Its ore and coal layers aren't in the game yet (the map script draws the map anyway).
+      layers: [
+        { name: 'Rock', count: 7 },
+        { name: 'Rock-Ridge', count: 7 },
+        { name: 'Gold', count: 7 },
+        { name: 'Granite', count: 4 },
+        { name: 'Water-Smooth', count: 5 },
+        { name: 'Oil-Smooth', count: 5 },
+        { name: 'Earth-Rough', count: 50 },
+        { name: 'Earth-Smooth2', count: 50 },
+      ],
+      // InEarth=ROCK=4;GOLD=1;FLNT=8 (its loam isn't in the game yet).
+      inEarth: { rock: 4, gold: 1, flint: 8 },
+      inEarthLevel: sval(28, 5),
+      // Its bones, skulls and burnt trees aren't in the game yet.
+      vegetation: {},
+      vegetationLevel: sval(14),
+      grass: false,
+    },
+    seed: 3141,
+    newMapEachRound: true,
+    // Crew=CLNK=1, and a flint (Material=FLAG=1;FLNT=1; the flag flies on the hut).
+    crewSize: 1,
+    sorcerers: 0,
+    magic: [],
+    // Rules=FGRV=1 (its power usage rule isn't in the game yet).
+    rules: ['flagRemoveable'],
+    startItems: ['flint'],
+    homeBase: true,
+    // Wealth=30; HomeBaseMaterial without its line kits, loam, metal, concrete, liquid granite, gunpowder and barrels.
+    base: {
+      wealth: 30,
+      stock: { conkit: 5, wood: 10, flint: 10, tflint: 14, supertflint: 6, superflint: 3, teraflint: 1, flag: 3, lorry: 1, clonk: 5 },
+    },
+    opponents: 0,
+    goal: 'none',
+    // Lava Caves' Scenario.txt: a hot climate, a slow year, gusty winds, the odd volcano and earthquake.
+    weather: {
+      ...DEFAULT_WEATHER,
+      climate: sval(0),
+      yearSpeed: sval(20, 10),
+      wind: sval(1, 100, -100, 100),
+      volcano: sval(3),
+      earthquake: sval(5),
+    },
+  },
 ];
 
 export function scenarioById(id: string, own: readonly ScenarioDef[] = []): ScenarioDef | undefined {
@@ -320,6 +387,8 @@ function landscapeIn(raw: unknown, f: LandscapeDef): LandscapeDef {
     vegetation: r.vegetation ? counts(PLANT_IDS, r.vegetation, LIMITS.share) : { ...f.vegetation },
     vegetationLevel: svalIn(r.vegetationLevel, f.vegetationLevel, P),
     grass: bool(r.grass, f.grass),
+    // The map script: kept as it is (the settings don't edit it); a saved landscape without one has none.
+    ...(typeof r.mapScript === 'string' ? { mapScript: r.mapScript.slice(0, 20000) } : raw === undefined && f.mapScript ? { mapScript: f.mapScript } : {}),
   };
 }
 

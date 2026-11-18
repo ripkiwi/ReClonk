@@ -78,6 +78,11 @@ export interface LandscapeDef {
   vegetationLevel: SVal;
   /** Grass along the earth surface (the original's Grass environment object). */
   grass: boolean;
+  /**
+   * A map script (the original's Landscape.txt) that draws the map instead of
+   * the values above; the map size, zoom and objects still come from them.
+   */
+  mapScript?: string;
 }
 
 /** The original's defaults (C4SLandscape::Default). */
@@ -127,7 +132,7 @@ export function mapSize(l: LandscapeDef, rng: Rng, players: number): { width: nu
 }
 
 /** sin() from plain arithmetic, so every browser draws the same map. */
-function dsin(x: number): number {
+export function dsin(x: number): number {
   const TAU = 2 * Math.PI;
   x -= Math.floor(x / TAU) * TAU;
   let sign = 1;

@@ -118,9 +118,11 @@ export function startRound(
   players.forEach((p, n) => {
     // With a home base the crew starts at its door; otherwise on the surface.
     const x0 = columns[n];
+    // In caves the crew starts on the cave floor nearest to the spawn (and there's no spare hut in another cave).
+    const nearY = map.cave ? map.spawn.y + 10 : undefined;
     const start = scenario.homeBase
-      ? setupDefaultBases(world, p.id, x0, scenario.base, !p.computer && scenario.goal !== 'melee').home.exitPoint()
-      : { x: x0, y: n === 0 && players.length === 1 ? map.spawn.y : groundAt(world, x0) - 10 };
+      ? setupDefaultBases(world, p.id, x0, scenario.base, !p.computer && scenario.goal !== 'melee' && !map.cave, nearY).home.exitPoint()
+      : { x: x0, y: n === 0 && players.length === 1 ? map.spawn.y : groundAt(world, x0, nearY) - 10 };
     if (p.computer) world.brains.set(p.id, new CrewAI(world, p.id));
     kinds.forEach((kind, i) => {
       const kindPool = kind === 'sorcerer' ? sorcererPool : pool;
@@ -140,7 +142,7 @@ export function startRound(
       if (!p.computer) localCrew.push(info);
       // Line the rest of the crew up next to the first clonk.
       const x = Math.max(8, Math.min(world.land.width - 8, start.x + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 14));
-      const c = world.addClonk(x, i === 0 ? start.y : groundAt(world, x) - 10, p.id, kind);
+      const c = world.addClonk(x, i === 0 ? start.y : groundAt(world, x, map.cave ? start.y : undefined) - 10, p.id, kind);
       if (!p.computer) c.controlStyle = profile.controlStyle;
       c.join(info);
       for (const id of scenario.startItems) world.give(c, id);
