@@ -1,20 +1,28 @@
+import { floorNear } from '../landscape/generate';
 import { Mat } from '../landscape/materials';
 import { STRUCTURES } from '../objects/defs';
 import type { Structure } from '../objects/structure';
 import { DEFAULT_BASE, type BaseSettings } from './scenarios';
 import type { PlayerState, World } from './world';
 
-/** First solid (or liquid) row in a column. */
-export function groundAt(world: World, x: number): number {
+/**
+ * First solid (or liquid) row in a column. In caves (`nearY` given) the floor
+ * of the cave nearest to that height instead.
+ */
+export function groundAt(world: World, x: number, nearY?: number): number {
   const { land } = world;
+  if (nearY !== undefined) {
+    const f = floorNear(land, x, nearY);
+    if (f >= 0) return f;
+  }
   for (let y = 0; y < land.height; y++) if (land.get(x, y) !== Mat.Sky) return y;
   return land.height;
 }
 
 /** True if there is water near the surface anywhere in [x0, x1]. */
-function wet(world: World, x0: number, x1: number): boolean {
+function wet(world: World, x0: number, x1: number, nearY?: number): boolean {
   for (let x = x0; x <= x1; x++) {
-    const y = groundAt(world, x);
+    const y = groundAt(world, x, nearY);
     if (world.land.isLiquid(x, y) || world.land.isLiquid(x, y + 2)) return true;
   }
   return false;
@@ -35,16 +43,16 @@ export function dryGround(world: World, nearX: number): number {
  * Find a dry spot for a building near `nearX`, searching outwards, preferring
  * flat ground. Returns the centre column.
  */
-export function findBuildSite(world: World, id: string, nearX: number): number {
+export function findBuildSite(world: World, id: string, nearX: number, nearY?: number): number {
   const half = STRUCTURES[id].width / 2;
   const { width } = world.land;
   let best = Math.max(half + 2, Math.min(width - half - 3, nearX));
   let bestScore = Infinity;
   for (let d = 0; d < width; d += 4) {
     for (const x of [nearX + d, nearX - d]) {
-      if (x - half < 2 || x + half >= width - 2 || wet(world, x - half - 4, x + half + 4)) continue;
+      if (x - half < 2 || x + half >= width - 2 || wet(world, x - half - 4, x + half + 4, nearY)) continue;
       if (world.structures.some((s) => Math.abs(s.x - x) < (s.def.width + STRUCTURES[id].width) / 2 + 10)) continue;
-      const bumpiness = Math.abs(groundAt(world, x - half) - groundAt(world, x + half));
+      const bumpiness = Math.abs(groundAt(world, x - half, nearY) - groundAt(world, x + half, nearY));
       const score = bumpiness + d / 8;
       if (score < bestScore) {
         bestScore = score;
@@ -52,6 +60,8 @@ export function findBuildSite(world: World, id: string, nearX: number): number {
       }
     }
     if (bestScore < d / 8) break;
+    // In a cave, stay in the cave the crew starts in.
+    if (nearY !== undefined && d > 60) break;
   }
   return best;
 }
@@ -88,18 +98,20 @@ export function layBasement(world: World, s: Structure, floor: number): void {
 /**
  * Put up a building on the surface at column `x`: level the ground under it
  * (clear hills above, fill dips below with earth), then place it standing on
- * that floor, on its basement.
+ * that floor, on its basement. In a cave (`nearY` given) on the cave floor
+ * nearest to that height, in a room cleared out of the rock.
  */
-export function buildOnSurface(world: World, id: string, x: number, base = -1): Structure {
+export function buildOnSurface(world: World, id: string, x: number, base = -1, nearY?: number): Structure {
   const def = STRUCTURES[id];
   const { land } = world;
-  const floor = groundAt(world, x);
+  const floor = groundAt(world, x, nearY);
+  const cave = nearY !== undefined;
   const x0 = x + def.offset.x - 2;
   const x1 = x + def.offset.x + def.width + 2;
   for (let xx = x0; xx <= x1; xx++) {
     for (let y = floor - def.height - 10; y < floor; y++) {
       land.set(xx, y, Mat.Sky);
-      land.setTunnel(xx, y, false);
+      land.setTunnel(xx, y, cave);
     }
     for (let y = floor; y < land.height && land.get(xx, y) === Mat.Sky; y++) land.set(xx, y, Mat.Earth);
   }
@@ -122,9 +134,11 @@ export function setupDefaultBases(
   spawnX: number,
   start: BaseSettings = DEFAULT_BASE,
   spareHut = true,
+  /** In a cave: the height of the cave floor to build on. */
+  nearY?: number,
 ): { home: Structure; player: PlayerState } {
   const state = world.addPlayer(player, start);
-  const home = buildOnSurface(world, 'hut', findBuildSite(world, 'hut', spawnX), player);
+  const home = buildOnSurface(world, 'hut', findBuildSite(world, 'hut', spawnX, nearY), player, nearY);
   if (spareHut) {
     const awayX = spawnX + (spawnX < world.land.width / 2 ? 260 : -260);
     buildOnSurface(world, 'hut', findBuildSite(world, 'hut', awayX));
