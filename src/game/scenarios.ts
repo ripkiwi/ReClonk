@@ -5,6 +5,7 @@ import { SPELL_IDS, type SpellId } from './magic';
 import { RULE_IDS, type RuleId } from './rules';
 import { LAVA_CAVES_MAP } from './maps/lavaCaves';
 import { DEFAULT_WEATHER, type WeatherDef } from './weather';
+import { ANIMAL_IDS, type AnimalId } from '../objects/animal';
 import type { Goal, ShopId } from './world';
 
 /** Starting gold and what the home base's shop has in stock (Scenario.txt Wealth and HomeBaseMaterial). */
@@ -48,9 +49,17 @@ export interface ScenarioDef {
   goal: Goal;
   /** Seasons, wind, rain, thunderstorms and disasters (the Weather page). */
   weather: WeatherDef;
+  /** Animals running, swimming and flying about at the start, how many of each (Scenario.txt [Animals] Animal). */
+  animals: Partial<Record<AnimalId, number>>;
+  /** Nests buried in the earth: monster eggs (Scenario.txt [Animals] Nest). */
+  nests: Partial<Record<NestId, number>>;
   /** Set on a player's own scenario: the original it was copied from. */
   basedOn?: string;
 }
+
+/** What can be buried as a nest. */
+export type NestId = 'monsterEgg';
+export const NEST_IDS: NestId[] = ['monsterEgg'];
 
 /**
  * The home base starts with the original Gold Mine stock, plus vehicles and
@@ -115,6 +124,8 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     goal: 'none',
     // Gold Mine's Scenario.txt: a cool climate, a slow year, gusty winds.
     weather: { ...DEFAULT_WEATHER, climate: sval(40, 10), yearSpeed: sval(20, 10), wind: sval(1, 100, -100, 100) },
+    animals: {},
+    nests: {},
   },
   {
     id: 'minor-melee',
@@ -147,9 +158,12 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     goal: 'melee',
     // Minor Melee's Scenario.txt: always late spring, gusty winds.
     weather: { ...DEFAULT_WEATHER, climate: sval(19), startSeason: sval(23), yearSpeed: sval(0), wind: sval(1, 100, -100, 100) },
+    // Its two zap nests (Nest=ZAPN=2) wait for zaps.
+    animals: {},
+    nests: {},
   },
   {
-    // Melees.c4f/SharkLake.c4s, without its sharks (Animal=SHRK=5) for now.
+    // Melees.c4f/SharkLake.c4s, with its five sharks (Animal=SHRK=5).
     id: 'shark-lake',
     title: 'Shark Lake',
     description:
@@ -198,13 +212,15 @@ export const SCENARIOS: readonly ScenarioDef[] = [
       meteorite: sval(0, 20),
       wind: sval(1, 100, -100, 100),
     },
+    animals: { shark: 5 },
+    nests: {},
   },
   {
-    // Worlds.c4f/Lavacaves.c4s, without its monsters, snakes and nests (no animals yet) and so without its goals.
+    // Worlds.c4f/Lavacaves.c4s, with its monsters and monster eggs (its snake, fire monster, fire monster eggs and zap nests come later), without its goals.
     id: 'lava-caves',
     title: 'Lava Caves',
     description:
-      'In these hot, lava flooded caves you will encounter monsters of various types. (Not yet: the monsters, and the goal of defeating them, come once the game has animals.)',
+      'In these hot, lava flooded caves you will encounter monsters of various types.',
     landscape: {
       ...DEFAULT_LANDSCAPE,
       // The map comes from its Landscape.txt map script, at this size and zoom.
@@ -264,6 +280,9 @@ export const SCENARIOS: readonly ScenarioDef[] = [
       volcano: sval(3),
       earthquake: sval(5),
     },
+    // Animal=SNKE=1;FMNS=1;MONS=3 and Nest=FMEG=4;MEGG=4;ZAPN=3: the monsters and their eggs.
+    animals: { monster: 3 },
+    nests: { monsterEgg: 4 },
   },
 ];
 
@@ -315,6 +334,8 @@ export const LIMITS = {
   opponents: { min: 0, max: 3, step: 1 },
   wealth: { min: 0, max: 1000, step: 5 },
   stock: { min: 0, max: 99, step: 1 },
+  /** Animals and nests at the start. */
+  animals: { min: 0, max: 50, step: 1 },
 };
 
 /** Objects a scenario can hand out, bury or scatter, in the settings' order. */
@@ -456,6 +477,9 @@ export function normalizeScenario(raw: Partial<ScenarioDef>, fallback: ScenarioD
     opponents: Math.round(clamp(raw.opponents, LIMITS.opponents, f.opponents)),
     goal: raw.goal === 'melee' || raw.goal === 'none' ? raw.goal : f.goal,
     weather: weatherIn(raw.weather, f.weather),
+    // Scenarios saved before animals existed take the original's.
+    animals: raw.animals ? counts(ANIMAL_IDS, raw.animals, LIMITS.animals) : { ...f.animals },
+    nests: raw.nests ? counts(NEST_IDS, raw.nests, LIMITS.animals) : { ...f.nests },
     ...(raw.basedOn ? { basedOn: String(raw.basedOn) } : {}),
   };
 }

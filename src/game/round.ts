@@ -8,6 +8,7 @@ import { hireClonk, idleMember, kindOf, PLAYER_COLORS, type CrewMember, type Cre
 import { evaluate } from '../landscape/mapCreator';
 import { crewCount, type ScenarioDef } from './scenarios';
 import { Weather } from './weather';
+import { initAnimals } from './animals';
 import { World } from './world';
 
 /** The local player's number in the world. Multiplayer will hand out more. */
@@ -148,6 +149,8 @@ export function startRound(
       for (const id of scenario.startItems) world.give(c, id);
     });
   });
+  // The animals come last, with random numbers of their own, so they don't change the map or the crews.
+  initAnimals(world, scenario.animals, scenario.nests, seed);
   return {
     scenario,
     seed,

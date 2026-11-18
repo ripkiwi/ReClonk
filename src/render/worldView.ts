@@ -10,6 +10,7 @@ import type { Clonk } from '../objects/clonk';
 import type { Item } from '../objects/item';
 import type { Structure } from '../objects/structure';
 import { GRASS, type Grass, type Plant } from '../objects/vegetation';
+import { Animal, DEAD_DELAY } from '../objects/animal';
 import { BALLOON_FLAG, BLIMP, SAIL, isSailing, type Vehicle } from '../objects/vehicle';
 import { colorByOwner, frame, type GameAssets } from './assets';
 import { FireView } from './fireView';
@@ -135,6 +136,9 @@ export class WorldView {
   private readonly vehicleLayer = new Container();
   /** ...except the front of their baskets and hulls, which is in front of the clonks in them. */
   private readonly vehicleFront = new Container();
+  /** Animals, in front of vehicles and behind clonks. */
+  private readonly animalLayer = new Container();
+  private readonly animalSprites = new Map<Animal, Sprite>();
   /** Trees and bushes: a holder at the root that tilts when it falls, and the picture in it. */
   private readonly plantSprites = new Map<Plant, { holder: Container; body: Sprite; burned: boolean | null }>();
   private readonly grassSprites = new Map<Grass, Sprite>();
@@ -173,7 +177,7 @@ export class WorldView {
     this.root.addChild(this.sky, this.layer);
     this.landscape = new LandscapeView(world.land, assets.materials);
     this.fire = new FireView(world, assets.items);
-    this.layer.addChild(this.landscape.sprite, this.grassLayer, this.fire.back, this.plantLayer, this.structureLayer, this.vehicleLayer, this.pxs);
+    this.layer.addChild(this.landscape.sprite, this.grassLayer, this.fire.back, this.plantLayer, this.structureLayer, this.vehicleLayer, this.animalLayer, this.pxs);
   }
 
   /**
@@ -238,6 +242,7 @@ export class WorldView {
     this.updateStructures();
     this.updateItems();
     this.updateVehicles();
+    this.updateAnimals();
     this.updateClonks();
     this.layer.addChild(this.vehicleFront);
     this.updateBridges();
@@ -552,6 +557,11 @@ export class WorldView {
       // Burning wood gets smaller, and stays charred (Wood.c4d Incineration: RGB 48, 32, 32).
       s.scale.set(item.con / 100000);
       s.tint = item.burned ? 0x302020 : 0xffffff;
+      const decay = item.def.decay;
+      if (decay) {
+        const f = item.decaying ? decay.facet : item.def.graphic.facet;
+        s.texture = frame(this.assets.items[item.def.graphic.file], f.x, f.y, f.w, f.h);
+      }
       const lit = item.def.litFacet;
       if (lit) {
         const f = item.lit ? lit : item.def.graphic.facet;
@@ -580,6 +590,43 @@ export class WorldView {
         this.itemOverlays.get(item)?.destroy();
         this.itemOverlays.delete(item);
       }
+    }
+  }
+
+  /**
+   * Animals: the current frame of their action, mirrored when they face right
+   * (the sheets face left), grown to their con (StretchGrowth). Dead sharks
+   * and monsters lie in their Dead frame, then in their Decay frame as they rot.
+   */
+  private updateAnimals(): void {
+    const seen = new Set<Animal>();
+    for (const a of this.world.animals) {
+      if (a.removed) continue;
+      seen.add(a);
+      let s = this.animalSprites.get(a);
+      if (!s) {
+        s = new Sprite();
+        s.anchor.set(0.5);
+        this.animalLayer.addChild(s);
+        this.animalSprites.set(a, s);
+      }
+      const def = a.def;
+      const dead = def.dead;
+      if (!a.alive && 'file' in dead) {
+        const f = a.deadTicks > DEAD_DELAY ? dead.decay : dead.facet;
+        s.texture = frame(this.assets.items[dead.file], f.x, f.y, f.w, f.h);
+        s.scale.set(a.con / 100);
+      } else {
+        const f = a.action.facet;
+        s.texture = frame(this.assets.items[def.file], f.x + a.phase * f.w, f.y, f.w, f.h);
+        s.scale.set((-a.dir * a.con) / 100, a.con / 100);
+      }
+      s.position.set(a.x, a.y);
+    }
+    for (const [a, s] of this.animalSprites) {
+      if (seen.has(a)) continue;
+      s.destroy();
+      this.animalSprites.delete(a);
     }
   }
 

@@ -206,7 +206,10 @@ export class GameScreen {
         sizzled++;
         this.env.sounds.play('Corrode', volumeAt(e.x, e.y) * 0.6);
       } else if (e.type === 'volcano') this.env.sounds.play(Math.random() < 0.5 ? 'VolcanoCast' : pick(LAVA), volumeAt(e.x, e.y));
-      else if (e.type === 'itemHit') {
+      else if (e.type === 'animal') {
+        const id = e.sound === 'Snuff' ? pick(['Snuff1', 'Snuff2'] as const) : e.sound === 'Growl' ? pick(['Growl1', 'Growl2', 'Growl3'] as const) : e.sound === 'Raven' ? 'Raven1' : e.sound;
+        this.env.sounds.play(id, volumeAt(e.x, e.y) * 0.8);
+      } else if (e.type === 'itemHit') {
         const id = e.item.def.id;
         const set = id === 'crystal' ? CRYSTAL_HITS : id === 'wood' ? WOOD_HITS : id === 'rock' || id === 'gold' || e.item.def.fuse ? ROCK_HITS : null;
         if (set) this.env.sounds.play(pick(set), volumeAt(e.item.x, e.item.y) * 0.5);

@@ -7,7 +7,7 @@ import type { Item } from '../objects/item';
 import { dropFlag } from './fire';
 import type { World } from './world';
 
-export type RuleId = 'flagRemoveable' | 'captureTheFlag' | 'lossOfBase' | 'killTheCaptain' | 'constructionMaterial';
+export type RuleId = 'flagRemoveable' | 'captureTheFlag' | 'lossOfBase' | 'killTheCaptain' | 'constructionMaterial' | 'collectibleAnimals';
 
 export interface RuleDef {
   id: RuleId;
@@ -43,6 +43,12 @@ export const RULES: Record<RuleId, RuleDef> = {
     description: 'Players are eliminated when they lose their last base building.',
     icon: 'rules/LossOfBase.png',
   },
+  collectibleAnimals: {
+    id: 'collectibleAnimals',
+    name: 'Collectible animals',
+    description: 'Wipfs and fishes can be collected by Clonks.',
+    icon: 'rules/CollectibleAnimals.png',
+  },
   killTheCaptain: {
     id: 'killTheCaptain',
     name: 'Kill The Captain',
@@ -62,7 +68,6 @@ export const LATER_RULES: readonly { name: string; icon: string; needs: string }
   { name: 'Team account', icon: 'rules/TeamAccount.png', needs: 'allied players' },
   { name: 'Team home base material', icon: 'rules/TeamHomebase.png', needs: 'allied players' },
   { name: 'Team knowledge', icon: 'rules/TeamKnowledge.png', needs: 'allied players' },
-  { name: 'Collectible animals', icon: 'rules/CollectibleAnimals.png', needs: 'animals' },
   { name: 'No metal in front of buildings', icon: 'rules/NoMetalTrick.png', needs: 'metal bridges' },
   { name: 'Research at Wizardtower', icon: 'rules/WizardTowerResearch.png', needs: 'the wizard tower' },
 ];

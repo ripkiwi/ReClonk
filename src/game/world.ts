@@ -19,6 +19,8 @@ import { MagicState, openSpellMenu, spellList, startSpell, stepMagic, stepSorcer
 import { stepRules, takeFlag, type RuleId } from './rules';
 import { menuMove } from './menus';
 import type { Weather } from './weather';
+import { Animal, ANIMALS, type AnimalId } from '../objects/animal';
+import { animalHurt, breakEgg, collectAnimal, eggHit, stepAnimals, type AnimalSound } from './animals';
 
 export type WorldEvent =
   | { type: 'explosion'; x: number; y: number; radius: number; tick: number }
@@ -76,7 +78,9 @@ export type WorldEvent =
   /** Acid ate a pixel (smoke, now and then the Corrode sound). */
   | { type: 'corrode'; x: number; y: number; tick: number }
   /** A volcano broke out of the ground, or threw out lava. */
-  | { type: 'volcano'; x: number; y: number; tick: number };
+  | { type: 'volcano'; x: number; y: number; tick: number }
+  /** An animal made a sound: a wipf snuffles, a bird croaks, a shark bites, a monster growls, an egg breaks. */
+  | { type: 'animal'; sound: AnimalSound; x: number; y: number; tick: number };
 
 /** Extra experience on top of the original's "1 per 5 commands", so promotions come at a fun pace. */
 export const EXPERIENCE = {
@@ -176,6 +180,8 @@ export class World {
   grass: Grass[] = [];
   /** Flames on burning oil. */
   flames: OilFlame[] = [];
+  /** Wipfs, birds, fish, sharks and monsters, alive or dead. */
+  animals: Animal[] = [];
   readonly players = new Map<number, PlayerState>();
   private readonly cursors = new Map<number, CrewCursor>();
   readonly messages: PlayerMessage[] = [];
@@ -346,6 +352,24 @@ export class World {
     return v;
   }
 
+  /** Put an animal in the world, centred on (x, y), grown up to `con` percent. */
+  addAnimal(id: AnimalId, x: number, y: number, con = 100): Animal {
+    const a = new Animal(ANIMALS[id], x, y, this.animals.length * 7);
+    a.con = con;
+    this.animals.push(a);
+    return a;
+  }
+
+  /** Hurt an animal by `points`. */
+  hurtAnimal(a: Animal, points: number, by: Clonk | null): void {
+    if (!a.alive) return;
+    if (by) a.lastHurtBy = by.id;
+    if (points > 0) {
+      animalHurt(this, a);
+      a.doEnergy(-points);
+    }
+  }
+
   spawnItem(id: ItemId, x: number, y: number, xdir = 0, ydir = 0, rdir = 0): Item {
     const item = new Item(ITEMS[id], x, y);
     item.xdir = xdir;
@@ -440,7 +464,7 @@ export class World {
       if (c.buildMenu !== null && (c.action.procedure !== 'walk' || c.carrying?.def.id !== 'conkit')) c.buildMenu = null;
       if (c.spellMenu !== null && !c.readyToMagic) c.spellMenu = null;
       stepSorcerer(this, c);
-      const got = c.tryCollect(this.items, this.land) ?? takeFlag(this, c);
+      const got = c.tryCollect(this.items, this.land) ?? takeFlag(this, c) ?? collectAnimal(this, c);
       if (got) {
         this.events.push({ type: 'collect', clonk: c, item: got, tick: this.tick });
         if (got.def.id === 'gold' && !got.found) {
@@ -463,6 +487,8 @@ export class World {
       }
       stepVehicle(this, v);
     }
+
+    stepAnimals(this);
 
     // Hostile clonks that run into each other start a fist fight (checked every 5 ticks, like the original).
     if (this.tick % 5 === 0) this.startFights();
@@ -495,6 +521,8 @@ export class World {
       if (hit && !item.def.explodeOnHit) this.events.push({ type: 'itemHit', item, tick: this.tick });
       // A T-flint lights on impact (TFlint.c4d Hit).
       if (hit && item.light()) this.events.push({ type: 'fuse', x: item.x, y: item.y, tick: this.tick });
+      // A monster egg may break when it lands (MonsterEgg.c4d Hit).
+      if (hit && item.def.egg) eggHit(this, item);
       if (hit && item.def.explodeOnHit) {
         item.removed = true;
         const by = this.thrower(item);
@@ -587,6 +615,20 @@ export class World {
         if (c.alive && (this.tick % 3 === 0 || c.action.procedure !== 'flight')) {
           const k = 50 / Math.max(CLONK.mass, 50);
           c.fling(item.xdir * k, -Math.abs(item.ydir / 2) * k);
+        }
+      }
+      // Animals get hit the same way.
+      for (const a of this.animals) {
+        if (!a.alive || a.removed || !a.at(item.x, item.y)) continue;
+        if (item.def.animal || item.def.decay) continue;
+        const rx = item.xdir - a.xdir;
+        const ry = item.ydir - a.ydir;
+        let energy = Math.round(((rx * rx + ry * ry) * item.def.mass) / 5);
+        energy = Math.max(Math.trunc(energy / 3), energy ? 1 : 0);
+        this.hurtAnimal(a, Math.trunc(energy / 5) * HIT_DAMAGE, this.thrower(item));
+        if (a.alive && this.tick % 3 === 0) {
+          const k = 50 / Math.max(a.def.mass, 50);
+          a.fling(item.xdir * k, -Math.abs(item.ydir / 2) * k);
         }
       }
     }
@@ -730,6 +772,28 @@ export class World {
       if (item.container || item.removed) continue;
       // Whatever the blast flings counts as thrown by whoever set it off.
       if (fling(item) > 0 && by) item.thrownBy = by.id;
+    }
+    // Animals take blast damage like clonks and get flung; eggs break.
+    for (const a of this.animals) {
+      if (a.removed) continue;
+      if (a.alive) {
+        let points = 0;
+        if (y - a.top >= -5 && y - a.top <= a.height - 1 + 10 && x - a.left >= -5 && x - a.left <= a.width - 1 + 10) points += Math.trunc(radius / 3);
+        if (Math.abs(y - a.y) <= radius && Math.abs(x - a.x) <= radius) points += Math.trunc(radius / 2);
+        if (points) this.hurtAnimal(a, points, by);
+      }
+      const dx = a.x - x;
+      const dy = a.y - y;
+      const d = Math.sqrt(dx * dx + dy * dy) || 1;
+      if (d < reach) {
+        const k = ((reach - d) / reach) * (50 / Math.max(a.def.mass, 50));
+        a.fling(a.xdir + (dx / d) * 3 * k, a.ydir + (dy / d) * 3 * k - 1.5 * k);
+      }
+    }
+    for (const item of this.items) {
+      if (item.removed || !item.def.egg) continue;
+      const at = item.container ?? item;
+      if (directHit(x, y, { x: at.x - 3, y: at.y - 3, w: 6, h: 6 })) breakEgg(this, item);
     }
     this.blastHits(x, y, radius, by);
     this.shoveVehicles(x, y, radius);
