@@ -4,6 +4,7 @@
 import type { ItemId } from '../landscape/materials';
 import type { Vertex } from './physics';
 import { CNAT } from './physics';
+import type { AnimalId } from './animal';
 
 export interface Facet {
   x: number;
@@ -46,6 +47,12 @@ export interface ItemDef {
   float?: boolean;
   /** Its picture in the same file, for menus and the scenario settings (DefCore Picture). */
   picture: Facet;
+  /** A live animal in a clonk's hands: let go of, it runs (or swims) off again. */
+  animal?: AnimalId;
+  /** A dead animal rots: after `after` ticks it shrinks by `step` percent every `every` ticks, drawn with the `facet` (its Decay action). */
+  decay?: { after: number; every: number; step: number; facet: Facet };
+  /** An egg: a hard landing breaks it one time in two, a blast always, and now and then it hatches by itself (MonsterEgg.c4d). */
+  egg?: AnimalId;
 }
 
 const itemVertex: Vertex[] = [{ x: 0, y: 0, cnat: CNAT.None, friction: 50 }];
@@ -118,6 +125,38 @@ export const ITEMS: Record<ItemId, ItemDef> = {
     ],
     graphic: { file: 'items/Flag.png', facet: { x: 0, y: 0, w: 24, h: 12 }, overlay: 'items/FlagOverlay.png' },
     picture: { x: 144, y: 0, w: 64, h: 64 },
+  },
+  // A wipf picked up alive (Wipf.c4d with the Collectible animals rule): 15 gold in a base.
+  wipf: {
+    id: 'wipf', name: 'Wipf', value: 15, mass: 20, vertices: [{ x: 0, y: 6, cnat: CNAT.Bottom, friction: 100 }], animal: 'wipf', contactIncinerate: 1,
+    graphic: { file: 'animals/Wipf.png', facet: { x: 0, y: 54, w: 24, h: 18 } }, picture: { x: 432, y: 0, w: 64, h: 64 },
+  },
+  // A fish caught alive (Fish.c4d with the Collectible animals rule).
+  fish: {
+    id: 'fish', name: 'Fish', value: 10, mass: 15, vertices: [{ x: 0, y: 4, cnat: CNAT.Bottom, friction: 100 }], animal: 'fish', float: true,
+    graphic: { file: 'animals/Fish.png', facet: { x: 0, y: 0, w: 16, h: 12 } }, picture: { x: 320, y: 0, w: 64, h: 64 },
+  },
+  // DeadWipf (Wipf.c4d/Dead.c4d): lies about for 3000 ticks, then rots away (Decay: DoCon(-4) every 100 ticks).
+  deadWipf: {
+    id: 'deadWipf', name: 'Dead wipf', value: 10, mass: 15, vertices: [{ x: 0, y: 6, cnat: CNAT.Bottom, friction: 100 }], contactIncinerate: 1, float: true,
+    decay: { after: 3000, every: 100, step: 4, facet: { x: 0, y: 18, w: 24, h: 18 } },
+    graphic: { file: 'animals/WipfDead.png', facet: { x: 0, y: 0, w: 24, h: 18 } }, picture: { x: 0, y: 0, w: 24, h: 18 },
+  },
+  // DeadFish (Fish.c4d/Dead.c4d): floats, then rots like a dead wipf.
+  deadFish: {
+    id: 'deadFish', name: 'Dead fish', value: 6, mass: 15, vertices: [{ x: 0, y: 4, cnat: CNAT.Bottom, friction: 100 }], float: true,
+    decay: { after: 3000, every: 100, step: 4, facet: { x: 0, y: 12, w: 16, h: 12 } },
+    graphic: { file: 'animals/FishDead.png', facet: { x: 0, y: 0, w: 16, h: 12 } }, picture: { x: 16, y: 0, w: 64, h: 64 },
+  },
+  // DeadBird (Bird.c4d/Dead.c4d): it has no Decay action, so it stays.
+  deadBird: {
+    id: 'deadBird', name: 'Dead bird', value: 1, mass: 5, vertices: [{ x: 0, y: 3, cnat: CNAT.Bottom, friction: 100 }], contactIncinerate: 1, float: true,
+    graphic: { file: 'animals/BirdDead.png', facet: { x: 0, y: 0, w: 28, h: 24 } }, picture: { x: 28, y: 0, w: 64, h: 64 },
+  },
+  // MonsterEgg.c4d (MEGG): breaks on a hard landing one time in two, and in a blast; a monster hatches if there's room.
+  monsterEgg: {
+    id: 'monsterEgg', name: 'Monster egg', value: 10, mass: 10, vertices: itemVertex, egg: 'monster',
+    graphic: { file: 'animals/MonsterEgg.png', facet: { x: 0, y: 0, w: 6, h: 6 } }, picture: { x: 6, y: 0, w: 40, h: 40 },
   },
 };
 

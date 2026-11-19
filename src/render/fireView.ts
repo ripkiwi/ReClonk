@@ -10,6 +10,7 @@ import { Clonk } from '../objects/clonk';
 import { CLONK } from '../objects/defs';
 import { Item } from '../objects/item';
 import { Vehicle } from '../objects/vehicle';
+import { Animal } from '../objects/animal';
 import { Plant } from '../objects/vegetation';
 import { frame } from './assets';
 
@@ -75,6 +76,7 @@ function look(o: Burning): Look | null {
     if (o.contained) return null;
     return { mode: 'living', x: o.x, y: o.y, w: CLONK.width, h: CLONK.height, fireTop: 0, con: 100, stretch: true, r: 0, xdir: o.xdir, ydir: o.ydir };
   }
+  if (o instanceof Animal) return { mode: 'living', x: o.x, y: o.y, w: o.width, h: o.height, fireTop: 0, con: 100, stretch: true, r: 0, xdir: o.xdir, ydir: o.ydir };
   if (o instanceof Item) {
     if (o.container) return null;
     const f = o.def.graphic.facet;
@@ -148,6 +150,7 @@ export class FireView {
     for (const i of w.items) if (i.fire) yield i;
     for (const p of w.plants) if (p.fire) yield p;
     for (const s of w.structures) if (s.fire) yield s;
+    for (const a of w.animals) if (a.fire) yield a;
   }
 
   private wind(x: number, y: number): number {

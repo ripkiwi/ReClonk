@@ -8,6 +8,7 @@
 import { MATERIALS } from '../landscape/materials';
 import { Clonk } from '../objects/clonk';
 import { Item } from '../objects/item';
+import { Animal } from '../objects/animal';
 import { contactIncinerate, contains, fireCenter, FIRE_SPREAD_INTERVAL, incinerate, type Burnable } from './fire';
 import type { World } from './world';
 
@@ -229,6 +230,7 @@ export function stepInMaterial(world: World, things: readonly Burnable[]): void 
     const p = fireCenter(o);
     const mat = MATERIALS[land.get(Math.round(p.x), Math.round(p.y))];
     if (mat.corrosive && o instanceof Clonk && o.alive) world.hurt(o, Math.trunc(mat.corrosive / 15), o.lastHurtBy);
+    if (mat.corrosive && o instanceof Animal && o.alive && !o.def.corrosionResist) world.hurtAnimal(o, Math.trunc(mat.corrosive / 15), null);
     if (mat.incindiary && !o.fire && contactIncinerate(o) > 0) incinerate(world, o, o instanceof Clonk ? o.lastHurtBy : null);
   }
 }
@@ -267,4 +269,5 @@ function* burnablesOf(world: World): Generator<Burnable> {
   yield* world.items;
   yield* world.plants;
   for (const s of world.structures) if (!s.gone) yield s;
+  for (const a of world.animals) if (!a.removed) yield a;
 }

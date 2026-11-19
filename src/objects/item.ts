@@ -27,6 +27,10 @@ export class Item extends GameObject {
    * Picking a thing up doesn't change its owner (the original's Collect).
    */
   owner = -1;
+  /** Ticks it has been lying about: dead animals rot (DefCore decay). */
+  age = 0;
+  /** A live animal in a clonk's hands keeps its energy and size (in 1/1000 points and percent). */
+  life: { energy: number; con: number } | null = null;
 
   constructor(
     readonly def: ItemDef,
@@ -51,9 +55,25 @@ export class Item extends GameObject {
     return true;
   }
 
+  /** Is it rotting yet (its Decay action)? */
+  get decaying(): boolean {
+    return !!this.def.decay && this.age > this.def.decay.after;
+  }
+
+  /** A dead animal rots away (Decaying: DoCon(-step) every `every` ticks once it has lain long enough). */
+  private rot(): void {
+    const d = this.def.decay;
+    if (!d || this.container) return;
+    this.age++;
+    if (this.age <= d.after || (this.age - d.after) % d.every !== 0) return;
+    this.con -= d.step * 1000;
+    if (this.con <= 0) this.removed = true;
+  }
+
   /** Advance one tick. Returns true if the item hit something hard (flints explode, T-flints light up). */
   tick(land: Landscape): boolean {
     if (this.noCollect > 0) this.noCollect--;
+    this.rot();
     const g = land.gravity;
     if (this.inLiquid(land)) {
       // Sink slowly through liquids; light things like flags bob up instead (Float).

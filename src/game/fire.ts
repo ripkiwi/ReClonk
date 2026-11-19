@@ -12,9 +12,10 @@ import { Item } from '../objects/item';
 import { Structure } from '../objects/structure';
 import { Plant } from '../objects/vegetation';
 import { Vehicle } from '../objects/vehicle';
+import { Animal } from '../objects/animal';
 import type { World } from './world';
 
-export type Burnable = Clonk | Item | Plant | Structure | Vehicle;
+export type Burnable = Clonk | Item | Plant | Structure | Vehicle | Animal;
 
 /** Every 35 ticks burning things set fire to what they touch. */
 export const FIRE_SPREAD_INTERVAL = FIRE.contactInterval;
@@ -55,6 +56,7 @@ export function contains(o: Burnable, px: number, py: number): boolean {
     return py >= sh.top && py < sh.top + sh.height;
   }
   if (o instanceof Vehicle) return o.inside(px, py);
+  if (o instanceof Animal) return o.at(px, py);
   const w = o instanceof Clonk ? CLONK.width : o.def.graphic.facet.w;
   const h = o instanceof Clonk ? CLONK.height : o.def.graphic.facet.h;
   const dx = px - (o.x - Math.floor(w / 2));
@@ -65,6 +67,7 @@ export function contains(o: Burnable, px: number, py: number): boolean {
 /** One time in how many a burning thing touching it sets it alight (0: never). */
 export function contactIncinerate(o: Burnable): number {
   if (o instanceof Clonk) return FIRE.clonkContact;
+  if (o instanceof Animal) return o.alive ? o.def.contactIncinerate : 0;
   if (o instanceof Item) return o.def.contactIncinerate ?? 0;
   if (o instanceof Plant) return o.def.contactIncinerate;
   if (o instanceof Vehicle) return o.burned ? o.def.burned.contactIncinerate : o.def.contactIncinerate;
@@ -73,7 +76,7 @@ export function contactIncinerate(o: Burnable): number {
 
 /** Blast damage it takes to set it alight (0: blasts don't). */
 export function blastIncinerate(o: Burnable): number {
-  if (o instanceof Clonk) return 0;
+  if (o instanceof Clonk || o instanceof Animal) return 0;
   if (o instanceof Item) return o.def.blastIncinerate ?? 0;
   if (o instanceof Plant) return o.def.blastIncinerate;
   if (o instanceof Vehicle) return o.burned ? o.def.burned.blastIncinerate : o.def.blastIncinerate;
@@ -83,6 +86,7 @@ export function blastIncinerate(o: Burnable): number {
 /** Its shape, for the whoosh: things over 500 square pixels catch fire loudly. */
 function area(o: Burnable): number {
   if (o instanceof Clonk) return CLONK.width * CLONK.height;
+  if (o instanceof Animal) return o.width * o.height;
   if (o instanceof Item) return o.def.graphic.facet.w * o.def.graphic.facet.h;
   if (o instanceof Plant) return o.def.width * o.def.height;
   return o.def.width * o.def.height;
@@ -102,7 +106,7 @@ function inWater(world: World, o: Burnable): boolean {
  * gates are gone. Returns false if it didn't catch fire.
  */
 export function incinerate(world: World, o: Burnable, by: Clonk | null, blasted = false): boolean {
-  if (o.fire || o.removed || (o instanceof Clonk && !o.alive) || (o instanceof Structure && o.gone)) return false;
+  if (o.fire || o.removed || ((o instanceof Clonk || o instanceof Animal) && !o.alive) || (o instanceof Structure && o.gone)) return false;
   const wet = inWater(world, o);
   if (wet && !blasted) return false;
   burnTo(world, o);
@@ -200,6 +204,7 @@ function* burnables(world: World): Generator<Burnable> {
   yield* world.plants;
   for (const s of world.structures) if (!s.gone) yield s;
   for (const v of world.vehicles) if (!v.removed) yield v;
+  for (const a of world.animals) if (!a.removed) yield a;
 }
 
 /** One tick of every fire (FnFxFireTimer → C4Object::ExecFire), and every 35 ticks fire spreads. */
@@ -216,18 +221,21 @@ function burn(world: World, o: Burnable, t: number): void {
   const by = fire.by < 0 ? null : (world.clonks.find((c) => c.id === fire.by) ?? null);
   // A clonk in a home base is put out (BASEFUNC_Extinguish).
   if (t % FIRE.checkInterval === 0 && o instanceof Clonk && o.contained && o.contained.base >= 0) return extinguish(world, o);
-  // Burning away (DoCon(-100)); clonks don't (NoBurnDecay).
-  if (!(o instanceof Clonk)) {
+  // A dead animal's fire goes out (only the living burn).
+  if (o instanceof Animal && !o.alive) return extinguish(world, o);
+  // Burning away (DoCon(-100)); clonks and animals don't (NoBurnDecay).
+  if (!(o instanceof Clonk) && !(o instanceof Animal)) {
     o.con -= FIRE.decay;
     if (o.con <= 0) return burnedAway(world, o);
     // A felled tree has less and less wood in it (ComponentConCutoff).
     if (o instanceof Plant && o.state !== 'standing') o.wood = Math.min(o.wood, o.woodAtCon);
   }
-  if (t % FIRE.damageInterval === 0 && !(o instanceof Clonk)) {
+  if (t % FIRE.damageInterval === 0 && !(o instanceof Clonk) && !(o instanceof Animal)) {
     o.damage += FIRE.damage;
     if (o instanceof Plant && o.state === 'standing' && o.damage > o.fellDamage) world.fell(o, world.rng.bool() ? 1 : -1);
   }
   if (t % FIRE.energyInterval === 0 && o instanceof Clonk && o.alive) world.hurt(o, FIRE.energy, by);
+  if (t % FIRE.energyInterval === 0 && o instanceof Animal && o.alive) world.hurtAnimal(o, FIRE.energy, by);
   // Water puts it out (the material's Extinguisher).
   if (t % FIRE.checkInterval === 0 && inWater(world, o)) extinguish(world, o, true);
 }

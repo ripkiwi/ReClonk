@@ -137,6 +137,10 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
   credited with a knockout when it was the last enemy to hurt the one that died.
 - Higher ranks have more energy (50, plus 5 per rank up to rank 10).
 - Lakes have sloping banks, so a clonk can always swim out.
+- **Animals**, with the original scripts and values: wipfs run about, dig and can be sold dead (or alive, with the
+  Collectible animals rule); birds fly; fish swim and suffocate on land; sharks hunt swimming clonks and bite them
+  from behind; monsters growl, jump and knock clonks over, and hatch from eggs. Scenarios set how many of each, and
+  Shark Lake and Lava Caves now have their sharks, monsters and monster eggs. Dead wipfs and fish rot away.
 
 Press `Esc` in game to pause or end the round. Ending a round saves what the crew learned.
 
@@ -233,7 +237,7 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
 3. **Economy and bases** (started): huts and flags, healing, buying and selling, buying clonks, fights,
    thrown-object hits, computer crews, the original's Scenario Properties and map creator, basements under
    buildings, construction kits, elevators, guard towers, weather, T-flints, super- and tera-flints, trees,
-   chopping, wood, grass and fire are in.
+   chopping, wood, grass, fire and animals are in.
 4. **Modding and content:** a public modding API in TypeScript + JSON (the base game itself is a mod), boats, scenarios, a Classic content pack.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
 

@@ -1,4 +1,4 @@
-import { crewCount, ITEM_IDS, LIMITS, SHOP_IDS, type ScenarioDef } from '../game/scenarios';
+import { crewCount, ITEM_IDS, LIMITS, NEST_IDS, SHOP_IDS, type ScenarioDef } from '../game/scenarios';
 import { SPELL_IDS, SPELLS, LATER_SPELLS, type SpellId } from '../game/magic';
 import { LATER_RULES, RULE_IDS, RULES } from '../game/rules';
 import { shopEntry, type ShopId } from '../game/world';
@@ -7,6 +7,7 @@ import { MATERIALS, Mat, TEXMAP, texIndex, TUNNEL, type ItemId, type TexEntry } 
 import { ITEMS, STRUCTURES } from '../objects/defs';
 import { PLANT_IDS, PLANTS, type PlantId } from '../objects/vegetation';
 import { VEHICLES, type VehicleId } from '../objects/vehicle';
+import { ANIMALS, ANIMAL_IDS } from '../objects/animal';
 import { CONTENT_BASE } from '../render/assets';
 import { bigButton, h } from './dom';
 import { mapPreview } from './preview';
@@ -60,6 +61,12 @@ const ITEM_SHEETS: Record<ItemId, [number, number]> = {
   meteor: [128, 128],
   crystal: [64, 74],
   flag: [208, 128],
+  wipf: [496, 72],
+  fish: [448, 64],
+  deadWipf: [24, 36],
+  deadFish: [144, 64],
+  deadBird: [92, 64],
+  monsterEgg: [92, 40],
 };
 const itemPicture = (id: ItemId): Picture => ({ file: ITEMS[id].graphic.file, sheet: ITEM_SHEETS[id], ...ITEMS[id].picture });
 const vehiclePicture = (id: VehicleId): Picture => ({
@@ -82,6 +89,8 @@ const PICTURES: Record<ItemId | VehicleId | 'clonk' | 'sorcerer' | 'hut' | 'elev
   // The flag's front-end picture (PictureFE): its cloth is already coloured in.
   flag: { ...itemPicture('flag'), y: 64 },
 };
+
+const animalPicture = (id: keyof typeof ANIMALS): Picture => ({ file: ANIMALS[id].file, sheet: ANIMALS[id].sheet, ...ANIMALS[id].picture });
 
 function picture(p: Picture, size: number): HTMLElement {
   const s = Math.min(size / p.w, size / p.h);
@@ -831,7 +840,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
   // Names like "Water" or "Water-Liquid" pick the matching entry.
   liquid.value = LIQUIDS.find(([v]) => v.split('-')[0].toLowerCase() === l.liquid.split('-')[0].toLowerCase())?.[0] ?? 'Water-Smooth';
   const inEarthLevel = slider({ x: 205, y: 84, w: 170, color: 'rgb(130,90,40)', label: 'Objects in earth amount:', value: l.inEarthLevel, random: true, show: plain, onChange: changed });
-  const vegetationLevel = slider({ x: 5, y: 166, w: 170, color: 'rgb(40,140,40)', label: 'Vegetation amount:', value: l.vegetationLevel, random: true, show: plain, onChange: changed });
+  const vegetationLevel = slider({ x: 5, y: 132, w: 170, color: 'rgb(40,140,40)', label: 'Vegetation amount:', value: l.vegetationLevel, random: true, show: plain, onChange: changed });
   const environmentPage = h(
     'div',
     { class: 'pp-page' },
@@ -843,7 +852,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         set: (v: number) => setLayer(t.name, v),
         max: LIMITS.layer.max,
       })),
-      { x: 5, y: 15, w: 170, hgt: 92, label: 'Material layers:', title: 'Veins of other materials drawn into the ground: how many per 15000 map pixels', format: String, onChange: changed },
+      { x: 5, y: 15, w: 170, hgt: 58, label: 'Material layers:', title: 'Veins of other materials drawn into the ground: how many per 15000 map pixels', format: String, onChange: changed },
     ),
     h('div', { class: 'pp-label', style: at(205, 176, 80) }, 'Ground:'),
     ground,
@@ -887,9 +896,29 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
           max: 1,
         },
       ],
-      { x: 5, y: 122, w: 170, hgt: 30, label: 'Vegetation types:', category: 'Vegetation', title: 'Trees and bushes by share, and grass on or off', onChange: changed },
+      { x: 5, y: 88, w: 170, hgt: 30, label: 'Vegetation types:', category: 'Vegetation', title: 'Trees and bushes by share, and grass on or off', onChange: changed },
     ),
     ...vegetationLevel,
+    ...idList(
+      ANIMAL_IDS.map((id) => ({
+        name: `${ANIMALS[id].name}: how many at the start`,
+        icon: () => picture(animalPicture(id), 22),
+        get: () => d.animals[id] ?? 0,
+        set: (v: number) => (d.animals[id] = v),
+        max: LIMITS.animals.max,
+      })),
+      { x: 5, y: 164, w: 75, hgt: 30, label: 'Animals:', title: 'Running, swimming and flying about at the start', format: String, onChange: changed },
+    ),
+    ...idList(
+      NEST_IDS.map((id) => ({
+        name: `${ITEMS[id].name}: buried in the earth`,
+        icon: () => picture(PICTURES[id], 18),
+        get: () => d.nests[id] ?? 0,
+        set: (v: number) => (d.nests[id] = v),
+        max: LIMITS.animals.max,
+      })),
+      { x: 100, y: 164, w: 60, hgt: 30, label: 'Nests:', title: 'Buried in the earth: a monster hatches from an egg that breaks', format: String, onChange: changed },
+    ),
   );
 
   // ---- Weather: the original's sliders and colours (C4PageWeather), with its words at both ends.

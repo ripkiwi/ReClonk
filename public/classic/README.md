@@ -66,3 +66,7 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `sound/*.wav` | `Sound.c4g/` (`Blast1-3`, `Click`, `Die`, `Eliminated`, `Grab`, `Hurt1-3`, `Kime1-3`, `Punch1-3`, `Trumpet`) |
 
 'Clonk' is a registered trademark of Matthes Bender.
+| `animals/Wipf.png`, `animals/Bird.png`, `animals/Fish.png`, `animals/Shark.png`, `animals/Monster.png` | `Objects.c4d/Animals.c4d/Wipf.c4d`, `Bird.c4d`, `Fish.c4d`, `Shark.c4d`, `Monster.c4d` `/Graphics.png` (**the fish's `Overlay.png` is drawn into `Fish.png`**) |
+| `animals/WipfDead.png`, `animals/BirdDead.png`, `animals/FishDead.png`, `animals/SharkDead.png`, `animals/MonsterDead.png` | the same folders' `Dead.c4d/Graphics.png` (**the dead fish's `Overlay.png` is drawn into `FishDead.png`**) |
+| `animals/MonsterEgg.png` | `Objects.c4d/Animals.c4d/Monster.c4d/MonsterEgg.c4d/Graphics.png` |
+| `sound/DeathGrowl.wav`, `EggBreak.wav`, `Growl1-3.wav`, `Munch1.wav`, `Raven1.wav`, `RavenHurt.wav`, `Snuff1-2.wav`, `WipfDead.wav`, `WipfHurt.wav` | `Sound.c4g/` (**renamed to lower-case `.wav`** where the original was `.WAV`) |
