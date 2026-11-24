@@ -58,11 +58,15 @@ export class Item extends GameObject {
   swimTime = 0;
 
   constructor(
-    readonly def: ItemDef,
+    /** What it is. A barrel turns into a full one and back (ChangeDef). */
+    public def: ItemDef,
     x: number,
     y: number,
   ) {
     super(x, y);
+    // A pack comes full (ArrowPack Initialize), and so does a bought barrel of something.
+    if (def.pack) this.count = def.pack.max;
+    if (def.barrel?.mat !== undefined && def.barrel.mat !== null) this.fill = 200;
   }
 
   get vertices() {

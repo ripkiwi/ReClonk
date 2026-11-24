@@ -16,7 +16,8 @@ import { blastIgnite, igniteOil, stepLiquids, type OilFlame } from './liquids';
 import { buildStep, construct, grabOrBuild, grabTarget, pushControl, siteProblem, stepElevator, stepGate } from './buildings';
 import { Vehicle, VEHICLES, type VehicleId } from '../objects/vehicle';
 import { grabVehicle, stepVehicle, takeOut, vehicleAt, vehicleBottom, vehicleControl } from './vehicles';
-import { collectArrow, enterVehicle, ridingControl, siegeItemHit, stepArrows, type SiegeSound } from './siege';
+import { barrelHit, stepBarrels, useBarrel } from './barrels';
+import { collectArrow, enterVehicle, itemValue, ridingControl, siegeItemHit, stepArrows, type SiegeSound } from './siege';
 import { MagicState, openSpellMenu, spellList, startSpell, stepMagic, stepSorcerer, type SpellId } from './magic';
 import { stepRules, takeFlag, type RuleId } from './rules';
 import { breakApart, bridgeMenuControl, shockwaveHits, checkBridgeMenu, digOut, DIG_OUT_INTERVAL, openBridgeMenu, stepMaterialItems } from './materialItems';
@@ -571,7 +572,7 @@ export class World {
         continue;
       }
       const hit = item.tick(this.land);
-      if (hit && siegeItemHit(this, item)) continue;
+      if (hit && (siegeItemHit(this, item) || barrelHit(this, item))) continue;
       if (hit && !item.def.explodeOnHit) this.events.push({ type: 'itemHit', item, tick: this.tick });
       // A T-flint lights on impact (TFlint.c4d Hit).
       if (hit && item.light()) this.events.push({ type: 'fuse', x: item.x, y: item.y, tick: this.tick });
@@ -588,6 +589,7 @@ export class World {
       }
     }
     stepArrows(this);
+    stepBarrels(this);
     stepMaterialItems(this);
     if (this.items.some((i) => i.removed)) this.items = this.items.filter((i) => !i.removed);
     this.objectHits();
@@ -1222,6 +1224,10 @@ export class World {
     const item = c.carrying;
     // Loam and metal open the menu of bridges and walls.
     if (openBridgeMenu(this, c)) return true;
+    if (useBarrel(this, c)) {
+      if (c.action.procedure === 'dig') c.setAction('Walk', 0, 0);
+      return true;
+    }
     if (item?.def.id === 'conkit') {
       if (c.action.procedure === 'dig') c.setAction('Walk', 0, 0);
       c.buildMenu = 0;
@@ -1611,9 +1617,13 @@ export class World {
     if (!p) return;
     this.release(item);
     item.removed = true;
-    p.wealth = Math.min(BASE.maxWealth, p.wealth + item.def.value);
-    if (item.def.rebuy) p.stock[item.def.id] = (p.stock[item.def.id] ?? 0) + 1;
-    this.say(c.owner, `Sold ${item.def.name} for ${item.def.value} gold`);
+    // A pack is worth the arrows left in it, a barrel what's in it (CalcValue).
+    const value = itemValue(item);
+    p.wealth = Math.min(BASE.maxWealth, p.wealth + value);
+    // A full barrel goes back to the shop as an empty one (Barrel SellTo).
+    const back = item.def.barrel ? 'barrel' : item.def.id;
+    if (item.def.rebuy) p.stock[back] = (p.stock[back] ?? 0) + 1;
+    this.say(c.owner, `Sold ${item.def.name} for ${value} gold`);
   }
 
   private buy(c: Clonk, id: ShopId): void {
