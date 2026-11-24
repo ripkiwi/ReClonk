@@ -20,7 +20,7 @@ import { NEST } from './objects/nest';
 import { GRASS, PLANTS } from './objects/vegetation';
 import { CONTENT_BASE, loadAssets } from './render/assets';
 import { FIRE_PARTICLES } from './render/fireView';
-import { FISH_OVERLAY, MAGIC_SPRITES } from './render/worldView';
+import { FISH_OVERLAY, HATCH_FILE, MAGIC_SPRITES } from './render/worldView';
 import { ENV_SPRITES } from './render/environmentView';
 import { fitStage, h, setCssImages } from './ui/dom';
 import { GameScreen } from './ui/gameScreen';
@@ -91,7 +91,9 @@ async function start(): Promise<void> {
         ...Object.values(ITEMS).map((i) => i.graphic.file),
         ...Object.values(STRUCTURES).flatMap((s) => [
           s.graphic.file,
-          s.burned.file,
+          ...(s.burned ? [s.burned.file] : []),
+          ...(s.wing ? [s.wing.file, s.wing.burnedFile] : []),
+          ...(s.hatches ? [HATCH_FILE] : []),
           ...(s.basement ? [s.basement.file] : []),
           ...(s.gates ?? []).map((g) => g.file),
           ...(s.elevator ? [ELEVATOR_CASE.file] : []),

@@ -254,7 +254,8 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
    thrown-object hits, computer crews, the original's Scenario Properties and map creator, basements, construction
    kits, elevators, guard towers, weather, all flints, trees and wood, fire, liquids, coal, ore, sulphur and crystal
    veins, material items, flags, vehicles, the lorry, the sorcerer, goals, rules, animals, vegetation, scenery,
-   day and night and the original menus are in.
+   day and night, the original menus and every original home and building (castles, cabins, igloos, statues,
+   production buildings) are in.
 4. **Modding and content** (content well along, modding not started): a public modding API in TypeScript + JSON
    (the base game itself as a mod), more of the original's scenarios.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
@@ -263,19 +264,18 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
 
 In the order we plan to build them (checked 24 Nov 2026, after PR #33):
 
-1. **Castles and more homes:** small castle, castle, dark castle, small tower, cabin, bamboo hut, igloo, statues,
-   bridge segment, signal.
-2. **Production and power:** sawmill, foundry, workshop, windmill, power plant, power lines, pump, oil derrick,
-   chemical plant, research lab, wizard tower, anvil. These unlock the Oil Production goal and the Power usage
-   and Research at Wizardtower rules.
-3. **Siege weapons, vehicles and containers:** catapult, cannon, crossbow and arrows, fire bomb, cannon tower,
+1. **What the production buildings do, and power:** the sawmill, foundry, workshop, windmill, power plant, pump,
+   oil derrick, chemical plant, research lab, magic tower and anvil can be built, entered and used as storage, but
+   don't produce anything yet; power lines and pipes are missing. These unlock the Oil Production goal and the
+   Power usage and Research at Wizardtower rules. Also the bridge segment.
+2. **Siege weapons, vehicles and containers:** catapult, cannon, crossbow and arrows, fire bomb, cannon tower,
    wagon, steam engine, submarine and torpedo, barrels, chest.
-4. **More original scenarios:** 4 of about 90 so far; next the Worlds, Melees and the ten tutorials.
-5. **Spells and crew:** force fields, air shield, wormhole, volcano, eternal flame, camouflage, warp to base,
+3. **More original scenarios:** 4 of about 90 so far; next the Worlds, Melees and the ten tutorials.
+4. **Spells and crew:** force fields, air shield, wormhole, volcano, eternal flame, camouflage, warp to base,
    invisibility, revaluation; the Aqua Clonk.
-6. **Allied players**, for the Team account, Team home base material and Team knowledge rules.
-7. **Savegames, replays and gamepad.**
-8. **Modding API**, then **multiplayer**, then the Knights, Western, Fantasy, Far Worlds and Hazard packs.
+5. **Allied players**, for the Team account, Team home base material and Team knowledge rules.
+6. **Savegames, replays and gamepad.**
+7. **Modding API**, then **multiplayer**, then the Knights, Western, Fantasy, Far Worlds and Hazard packs.
 
 ## License
 

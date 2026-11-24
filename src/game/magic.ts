@@ -485,7 +485,7 @@ function flame(world: World, f: Firetail): void {
     if (Math.abs(c.x - f.x) <= CLONK.width / 2 && Math.abs(c.y - f.y) <= CLONK.height / 2) incinerate(world, c, f.by);
   }
   for (const s of world.structures) {
-    if (s.gone || !s.burned || !s.def.burned.contactIncinerate) continue;
+    if (s.gone || !s.burned || !s.def.burned?.contactIncinerate) continue;
     if (f.x >= s.left && f.x < s.left + s.def.width && f.y >= s.top && f.y < s.top + s.def.height) incinerate(world, s, f.by);
   }
 }

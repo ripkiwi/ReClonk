@@ -3,7 +3,10 @@
  * content, CC BY-NC 4.0, see public/classic/README.md). Menus show them when
  * an item stays selected for a while (C4Menu tooltips).
  */
+import { BUILDING_DESCRIPTIONS } from './buildingDefs';
+
 export const DESCRIPTIONS: Record<string, string> = {
+  ...BUILDING_DESCRIPTIONS,
   flint: 'Explodes on contact.',
   tflint: 'Useful in mining, as it will explode with a delay.',
   superflint: 'More powerful than the natural flint.',

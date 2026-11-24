@@ -5,6 +5,7 @@ import { Mat, type ItemId } from '../landscape/materials';
 import type { Vertex } from './physics';
 import { CNAT } from './physics';
 import type { AnimalId } from './animal';
+import { MORE_STRUCTURES } from './buildingDefs';
 
 export interface Facet {
   x: number;
@@ -554,7 +555,25 @@ export interface StructureDef {
    * What it turns into when it catches fire (DefCore BurnTo): the burned
    * building (Burned.c4d), which a clonk can build back up into the real one (ConstructTo).
    */
-  burned: { file: string; blastIncinerate: number; contactIncinerate?: number };
+  burned?: { file: string; blastIncinerate: number; contactIncinerate?: number };
+  /** Where the solid mask's top-left corner goes, from the building's top-left corner (DefCore SolidMask target). */
+  maskAt?: { x: number; y: number };
+  /**
+   * Ways in from the roof or a platform (the original's CSTE entrance objects),
+   * relative to the centre: up (jump) there goes into the building. `through`:
+   * straight on and out of the door at the bottom (the guard tower's way down).
+   */
+  hatches?: readonly { x: number; y: number; w: number; h: number; through: boolean }[];
+  /** From inside, left and right lead up onto these platforms (Castle3 ContainedLeft/Right): where a clonk stands, relative to the centre. */
+  platforms?: { left: { x: number; y: number }; right: { x: number; y: number } };
+  /** Another building that goes up with it once it's finished, its bottom level with this one's (the castle's small tower). */
+  annex?: { id: string; x: number };
+  /** Made of ice: melts when it's warmer than 10 degrees (Igloo.c4d CheckTemp). */
+  melts?: boolean;
+  /** Falls apart at this much damage, throwing out these things (the statues' and igloo's Damage). */
+  breaksAt?: { damage: number; into: Partial<Record<ItemId, number>> };
+  /** A wing that turns with the wind (Windmill.c4d/Wing.c4d), its centre at `at` from the building's centre. */
+  wing?: { file: string; burnedFile: string; size: number; at: { x: number; y: number } };
 }
 
 /** A guard tower gate (GateLeft.c4d / GateRight.c4d). */
@@ -662,6 +681,8 @@ export const STRUCTURES: Record<string, StructureDef> = {
     entrance: { x: -8, y: 17, w: 13, h: 15 },
     // DoorClosed puts everyone inside out onto the platform (Exit at 0,-20): feet on its top row.
     exitTo: { x: 0, y: -30 },
+    // The way back down (the CSTE exit at 0,-20 with Entrance -10,-11,14,23): in, and out of the door.
+    hatches: [{ x: -10, y: -31, w: 14, h: 23, through: true }],
     canBeBase: false,
     energy: 0,
     flagVertex: { x: -24, y: -32 },
@@ -702,10 +723,35 @@ export const STRUCTURES: Record<string, StructureDef> = {
     blastIncinerate: 250,
     burned: { file: 'structures/Tower2Burned.png', blastIncinerate: 250 },
   },
+  ...MORE_STRUCTURES,
 };
 
-/** Buildings a construction kit can put up, in menu order (the original's construction plans). */
-export const BUILD_PLANS = ['hut', 'elevator', 'tower'] as const;
+/** Buildings a construction kit can put up, in menu order (the original's construction plans): homes first. */
+export const BUILD_PLANS: readonly string[] = [
+  'hut',
+  'bambooHut',
+  'cabin',
+  'igloo',
+  'smallCastle',
+  'castle',
+  'darkCastle',
+  'tower',
+  'magicTower',
+  'elevator',
+  'sawmill',
+  'foundry',
+  'workshop',
+  'chemicalPlant',
+  'researchLab',
+  'powerPlant',
+  'windmill',
+  'pump',
+  'derrick',
+  'anvil',
+  'signal',
+  'statue',
+  'goldStatue',
+];
 
 /** The flag on a home base (Flag.c4d, action FlyBase). */
 export const FLAG = {
