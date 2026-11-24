@@ -68,9 +68,10 @@ const CTRL_STYLES: { style: ControlStyle; title: string; text: string; row: numb
 function roundVerdict(round: Round): { title: string; text: string } {
   const { world, players } = round;
   const name = (id: number): string => players.find((p) => p.id === id)?.name ?? 'Someone';
-  if (world.winner === LOCAL_PLAYER) return { title: 'Victory!', text: 'Last crew standing · ' };
+  if (world.winner === LOCAL_PLAYER) return { title: 'Victory!', text: world.fulfilled && !world.goals.melee ? 'Goal fulfilled · ' : 'Last crew standing · ' };
+  if (world.fulfilled && world.winner === -1) return { title: 'Victory!', text: 'Goal fulfilled · ' };
   if (world.winner !== null && world.winner >= 0) return { title: 'Defeat', text: `${name(world.winner)} won · ` };
-  if (world.winner === -1) return { title: 'Round over', text: 'Nobody is left standing · ' };
+  if (world.winner === -1) return { title: world.eliminated.has(LOCAL_PLAYER) ? 'Defeat' : 'Round over', text: world.eliminated.has(LOCAL_PLAYER) ? 'The round is lost · ' : 'Nobody is left standing · ' };
   if (world.eliminated.has(LOCAL_PLAYER)) return { title: 'Defeat', text: 'Your crew is out · ' };
   return { title: 'Round over', text: '' };
 }

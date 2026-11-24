@@ -10,6 +10,7 @@ import { crewCount, type ScenarioDef } from './scenarios';
 import { Weather } from './weather';
 import { initAnimals } from './animals';
 import { Environment } from './environment';
+import { initGoals, RACE_OFFSET } from './goals';
 import { World } from './world';
 
 /** The local player's number in the world. Multiplayer will hand out more. */
@@ -54,7 +55,9 @@ function crewInfo(m: CrewMember): CrewInfo {
 }
 
 /** Where each crew starts: the map's spawn point alone, or spread out evenly for several crews. */
-function startColumns(world: World, map: GeneratedMap, crews: number): number[] {
+function startColumns(world: World, map: GeneratedMap, crews: number, race: boolean): number[] {
+  // A race runs from left to right: everyone starts at the left edge, a building's width apart.
+  if (race) return Array.from({ length: crews }, (_, i) => dryGround(world, RACE_OFFSET + 20 + i * 80));
   if (crews === 1) return [map.spawn.x];
   const w = world.land.width;
   return Array.from({ length: crews }, (_, i) => dryGround(world, Math.round((w * (i + 0.5)) / crews)));
@@ -96,7 +99,7 @@ export function startRound(
     return crewInfo(m);
   };
   world.recruit = (player, kind) => (player === LOCAL_PLAYER ? recruit(kind) : null);
-  world.goal = scenario.goal;
+  world.goals = { ...scenario.goals };
   world.spells = [...scenario.magic];
   for (const r of scenario.rules) world.rules.add(r);
 
@@ -115,7 +118,7 @@ export function startRound(
   const sorcererPool = sorcererNames.length ? sorcererNames : pool;
   // The crew: the clonks first, then the sorcerers.
   const kinds: ClonkKind[] = [...Array<ClonkKind>(scenario.crewSize).fill('clonk'), ...Array<ClonkKind>(scenario.sorcerers).fill('sorcerer')];
-  const columns = startColumns(world, map, players.length);
+  const columns = startColumns(world, map, players.length, !!scenario.goals.race);
   const localCrew: CrewInfo[] = [];
   players.forEach((p, n) => {
     // With a home base the crew starts at its door; otherwise on the surface.
@@ -123,7 +126,7 @@ export function startRound(
     // In caves the crew starts on the cave floor nearest to the spawn (and there's no spare hut in another cave).
     const nearY = map.cave ? map.spawn.y + 10 : undefined;
     const start = scenario.homeBase
-      ? setupDefaultBases(world, p.id, x0, scenario.base, !p.computer && scenario.goal !== 'melee' && !map.cave, nearY).home.exitPoint()
+      ? setupDefaultBases(world, p.id, x0, scenario.base, !p.computer && !scenario.goals.melee && !map.cave, nearY).home.exitPoint()
       : { x: x0, y: n === 0 && players.length === 1 ? map.spawn.y : groundAt(world, x0, nearY) - 10 };
     if (p.computer) world.brains.set(p.id, new CrewAI(world, p.id));
     kinds.forEach((kind, i) => {
@@ -150,8 +153,11 @@ export function startRound(
       for (const id of scenario.startItems) world.give(c, id);
     });
   });
+  for (const p of players) world.names.set(p.id, p.name);
   // The animals come last, with random numbers of their own, so they don't change the map or the crews.
   initAnimals(world, scenario.animals, scenario.nests, seed);
+  // Then what the goals bring along: monsters to hunt, wipfs to rescue.
+  initGoals(world, new Rng(seed ^ 0x90a1));
   // Then the environment objects (Scenario.txt [Environment]), also with random numbers of their own.
   if (Object.values(scenario.environment).some((n) => n && n > 0)) {
     world.environment = new Environment(scenario.environment, world, seed ^ 0xe1f0);

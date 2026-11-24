@@ -114,6 +114,14 @@ export class CrewAI implements Brain {
       return out;
     }
 
+    // A race (nobody is an enemy): run for the goal line at the right edge.
+    if (w.goals.race && !t) {
+      this.hold(out, 1);
+      m.want = true;
+      this.unstick(c, m, out);
+      return out;
+    }
+
     if (c.carrying) {
       m.item = null;
       // A moment's calm at the start, so a player can get their bearings.

@@ -135,6 +135,13 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
 - **Last crew standing** (the original's Melee goal): a crew with no clonks left is out, and the round ends when only
   one is left. Victory and defeat show on the results screen, with the knockouts each clonk scored; a clonk is
   credited with a knockout when it was the last enemy to hurt the one that died.
+- **Goals**, the original's (Scenario Properties, Game; their pictures under the menu button in the game, click one
+  to read how far along it is): Melee, Goldmine (mine and sell all the gold), Money Points and Settlement points
+  (100 per goal), Wipf rescue, Monsterkill, Race (left to right, nobody fights) and Engineer (build everything a
+  construction kit can). Every goal fulfilled wins the round; computer crews don't have to help. Gold Mine and Lava
+  Caves have their original goals. Ore Mining and Oil Production wait for ore and oil barrels.
+- **Rivalry**: whoever fulfils every goal first wins, everyone else is out. **Release Clonk**: click its picture to let
+  the clonk you control go for the round. **Buildings can snow in**: otherwise buildings clear snow out of themselves.
 - Higher ranks have more energy (50, plus 5 per rank up to rank 10).
 - Lakes have sloping banks, so a clonk can always swim out.
 - **Animals**, with the original scripts and values: wipfs run about, dig and can be sold dead (or alive, with the
@@ -232,14 +239,37 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
 ## Roadmap
 
 1. **Foundations** (done): project setup, landscape sandbox, CI, deploy.
-2. **A clonk** (now): walk, jump, climb, swim, dig, throw rocks and flints that blast terrain;
-   menus, player profiles, crews, ranks and the first two scenarios.
-3. **Economy and bases** (started): huts and flags, healing, buying and selling, buying clonks, fights,
-   thrown-object hits, computer crews, the original's Scenario Properties and map creator, basements under
-   buildings, construction kits, elevators, guard towers, weather, T-flints, super- and tera-flints, trees,
-   chopping, wood, grass, fire and animals are in.
-4. **Modding and content:** a public modding API in TypeScript + JSON (the base game itself is a mod), boats, scenarios, a Classic content pack.
+2. **A clonk** (done): walk, jump, backjump, climb, swim, dig, throw, fight; menus, player profiles, crews,
+   ranks, both control styles with rebindable keys. Still to come: loam bridges, gamepad.
+3. **Economy and bases** (mostly done): huts and flags, healing, buying and selling, buying clonks, fights,
+   thrown-object hits, computer crews, the original's Scenario Properties and map creator, basements, construction
+   kits, elevators, guard towers, weather, all flints, trees and wood, fire, liquids, flags, vehicles, the lorry,
+   the sorcerer, rules, animals and the original menus are in.
+4. **Modding and content** (content well along, modding not started): a public modding API in TypeScript + JSON
+   (the base game itself as a mod), more of the original's scenarios.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
+
+### Still missing from the original
+
+In the order we plan to build them (checked 24 Nov 2026):
+
+1. **Goals:** Goldmine, Money Points, Settlement points, Wipf hunt, Monster kill, Race, Ore mining, Oil production,
+   Engineer (only melee exists; Gold Mine has no goal yet).
+2. **Castles and more homes:** small castle, castle, dark castle, small tower, cabin, bamboo hut, igloo, statues,
+   bridge segment, signal.
+3. **Loam and bridges.**
+4. **Ground materials:** coal, ore, sulphur and crystal veins, and the metal, concrete and gunpowder items.
+5. **Production and power:** sawmill, foundry, workshop, windmill, power plant, power lines, pump, oil derrick,
+   chemical plant, research lab, wizard tower, anvil.
+6. **Siege weapons and vehicles:** catapult, cannon, crossbow and arrows, fire bomb, cannon tower, wagon, steam
+   engine, submarine and torpedo, barrels, chest.
+7. **Animals and crew:** snake, fire monster, zap nest, bird nests; the Aqua Clonk.
+8. **Spells and rules:** force fields, warp, warp to base, volcano, eternal flame, camouflage, invisibility,
+   revaluation, random magic; the rules still greyed in Scenario Properties.
+9. **Vegetation and scenery:** cactus, palms, seaweed, bones, skulls, shells, day and night, birdsong and others.
+10. **More original scenarios:** 4 of about 90 so far; next the Worlds, Melees and the ten tutorials.
+11. **Savegames, replays and gamepad.**
+12. **Modding API**, then **multiplayer**, then the Knights, Western, Fantasy, Far Worlds and Hazard packs.
 
 ## License
 
