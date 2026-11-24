@@ -1,5 +1,6 @@
 // Pixi normally compiles shaders/uniform code with eval; the site's CSP forbids that,
 // so use Pixi's eval-free code paths instead.
+import { BRIDGE_MENU_GRAPHICS } from './game/materialItems';
 import { MENU_GRAPHICS } from './render/classicMenu';
 import 'pixi.js/unsafe-eval';
 import './ui/menu.css';
@@ -15,6 +16,7 @@ import { SPELLS } from './game/magic';
 import { ELEVATOR_CASE, FLAG, ITEMS, STRUCTURES } from './objects/defs';
 import { SAIL, VEHICLES } from './objects/vehicle';
 import { ANIMALS } from './objects/animal';
+import { NEST } from './objects/nest';
 import { GRASS, PLANTS } from './objects/vegetation';
 import { CONTENT_BASE, loadAssets } from './render/assets';
 import { FIRE_PARTICLES } from './render/fireView';
@@ -96,6 +98,7 @@ async function start(): Promise<void> {
         ]),
         ...Object.values(VEHICLES).flatMap((v) => [v.graphic.file, v.burned.file]),
         ...Object.values(ANIMALS).flatMap((a) => [a.file, ...('file' in a.dead ? [a.dead.file] : [])]),
+        NEST.file,
         SAIL.file,
         FLAG.graphic.file,
         FLAG.graphic.overlay,
@@ -106,6 +109,7 @@ async function start(): Promise<void> {
         MAGIC_SPRITES.bridge,
         ...Object.values(ENV_SPRITES),
         FISH_OVERLAY,
+        ...Object.values(BRIDGE_MENU_GRAPHICS),
         ...Object.values(SPELLS).map((s) => s.icon),
         ...Object.values(MENU_GRAPHICS),
       ],

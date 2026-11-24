@@ -24,7 +24,9 @@ describe('Scenario values', () => {
     expect(TEXMAP[texIndex('Water', 'Smooth')].name).toBe('Water-Smooth');
     // No such texture: the material's own; no such material: nothing.
     expect(TEXMAP[texIndex('Granite-Swirl')].name).toBe('Granite-Rock');
-    expect(texIndex('Ore', 'Rough')).toBe(0);
+    expect(TEXMAP[texIndex('Ore', 'Rough')].name).toBe('Ore-Rough');
+    expect(TEXMAP[texIndex('Coal')].name).toBe('Coal-Swirl');
+    expect(texIndex('Uranium', 'Rough')).toBe(0);
   });
 });
 

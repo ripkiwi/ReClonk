@@ -40,6 +40,10 @@ const METAL_HITS = ['MetalHit1', 'MetalHit2', 'MetalHit3'] as const;
 const BIRD_SONGS = ['BirdSong1', 'BirdSong2', 'BirdSong3', 'BirdSong4', 'BirdSong5'] as const;
 const CICADAS = ['Cicada1', 'Cicada2', 'Cicada3'] as const;
 const ROCK_BREAKS = ['RockBreak1', 'RockBreak2', 'RockBreak3'] as const;
+const DIGS = ['Dig1', 'Dig2', 'Dig3', 'Dig4', 'Dig5'] as const;
+/** What each kind of item sounds like when it lands (its Hit: RockHit, WoodHit, MetalHit). */
+const ROCK_SOUND = new Set(['rock', 'gold', 'coal', 'ore', 'ice', 'loam']);
+const WOOD_SOUND = new Set(['wood', 'sulphur', 'gunpowder']);
 /** The original's DeathAnnounce messages. */
 const DEATH_MESSAGES = ['%s is dead.', '%s has\ndeceased.', '%s\nrests in peace.'];
 /** How long the round goes on after it's decided before the results show: 3.5 seconds. */
@@ -205,6 +209,8 @@ export class GameScreen {
       else if (e.type === 'thunder') this.env.sounds.play(pick(THUNDER), near ? Math.max(0.3, 1 - Math.abs(e.x - near.x) / 800) : 1);
       else if (e.type === 'fuse') this.env.sounds.play('Fuse', volumeAt(e.x, e.y));
       else if (e.type === 'chop') this.env.sounds.play(pick(CHOPS), volumeAt(e.clonk.x, e.clonk.y));
+      // Building a bridge sounds like digging (the Bridge action's StartCall Digging).
+      else if (e.type === 'bridge') this.env.sounds.play(pick(DIGS), volumeAt(e.clonk.x, e.clonk.y));
       // Only big trees crash down audibly (Tree.c4d ChopDown: con over 50).
       else if (e.type === 'treeDown' && e.plant.scale > 0.5) this.env.sounds.play(pick(TREE_DOWN), volumeAt(e.plant.x, e.plant.bottom));
       // Big things catch fire with a whoosh (FnFxFireStart: shape over 500), and water hisses as it puts a fire out.
@@ -226,7 +232,12 @@ export class GameScreen {
         this.env.sounds.play('Corrode', volumeAt(e.x, e.y) * 0.6);
       } else if (e.type === 'volcano') this.env.sounds.play(Math.random() < 0.5 ? 'VolcanoCast' : pick(LAVA), volumeAt(e.x, e.y));
       else if (e.type === 'animal') {
-        const id = e.sound === 'Snuff' ? pick(['Snuff1', 'Snuff2'] as const) : e.sound === 'Growl' ? pick(['Growl1', 'Growl2', 'Growl3'] as const) : e.sound === 'Raven' ? 'Raven1' : e.sound;
+        const id =
+          e.sound === 'Snuff' ? pick(['Snuff1', 'Snuff2'] as const)
+          : e.sound === 'Growl' ? pick(['Growl1', 'Growl2', 'Growl3'] as const)
+          : e.sound === 'Snake' ? pick(['Snake1', 'Snake2'] as const)
+          : e.sound === 'Raven' ? 'Raven1'
+          : e.sound;
         this.env.sounds.play(id, volumeAt(e.x, e.y) * 0.8);
       } else if (e.type === 'environment') {
         // Birds, cicadas and the owl are heard everywhere (global sounds); rocks where they are.
@@ -239,7 +250,7 @@ export class GameScreen {
       } else if (e.type === 'itemHit') {
         const id = e.item.def.id;
         // Bones and skulls knock like wood, a shell clinks like metal (their Hit scripts).
-        const set = id === 'crystal' ? CRYSTAL_HITS : id === 'wood' || id === 'bone' || id === 'skull' ? WOOD_HITS : id === 'shell' ? METAL_HITS : id === 'rock' || id === 'gold' || e.item.def.fuse ? ROCK_HITS : null;
+        const set = id === 'crystal' ? CRYSTAL_HITS : id === 'metal' || id === 'shell' ? METAL_HITS : WOOD_SOUND.has(id) || id === 'bone' || id === 'skull' ? WOOD_HITS : ROCK_SOUND.has(id) || e.item.def.fuse ? ROCK_HITS : null;
         if (set) this.env.sounds.play(pick(set), volumeAt(e.item.x, e.item.y) * 0.5);
       }
     }

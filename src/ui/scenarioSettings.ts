@@ -9,7 +9,7 @@ import { ITEMS, STRUCTURES } from '../objects/defs';
 import { BURNED_TREES, PLANTS, VEGETATION_IDS, VEGETATION_ITEMS, type BurnedTreeId, type PlantId, type VegetationId, type VegetationItemId } from '../objects/vegetation';
 import { ENV_IDS, ENVIRONMENT } from '../game/environment';
 import { VEHICLES, type VehicleId } from '../objects/vehicle';
-import { ANIMALS, ANIMAL_IDS } from '../objects/animal';
+import { ANIMALS, SCENARIO_ANIMAL_IDS } from '../objects/animal';
 import { CONTENT_BASE } from '../render/assets';
 import { bigButton, h } from './dom';
 import { mapPreview } from './preview';
@@ -72,6 +72,24 @@ const ITEM_SHEETS: Record<ItemId, [number, number]> = {
   shell: [76, 64],
   bone: [70, 64],
   skull: [88, 64],
+  loam: [64, 70],
+  metal: [72, 64],
+  coal: [45, 35],
+  ore: [45, 35],
+  sulphur: [46, 40],
+  concrete: [41, 35],
+  liquidGranite: [41, 35],
+  gunpowder: [64, 70],
+  earth: [44, 35],
+  sand: [41, 35],
+  ashes: [44, 35],
+  ice: [45, 35],
+  snowball: [38, 32],
+  snake: [624, 64],
+  deadSnake: [624, 64],
+  fireMonsterEgg: [92, 40],
+  birdEgg: [92, 40],
+  zapNest: [70, 64],
 };
 const itemPicture = (id: ItemId): Picture => ({ file: ITEMS[id].graphic.file, sheet: ITEM_SHEETS[id], ...ITEMS[id].picture });
 const vehiclePicture = (id: VehicleId): Picture => ({
@@ -975,7 +993,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     ),
     ...vegetationLevel,
     ...idList(
-      ANIMAL_IDS.map((id) => ({
+      SCENARIO_ANIMAL_IDS.map((id) => ({
         name: `${ANIMALS[id].name}: how many at the start`,
         icon: () => picture(animalPicture(id), 22),
         get: () => d.animals[id] ?? 0,
@@ -992,7 +1010,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         set: (v: number) => (d.nests[id] = v),
         max: LIMITS.animals.max,
       })),
-      { x: 100, y: 164, w: 60, hgt: 30, label: 'Nests:', title: 'Buried in the earth: a monster hatches from an egg that breaks', format: String, onChange: changed },
+      { x: 100, y: 164, w: 60, hgt: 30, label: 'Nests:', title: 'Buried in the earth: a monster hatches from an egg that breaks, a zap nest bursts into zaps', format: String, onChange: changed },
     ),
   );
 

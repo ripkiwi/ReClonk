@@ -38,6 +38,14 @@ export const SOUND_FILES = [
   'Lava1',
   'Lava2',
   'Lava3',
+  'Dig1',
+  'Dig2',
+  'Dig3',
+  'Dig4',
+  'Dig5',
+  'MetalHit1',
+  'MetalHit2',
+  'MetalHit3',
   'Punch1',
   'Punch2',
   'Punch3',
@@ -89,6 +97,10 @@ export const SOUND_FILES = [
   'MetalHit1',
   'MetalHit2',
   'MetalHit3',
+  'Snake1',
+  'Snake2',
+  'Bsss',
+  'Sting',
 ] as const;
 export type SoundId = (typeof SOUND_FILES)[number];
 

@@ -3,6 +3,7 @@
 // See licenses/clonk_engine_license.txt.
 
 import type { Landscape } from '../landscape/landscape';
+import type { Mat } from '../landscape/materials';
 import { CLONK, CLONK_KINDS, ENERGY_UNIT, MAGIC_UNIT, type ActionDef, type ClonkKind } from './defs';
 import type { FireState } from './fire';
 import { GameObject } from './gameObject';
@@ -146,6 +147,8 @@ const GO_TO_NEAR = 6;
 const PUSH_RANGE = 10;
 /** How long a dig waits for a second press while holding a usable item: the keyboard's double-press time. */
 const USE_WAIT_TICKS = 12;
+/** How long a bridge takes to build (Loam.c4d BridgeTime): 20 px across, 25 up. */
+export const BRIDGE_TICKS = 100;
 
 export class Clonk extends GameObject {
   readonly vertices = CLONK.vertices;
@@ -202,6 +205,14 @@ export class Clonk extends GameObject {
   released = false;
   /** Ticks before a new dig breaks ground (see startDig). */
   private digWait = 0;
+  /** Pixels of each material dug so far, for the chunks digging drops (the original's MaterialContents). */
+  readonly dug = new Map<Mat, number>();
+  /** Asked to make chunks of earth, sand or snow while digging (the Dig action's Data, toggled by dig or throw). */
+  digRequest = false;
+  /** The bridge or wall being built (the Bridge action's data: length in ticks, moving along, wall, material) and for how long. */
+  bridge: { time: number; move: boolean; wall: boolean; mat: Mat; t: number } | null = null;
+  /** Selected line of the loam (or metal) bridge menu, or null when it's closed. */
+  bridgeMenu: number | null = null;
   /** Ticks spent stuck in the ground in mid-air. */
   private stuckTicks = 0;
   /** Set when the current action started or started over this tick (the original's StartCall). */
@@ -348,6 +359,7 @@ export class Clonk extends GameObject {
         this.loadMenu = null;
       }
       if (a.procedure !== 'chop') this.chopping = null;
+      if (a.procedure !== 'bridge') this.bridge = null;
     }
     if (xdir !== undefined) this.xdir = xdir;
     if (ydir !== undefined) this.ydir = ydir;
@@ -407,7 +419,101 @@ export class Clonk extends GameObject {
    */
   private startDig(): void {
     this.setAction('Dig', 0, 0);
+    this.digRequest = false;
     this.digWait = this.carrying?.def.usable || this.atTree ? USE_WAIT_TICKS : 0;
+  }
+
+  /**
+   * Build a bridge or wall the way `dir` points (Loam.c4d StartBridge,
+   * SetBridgeActionData): 100 ticks long. A bridge walks the clonk along it,
+   * except a roof straight up; `alternate` swaps that.
+   */
+  startBridge(dir: ComDir, wall: boolean, mat: Mat, alternate = false): void {
+    this.setAction('Bridge', 0, 0);
+    this.comDir = dir;
+    let move = true;
+    if (wall && dir.x === 0 && dir.y < 0) move = false;
+    if (alternate) move = !move;
+    this.bridge = { time: BRIDGE_TICKS, move, wall, mat, t: 0 };
+    this.goTo = null;
+  }
+
+  /**
+   * One tick of building a bridge (DoBridge): every few ticks another 4x3
+   * pixels of material go down, ahead of the clonk or under its feet, and it
+   * steps along. Where it would bump its head it stops moving and builds on
+   * from where it stands. Returns false when it's done.
+   */
+  private doBridge(land: Landscape): boolean {
+    const b = this.bridge;
+    if (!b || b.t >= b.time) {
+      this.walk();
+      return false;
+    }
+    const cd = this.comDir;
+    const side = cd.x === 0 && cd.y < 0 ? 0 : cd.y === 0 && cd.x !== 0 ? 1 : cd.y < 0 && cd.x !== 0 ? 2 : -1;
+    if (side < 0) return true;
+    let move = b.move;
+    let dtp: number;
+    if (b.wall) {
+      if (side === 1) {
+        dtp = 4;
+        move = false;
+      } else if (side === 2) {
+        dtp = 5;
+        move = false;
+      } else dtp = 5;
+    } else dtp = side === 1 ? 5 : side === 0 ? 4 : 6;
+    if (b.t % dtp) return true;
+    const cw = CLONK.width;
+    const ch = CLONK.height;
+    let cx = this.x;
+    let cy = this.y;
+    let tx = cx;
+    let ty = cy + ch / 2;
+    const dt = move ? 0 : Math.trunc(b.t / dtp);
+    const right = this.dir === 1 ? 1 : -1;
+    if (b.wall) {
+      if (side === 1) {
+        tx += (cd.x * cw) / 2;
+        ty -= dt;
+      } else if (side === 0) {
+        const x0 = move ? -3 : Math.trunc(Math.trunc(b.time / dtp) / -2);
+        tx += (x0 + dt) * right;
+        cx += right;
+        ty -= ch + 3;
+      } else {
+        tx += cd.x * (-4 + dt);
+        ty += -ch - 7 + dt;
+      }
+    } else if (side === 1) {
+      tx += cd.x * (2 + dt);
+      cx += cd.x;
+    } else if (side === 0) {
+      tx += move ? 0 : -cw / 2 + (cw - 1) * (right === 1 ? 1 : 0);
+      ty += -dt - (move ? 1 : 0);
+      cy--;
+    } else {
+      tx += cd.x < 0 ? -5 - dt + (move ? 3 : 0) : 5 + dt - (move ? 2 : 0);
+      ty += 2 - dt - (move ? 3 : 0);
+      cx += cd.x;
+      cy--;
+    }
+    // Would the clonk bump into something? Then it builds on from where it stands.
+    if (move && contactCheck(land, this.vertices, cx, cy - 1).count) {
+      b.time -= b.t;
+      b.t = 0;
+      if (b.wall && side === 0) {
+        // A roof that's cut short starts at its middle, so it still covers the clonk.
+        b.t = b.time;
+        b.time += b.time;
+      }
+      b.move = false;
+      return this.doBridge(land);
+    }
+    land.drawMaterialRect(b.mat, tx - 2, ty, 4, 3);
+    if (move) this.setPosition(cx, cy);
+    return true;
   }
 
   /** Chop a tree down, or a felled one into wood (ObjectActionChop). */
@@ -542,7 +648,10 @@ export class Clonk extends GameObject {
       case 'dig':
         // The clonk keeps digging on its own until dig is pressed again, so it
         // can be left to dig while the player controls another clonk.
-        if (c.pressedThrow) {
+        if (c.pressedThrow && !this.carrying) {
+          // Throw with empty hands: make chunks of what's dug, or stop making them.
+          this.digRequest = !this.digRequest;
+        } else if (c.pressedThrow) {
           this.walk();
           this.throwOrDrop(true, out);
         } else if (c.pressedUse) {
@@ -550,6 +659,9 @@ export class Clonk extends GameObject {
           out.useItem();
         } else if (c.pressedDig) this.walk();
         else if (held.x !== 0 || held.y !== 0) this.comDir = held;
+        break;
+      case 'bridge':
+        if (c.pressedDown) this.walk();
         break;
       case 'swim':
         if (c.pressedUp && out.tryEnter()) break;
@@ -616,8 +728,13 @@ export class Clonk extends GameObject {
         if (c.pressedLeft && i >= 1 && i <= 6) this.comDir = COMDIRS[i + 1];
         if (c.pressedRight && i >= 2 && i <= 7) this.comDir = COMDIRS[i - 1];
         if (c.pressedDown) this.walk();
+        // Dig again: make chunks of what's dug, or stop making them.
+        else if (c.pressedDig && !c.pressedUse) this.digRequest = !this.digRequest;
         break;
       }
+      case 'bridge':
+        if (c.pressedDown) this.walk();
+        break;
       case 'swim':
         if (c.pressedUp && out.tryEnter()) break;
         if (c.pressedLeft) this.comDir = { x: -1, y: cd.y };
@@ -759,6 +876,12 @@ export class Clonk extends GameObject {
       case 'chop':
         this.xdir = this.ydir = 0;
         break;
+      case 'bridge':
+        this.xdir = this.ydir = 0;
+        if (!this.doBridge(land)) break;
+        if (this.comDir.x) this.setDir(this.comDir.x);
+        this.bridge!.t++;
+        break;
       case 'scale': {
         // Pushing towards the wall means "climb up".
         const up = cd.y < 0 || (cd.x !== 0 && cd.x === this.dir);
@@ -857,7 +980,8 @@ export class Clonk extends GameObject {
 
     // Dig out the space ahead.
     if (this.action.digFree && this.digWait === 0) {
-      land.dig(Math.floor(this.fx + this.xdir + 0.5), Math.floor(this.fy + this.ydir + 0.5) - 1, this.action.digFree);
+      const dug = land.dig(Math.floor(this.fx + this.xdir + 0.5), Math.floor(this.fy + this.ydir + 0.5) - 1, this.action.digFree);
+      for (const [m, n] of dug) this.dug.set(m, (this.dug.get(m) ?? 0) + n);
     }
 
     const speed = Math.abs(this.xdir) + Math.abs(this.ydir);
@@ -1039,6 +1163,7 @@ export class Clonk extends GameObject {
     this.alive = false;
     this.menu = null;
     this.buildMenu = null;
+    this.bridgeMenu = null;
     this.spellMenu = null;
     this.casting = null;
     this.goTo = null;
@@ -1085,6 +1210,7 @@ function attachFor(a: ActionDef, dir: -1 | 1): number {
     case 'push':
     case 'build':
     case 'chop':
+    case 'bridge':
       return CNAT.Bottom;
     case 'scale':
       return dir === -1 ? CNAT.Left : CNAT.Right;

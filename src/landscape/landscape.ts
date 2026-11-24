@@ -195,6 +195,25 @@ export class Landscape {
   }
 
   /**
+   * Fill a rectangle with a material where it's stronger than what's there
+   * (C4Landscape::DrawMaterialRect): denser, or as dense and no easier to dig.
+   * Loam bridges fill sky, tunnels and liquids, metal ones even earth and
+   * rock. Buildings' basements stay as they are.
+   */
+  drawMaterialRect(mat: Mat, tx: number, ty: number, w: number, h: number): void {
+    const m = MATERIALS[mat];
+    for (let y = ty; y < ty + h; y++) {
+      for (let x = tx; x < tx + w; x++) {
+        if (!this.inBounds(x, y)) continue;
+        const cur = this.get(x, y);
+        if (cur === mat || cur === Mat.Basement) continue;
+        const c = MATERIALS[cur];
+        if (m.density > c.density || (m.density === c.density && Number(m.digFree) <= Number(c.digFree))) this.set(x, y, mat);
+      }
+    }
+  }
+
+  /**
    * Blast a round hole, like a flint explosion. Clears blastable material and
    * cracks some granite into rock. Returns how many pixels of each material
    * were in the blast, so the caller can drop rocks and gold nuggets.

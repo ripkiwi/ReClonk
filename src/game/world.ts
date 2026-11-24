@@ -18,11 +18,13 @@ import { Vehicle, VEHICLES, type VehicleId } from '../objects/vehicle';
 import { grabVehicle, stepVehicle, takeOut, vehicleAt, vehicleBottom, vehicleControl } from './vehicles';
 import { MagicState, openSpellMenu, spellList, startSpell, stepMagic, stepSorcerer, type SpellId } from './magic';
 import { stepRules, takeFlag, type RuleId } from './rules';
+import { breakApart, bridgeMenuControl, shockwaveHits, checkBridgeMenu, digOut, DIG_OUT_INTERVAL, openBridgeMenu, stepMaterialItems } from './materialItems';
 import { activeGoals, GoalState, stepGoals, type Goals } from './goals';
 import { menuMove } from './menus';
 import type { Weather } from './weather';
 import { Animal, ANIMALS, type AnimalId } from '../objects/animal';
-import { animalHurt, breakEgg, collectAnimal, eggHit, stepAnimals, type AnimalSound } from './animals';
+import { animalHurt, breakEgg, collectAnimal, collected, dropNest, itemLanded, stepAnimals, type AnimalSound } from './animals';
+import type { TreeNest } from '../objects/nest';
 
 export type WorldEvent =
   | { type: 'explosion'; x: number; y: number; radius: number; tick: number }
@@ -87,6 +89,11 @@ export type WorldEvent =
   | { type: 'volcano'; x: number; y: number; tick: number }
   /** An animal made a sound: a wipf snuffles, a bird croaks, a shark bites, a monster growls, an egg breaks. */
   | { type: 'animal'; sound: AnimalSound; x: number; y: number; tick: number }
+  /** A clonk started on a loam or metal bridge. */
+  | { type: 'bridge'; clonk: Clonk; tick: number }
+  /** A chunk of earth, sand or concrete burst where it landed. */
+  | { type: 'itemBreak'; item: Item; tick: number }
+
   /** An environment object made a sound: birds, cicadas or the owl (anywhere, x -1), a big rock where it is. */
   | { type: 'environment'; sound: EnvSound; x: number; y: number; tick: number };
 
@@ -197,6 +204,8 @@ export class World {
   flames: OilFlame[] = [];
   /** Wipfs, birds, fish, sharks and monsters, alive or dead. */
   animals: Animal[] = [];
+  /** Birds' nests in the trees. */
+  treeNests: TreeNest[] = [];
   readonly players = new Map<number, PlayerState>();
   private readonly cursors = new Map<number, CrewCursor>();
   readonly messages: PlayerMessage[] = [];
@@ -464,11 +473,13 @@ export class World {
         continue;
       }
       const carried = c.carrying;
+      const request = c.digRequest;
       // Whether a dig might be the first press of a double dig at a tree.
       if (mine) c.atTree = c.action.procedure === 'walk' && !!this.choppableAt(c);
       if (mine && c.buildMenu !== null) this.buildMenuControl(c, mine);
+      else if (mine && c.bridgeMenu !== null) bridgeMenuControl(this, c, mine);
       else if (mine && c.spellMenu !== null) this.spellMenuControl(c, mine);
-      else if (mine?.pressedMagic && c.buildMenu === null && openSpellMenu(this, c)) {
+      else if (mine?.pressedMagic && c.buildMenu === null && c.bridgeMenu === null && openSpellMenu(this, c)) {
         // The spell menu is open, or the clonk said why not.
       } else if (mine && c.alive && c.action.procedure === 'push' && c.vehicle) {
         vehicleControl(
@@ -492,6 +503,10 @@ export class World {
       if (c.contained || this.fellOut(c)) continue;
       if (carried && !c.carrying) this.events.push({ type: 'throw', clonk: c, tick: this.tick });
       c.tick(this.land);
+      if (c.action.procedure === 'dig' && c.digRequest !== request && c.owner >= 0 && !brain) this.say(c.owner, c.digRequest ? 'Digging out chunks' : 'No more chunks');
+      if (this.tick % DIG_OUT_INTERVAL === 0) digOut(this, c);
+      if (c.action.procedure === 'bridge' && c.actionStarted) this.events.push({ type: 'bridge', clonk: c, tick: this.tick });
+      checkBridgeMenu(c);
       if (c.action.procedure === 'fight') this.fighting(c);
       if (c.action.procedure === 'build') buildStep(this, c);
       if (c.action.procedure === 'chop') this.chopStep(c);
@@ -500,6 +515,7 @@ export class World {
       stepSorcerer(this, c);
       const got = c.tryCollect(this.items, this.land) ?? takeFlag(this, c) ?? collectAnimal(this, c);
       if (got) {
+        collected(got);
         this.events.push({ type: 'collect', clonk: c, item: got, tick: this.tick });
         if (got.def.id === 'gold' && !got.found) {
           got.found = true;
@@ -555,8 +571,10 @@ export class World {
       if (hit && !item.def.explodeOnHit) this.events.push({ type: 'itemHit', item, tick: this.tick });
       // A T-flint lights on impact (TFlint.c4d Hit).
       if (hit && item.light()) this.events.push({ type: 'fuse', x: item.x, y: item.y, tick: this.tick });
-      // A monster egg may break when it lands (MonsterEgg.c4d Hit).
-      if (hit && item.def.egg) eggHit(this, item);
+      // An egg may break when it lands, a zap nest bursts (their Hit).
+      if (hit) itemLanded(this, item);
+      // Earth, sand, snow and concrete burst where they land (Hit: CastPXS).
+      if (hit && item.def.breaksInto) breakApart(this, item);
       if (hit && item.def.explodeOnHit) {
         item.removed = true;
         const by = this.thrower(item);
@@ -565,6 +583,7 @@ export class World {
         if (by && freed && by.doExperience(freed * EXPERIENCE.blastedLoose)) this.promoted(by);
       }
     }
+    stepMaterialItems(this);
     if (this.items.some((i) => i.removed)) this.items = this.items.filter((i) => !i.removed);
     this.objectHits();
 
@@ -879,7 +898,10 @@ export class World {
       const at = item.container ?? item;
       if (directHit(x, y, { x: at.x - 3, y: at.y - 3, w: 6, h: 6 })) breakEgg(this, item);
     }
+    // A blast sets birds' nests alight (BlastIncinerate 10): they fall out of their trees.
+    for (const n of this.treeNests) if (radius >= 10 && Math.abs(n.x - x) <= radius && Math.abs(n.y - y) <= radius) dropNest(this, n);
     this.blastHits(x, y, radius, by);
+    shockwaveHits(this, x, y, radius, by);
     this.shoveVehicles(x, y, radius);
     for (const s of this.structures) this.blastBasement(s, x, y, radius);
     this.blastPlants(x, y, radius);
@@ -1189,6 +1211,8 @@ export class World {
     // The first press of a double dig has already started digging.
     if (c.action.procedure !== 'walk' && c.action.procedure !== 'dig') return false;
     const item = c.carrying;
+    // Loam and metal open the menu of bridges and walls.
+    if (openBridgeMenu(this, c)) return true;
     if (item?.def.id === 'conkit') {
       if (c.action.procedure === 'dig') c.setAction('Walk', 0, 0);
       c.buildMenu = 0;

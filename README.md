@@ -155,6 +155,8 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
   Collectible animals rule); birds fly; fish swim and suffocate on land; sharks hunt swimming clonks and bite them
   from behind; monsters growl, jump and knock clonks over, and hatch from eggs. Scenarios set how many of each, and
   Shark Lake and Lava Caves now have their sharks, monsters and monster eggs. Dead wipfs and fish rot away.
+  Snakes bite (even the clonk carrying one), fire monsters spit fire and hatch from fire eggs, zap nests burst
+  into stinging zaps, and birds build nests in trees, lay eggs and hatch young ones.
 
 Press `Esc` in game to pause or end the round. Ending a round saves what the crew learned.
 
@@ -270,7 +272,7 @@ In the order we plan to build them (checked 24 Nov 2026):
    chemical plant, research lab, wizard tower, anvil.
 6. **Siege weapons and vehicles:** catapult, cannon, crossbow and arrows, fire bomb, cannon tower, wagon, steam
    engine, submarine and torpedo, barrels, chest.
-7. **Animals and crew:** snake, fire monster, zap nest, bird nests; the Aqua Clonk.
+7. **Animals and crew:** the Aqua Clonk (the snake, fire monster, zap nest and bird nests are in).
 8. **Spells and rules:** force fields, warp, warp to base, volcano, eternal flame, camouflage, invisibility,
    revaluation, random magic; the rules still greyed in Scenario Properties.
 9. ~~**Vegetation and scenery:** cactus, palms, seaweed, bones, skulls, shells, day and night, birdsong and others.~~

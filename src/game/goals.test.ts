@@ -45,7 +45,7 @@ const idle: Brain = { control: () => ({ ...NO_CONTROL }) };
 
 describe('Goals', () => {
   it('has the original goals, each with its picture', () => {
-    expect(GOAL_IDS).toEqual(['melee', 'goldmine', 'wealth', 'value', 'wipfhunt', 'monsterkill', 'race', 'engineering']);
+    expect(GOAL_IDS).toEqual(['melee', 'goldmine', 'oremine', 'wealth', 'value', 'wipfhunt', 'monsterkill', 'race', 'engineering']);
     for (const id of GOAL_IDS) expect(GOALS[id].icon).toMatch(/^goals\/\w+\.png$/);
   });
 
@@ -70,6 +70,20 @@ describe('Goals', () => {
     expect(e).toMatchObject({ winner: -1, fulfilled: true });
     expect(world.fulfilled).toBe(true);
     expect(goalStatus(world, 'goldmine', 0)).toBe('All gold has been mined.');
+  });
+
+  it('Ore Mining: won once the ore veins are gone and every chunk of ore is sold', () => {
+    const world = flatWorld({ oremine: 1 });
+    world.addClonk(100, GROUND - 10, 0);
+    for (let x = 0; x < 20; x++) for (let y = 120; y < 130; y++) world.land.set(x, y, Mat.Ore);
+    world.spawnItem('ore', 200, GROUND - 5);
+    expect(goalStatus(world, 'oremine', 0)).toBe('You still have to mine an unknown amount of solid ore and collect 1 ore chunks, 1 of which are outside.');
+    expect(decided(world, 80)).toBeNull();
+    expect(goalStatus(world, 'oremine', 0)).toBe('You still have to mine 1 units of solid ore and collect 1 ore chunks, 1 of which are outside.');
+    for (let x = 0; x < 20; x++) for (let y = 120; y < 124; y++) world.land.set(x, y, Mat.Earth);
+    world.items[0].removed = true;
+    expect(decided(world, 80)).toMatchObject({ winner: -1, fulfilled: true });
+    expect(goalStatus(world, 'oremine', 0)).toBe('All ore has been mined.');
   });
 
   it('Money Points: every player needs the gold, computer crews don\'t have to help', () => {

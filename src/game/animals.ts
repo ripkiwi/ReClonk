@@ -1,17 +1,22 @@
 // What animals do, from their scripts in the original Clonk Rage content
 // (Objects.c4d/Animals.c4d: Animal.c4d's reproduction, and the Activity timers,
-// contact calls and action calls of Wipf.c4d, Bird.c4d, Fish.c4d, Shark.c4d and
-// Monster.c4d), and how the engine places them (C4Game::PlaceAnimal, InitAnimals).
+// contact calls and action calls of Wipf.c4d, Bird.c4d, Fish.c4d, Shark.c4d,
+// Monster.c4d, Snake.c4d, FireMonster.c4d and ZapNest.c4d/Zap.c4d; the eggs,
+// the zap nest and the bird's nest), and how the engine places them
+// (C4Game::PlaceAnimal, PlaceInEarth, InitAnimals).
 // See licenses/clonk_engine_license.txt.
 
 import { Rng } from '../core/rng';
-import { MATERIALS } from '../landscape/materials';
+import { MATERIALS, type ItemId } from '../landscape/materials';
 import { ITEMS } from '../objects/defs';
 import { Clonk } from '../objects/clonk';
 import { Animal, ANIMALS, BIRTH_CON, COMD, type AnimalId, type Comd } from '../objects/animal';
 import type { Item } from '../objects/item';
 import { CLONK } from '../objects/defs';
 import { CNAT } from '../objects/physics';
+import { NEST, TreeNest } from '../objects/nest';
+import { FULL_CON, type Plant } from '../objects/vegetation';
+import { spitFlame } from './liquids';
 import type { World } from './world';
 
 /** Scripts' TimerCall=Activity runs every 35 ticks (DefCore Timer). */
@@ -20,11 +25,15 @@ export const ACTIVITY_INTERVAL = 35;
 const REPRODUCTION_AREA = 800;
 /** A MoveTo command gives up after this many ticks. */
 const MOVE_TICKS = 200;
-/** An egg hatches by itself one time in this many every 35 ticks (MonsterEgg.c4d Breed). */
+/** An egg hatches by itself one time in this many every 35 ticks (MonsterEgg.c4d and FireMonsterEgg.c4d Breed). */
 const EGG_HATCH = 2000;
+/** A bird egg in a nest hatches after brooding this many times 35 ticks; broken before half that, it's empty (BirdEgg.c4d). */
+const BIRD_EGG = { hatch: 50, alive: 25 };
+/** A Call command (a bird off to build or sit in its nest) gives up after this many ticks. */
+const CALL_TICKS = 600;
 
 /** Sounds animals make (Sound.c4g). */
-export type AnimalSound = 'Snuff' | 'WipfHurt' | 'WipfDead' | 'Raven' | 'RavenHurt' | 'Munch1' | 'Growl' | 'DeathGrowl' | 'EggBreak';
+export type AnimalSound = 'Snuff' | 'WipfHurt' | 'WipfDead' | 'Raven' | 'RavenHurt' | 'Munch1' | 'Growl' | 'DeathGrowl' | 'EggBreak' | 'Snake' | 'Inflame' | 'Bsss' | 'Sting';
 
 function sound(world: World, a: { x: number; y: number }, s: AnimalSound): void {
   world.events.push({ type: 'animal', sound: s, x: a.x, y: a.y, tick: world.tick });
@@ -88,14 +97,14 @@ function free(world: World, x: number, y: number, w: number): boolean {
 const SAFE_START = 200;
 
 function addBorn(world: World, id: AnimalId, x: number, y: number, rng?: Rng): Animal | null {
-  if ((id === 'shark' || id === 'monster') && world.clonks.some((c) => Math.abs(c.x - x) < SAFE_START && Math.abs(c.y - y) < SAFE_START)) return null;
+  if ((id === 'shark' || id === 'monster' || id === 'fireMonster') && world.clonks.some((c) => Math.abs(c.x - x) < SAFE_START && Math.abs(c.y - y) < SAFE_START)) return null;
   const a = world.addAnimal(id, Math.round(x), Math.round(y));
   birth(a, rng ?? world.rng);
   return a;
 }
 
-/** Bury nests (here: monster eggs) in the earth (C4Game::PlaceInEarth). */
-export function placeInEarth(world: World, id: 'monsterEgg', rng: Rng): Item | null {
+/** Bury nests (eggs and zap nests) in the earth (C4Game::PlaceInEarth). */
+export function placeInEarth(world: World, id: ItemId, rng: Rng): Item | null {
   const land = world.land;
   for (let tries = 0; tries < 50; tries++) {
     const x = rng.int(land.width);
@@ -113,10 +122,10 @@ function digable(world: World, x: number, y: number): boolean {
 }
 
 /** Place a scenario's animals and nests at the start of a round (C4Game::InitAnimals). */
-export function initAnimals(world: World, animals: Partial<Record<AnimalId, number>>, nests: Partial<Record<'monsterEgg', number>>, seed: number): void {
+export function initAnimals(world: World, animals: Partial<Record<AnimalId, number>>, nests: Partial<Record<ItemId, number>>, seed: number): void {
   const rng = new Rng(seed ^ 0xa417);
   for (const [id, n] of Object.entries(animals) as [AnimalId, number][]) for (let i = 0; i < n; i++) placeAnimal(world, id, rng);
-  for (const [id, n] of Object.entries(nests) as ['monsterEgg', number][]) for (let i = 0; i < n; i++) placeInEarth(world, id, rng);
+  for (const [id, n] of Object.entries(nests) as [ItemId, number][]) for (let i = 0; i < n; i++) placeInEarth(world, id, rng);
 }
 
 // ------------------------------------------------------------ the scripts
@@ -176,7 +185,7 @@ function preyIsSwimming(p: Clonk | Animal): boolean {
  * A bite or a blow (ObjectComPunch): the punch in energy, then a hard one
  * (10 and up) knocks the victim over, a lighter one makes it reel back.
  */
-function punch(world: World, a: Animal, p: Clonk | Animal, points: number): void {
+function punch(world: World, a: { dir: -1 | 1 }, p: Clonk | Animal, points: number): void {
   if (p instanceof Clonk) {
     world.hurt(p, points, null);
     world.events.push({ type: 'hit', clonk: p, points, tick: world.tick });
@@ -202,16 +211,20 @@ export function reproduce(world: World, a: Animal): void {
   for (const o of world.animals) {
     if (o.def.id === id && o.alive && !o.removed && Math.abs(o.x - a.x) <= half && Math.abs(o.y - a.y) <= half) count++;
   }
-  // The monster counts its eggs too.
-  if (id === 'monster') {
-    for (const it of world.items) if (!it.removed && it.def.egg === 'monster' && Math.abs(it.x - a.x) <= half && Math.abs(it.y - a.y) <= half) count++;
+  // Monsters count their eggs too, birds their young on the way: the ones they're expecting and the eggs they've laid.
+  for (const it of world.items) {
+    if (it.removed || it.def.egg !== id || (id === 'bird' && !it.laid)) continue;
+    const at = it.container ?? it;
+    if (Math.abs(at.x - a.x) <= half && Math.abs(at.y - a.y) <= half) count++;
   }
+  if (id === 'bird') for (const o of world.animals) if (o.def.id === 'bird' && o.expecting && Math.abs(o.x - a.x) <= half && Math.abs(o.y - a.y) <= half) count++;
   if (count >= a.def.maxCount) return;
-  // A monster lays an egg; the others have their young right there.
-  if (id === 'monster') {
-    world.spawnItem('monsterEgg', a.x, a.y + 10);
+  // Monsters lay an egg, a bird sees to a nest; the others have their young right there.
+  if (id === 'monster' || id === 'fireMonster') {
+    world.spawnItem(id === 'monster' ? 'monsterEgg' : 'fireMonsterEgg', a.x, a.y + 10);
     return;
   }
+  if (id === 'bird') return birdNesting(world, a);
   const child = world.addAnimal(id, a.x, a.y, BIRTH_CON);
   birth(child, world.rng);
 }
@@ -286,6 +299,10 @@ function birdActivity(world: World, a: Animal): void {
     turnLeft(a);
     return;
   }
+  // Off somewhere: to a tree, or its nest.
+  if (a.target) return;
+  // A young one on the way: on with the nest.
+  if (a.expecting) reproduce(world, a);
   if (rng.int(2) || a.action.name !== 'Fly') return;
   a.comd = rng.int(2) ? COMD.Down : COMD.Up;
   if (!rng.int(4)) return;
@@ -452,6 +469,363 @@ function monsterHitCheck(world: World, a: Animal): void {
   }
 }
 
+
+// ------------------------------------------------------------ bird nests
+
+/**
+ * Bird.c4d SpecialRepr: a bird with a young one on the way needs a nest. With
+ * none, it looks for a grown tree nearby without one and flies into its crown
+ * to build one; with a nest and no egg in it, it flies there to lay one.
+ */
+function birdNesting(world: World, a: Animal): void {
+  const land = world.land;
+  // A nest that fell out of its tree, or got flooded, is no good any more.
+  if (a.nest && (a.nest.removed || a.nest.state !== 'be' || land.isLiquid(Math.round(a.nest.x), Math.round(a.nest.y)) || land.isSolid(Math.round(a.nest.x), Math.round(a.nest.y)))) a.nest = null;
+  if (!a.nest) {
+    const tree = findTree(world, a);
+    if (tree) {
+      // A nice spot in its crown.
+      const s = tree.shape;
+      const fireTop = (tree.def.burned?.fireTop ?? 0) * tree.scale;
+      const x = s.x + world.rng.int(Math.max(1, Math.trunc(s.w - 20))) + 10;
+      const y = s.y + world.rng.int(Math.max(1, Math.trunc(s.h - fireTop - 20))) + 10;
+      moveTo(a, x, y, { call: 'buildNest', tree });
+    }
+    a.expecting = true;
+    return;
+  }
+  if (!world.items.some((i) => i.onNest === a.nest && !i.removed)) {
+    a.expecting = true;
+    moveTo(a, a.nest.x, a.nest.y, { call: 'breed' });
+  }
+}
+
+/** Bird.c4d FindTree: a standing, grown tree within 500 px, not burning, not under water, without a nest. */
+function findTree(world: World, a: Animal): Plant | null {
+  for (const p of world.plants) {
+    if (!p.def.id.startsWith('tree') || p.burned || p.state !== 'standing' || p.removed || p.fire || p.con < FULL_CON) continue;
+    const c = p.center;
+    if (Math.hypot(c.x - a.x, c.y - a.y) >= 500) continue;
+    if (world.land.isSolid(Math.round(c.x), Math.round(c.y)) || world.land.isLiquid(Math.round(c.x), Math.round(c.y))) continue;
+    if (world.treeNests.some((n) => n.tree === p && !n.removed && n.state !== 'decay')) continue;
+    return p;
+  }
+  return null;
+}
+
+/** Bird.c4d BuildNest: there, it starts a nest beside it, half built, and stops to work on it. */
+function buildNest(world: World, a: Animal, tree: Plant): void {
+  if (tree.removed || tree.state !== 'standing') return;
+  a.dir = tree.x < a.x ? -1 : 1;
+  const nest = new TreeNest(a.x + (a.dir > 0 ? 12 : -12), a.y + 5, tree);
+  world.treeNests.push(nest);
+  a.nest = nest;
+  a.setAction('BuildNest');
+  a.comd = COMD.Stop;
+  a.xdir = a.ydir = 0;
+}
+
+/** Bird.c4d Build, every 40 ticks of building: 10 more percent, and when it's done it goes and sits in it. */
+function buildStep(world: World, a: Animal): void {
+  const nest = a.nest;
+  if (!nest || nest.removed || nest.state === 'decay') {
+    a.setAction('Fly');
+    birdActivity(world, a);
+    return;
+  }
+  nest.con = Math.min(100, nest.con + NEST.buildStep);
+  if (nest.con < 100) return;
+  a.setAction('Fly');
+  moveTo(a, nest.x, nest.y, { call: 'breed' });
+}
+
+/** Bird.c4d StartBreeding: into the nest, to sit on it (the nest's Bird action). */
+function startBreeding(a: Animal): void {
+  const nest = a.nest;
+  if (!nest || nest.removed || nest.state !== 'be') return;
+  a.inNest = nest;
+  a.setPosition(Math.round(nest.x), Math.round(nest.y));
+  a.xdir = a.ydir = 0;
+  a.target = null;
+  nest.state = 'bird';
+  nest.time = 0;
+}
+
+/** Bird.c4d LayEgg: an egg in the nest with the young one in it, and off it flies. */
+function layEgg(world: World, a: Animal, nest: TreeNest): void {
+  const egg = world.spawnItem('birdEgg', nest.x, nest.y - 1);
+  egg.onNest = nest;
+  egg.laid = a.expecting;
+  a.expecting = false;
+  leaveNest(world, a);
+  birdActivity(world, a);
+}
+
+function leaveNest(world: World, a: Animal): void {
+  const nest = a.inNest;
+  a.inNest = null;
+  if (nest && nest.state === 'bird') nest.state = 'be';
+  a.setAction('Fly');
+  birth(a, world.rng);
+}
+
+/**
+ * Nest.c4d: it hangs in its tree, and when the tree is gone, burns or falls
+ * (Check4Tree, every 10 ticks), or the nest catches fire or gets wet, it
+ * drops with whatever is in it, and rots away.
+ */
+function stepNests(world: World): void {
+  if (!world.treeNests.length) return;
+  const land = world.land;
+  for (const n of world.treeNests) {
+    if (n.removed) continue;
+    n.time++;
+    const x = Math.round(n.x);
+    const y = Math.round(n.y);
+    if (n.state !== 'decay') {
+      const t = n.tree;
+      if (world.tick % NEST.checkInterval === 0 && (t.removed || t.fire || t.state !== 'standing')) dropNest(world, n);
+      else if (land.isLiquid(x, y)) dropNest(world, n);
+      else if (world.tick % ACTIVITY_INTERVAL === 0 && burningAt(world, n)) dropNest(world, n);
+    }
+    if (n.state === 'bird' && n.time >= NEST.brood) {
+      // Breed: the bird in it lays its egg.
+      n.time = 0;
+      const bird = world.animals.find((b) => b.inNest === n);
+      if (bird) layEgg(world, bird, n);
+      else n.state = 'be';
+    }
+    if (n.state === 'decay') {
+      // Fallen: it drops to the ground and lies there.
+      n.ydir = land.isLiquid(x, y) ? Math.max(n.ydir - land.gravity, -1) : n.ydir + land.gravity;
+      const bottom = Math.trunc(n.h / 2);
+      let ny = n.y;
+      const steps = Math.ceil(Math.abs(n.ydir));
+      for (let i = 0; i < steps; i++) {
+        const next = ny + n.ydir / steps;
+        if (land.isSolid(x, Math.round(next) + bottom)) {
+          n.ydir = 0;
+          break;
+        }
+        ny = next;
+      }
+      n.y = ny;
+      if (n.time >= NEST.decay || n.y > land.height + 20) n.removed = true;
+    }
+  }
+  if (world.treeNests.some((n) => n.removed)) world.treeNests = world.treeNests.filter((n) => !n.removed);
+}
+
+/** The nest comes down: the egg in it falls, the bird in it flies off (Check4Tree, Incineration). */
+export function dropNest(world: World, n: TreeNest): void {
+  if (n.state === 'decay') return;
+  n.fall();
+  for (const i of world.items) if (i.onNest === n) i.onNest = null;
+  for (const b of world.animals) if (b.inNest === n) leaveNest(world, b);
+}
+
+/** Is a burning thing's centre in the nest (it catches fire: ContactIncinerate 1)? */
+function burningAt(world: World, n: TreeNest): boolean {
+  const at = (o: { x: number; y: number }): boolean => n.contains(Math.round(o.x), Math.round(o.y));
+  for (const c of world.clonks) if (c.fire && !c.contained && at(c)) return true;
+  for (const p of world.plants) if (p.fire && p !== n.tree && at(p.center)) return true;
+  for (const i of world.items) if (i.fire && !i.container && at(i)) return true;
+  for (const o of world.animals) if (o.fire && at(o)) return true;
+  for (const f of world.flames) if (at(f)) return true;
+  return false;
+}
+
+// ------------------------------------------------------------ snake
+
+/** Snake.c4d Activity. */
+function snakeActivity(world: World, a: Animal): void {
+  const rng = world.rng;
+  if (!rng.int(15)) sound(world, a, 'Snake');
+  if (a.action.name !== 'Walk' && a.action.name !== 'Swim') return;
+  snakeAttack(world, a);
+  if (!rng.int(a.def.reproductionRate)) reproduce(world, a);
+  if (rng.int(2)) return;
+  if (a.action.name === 'Walk' && !rng.int(3)) {
+    a.jump();
+    return;
+  }
+  turnRandom(world, a);
+}
+
+/** Snake.c4d Attack: walking or swimming, every 2 seconds at most, it bites the prey right in front of it. */
+function snakeAttack(world: World, a: Animal): boolean {
+  if (a.attackDelay > 0 || (a.action.name !== 'Walk' && a.action.name !== 'Swim')) return false;
+  const px = a.x + (a.dir > 0 ? 13 : -13);
+  const py = a.y;
+  for (const p of preys(world)) {
+    const b = preyBox(p);
+    if (px < b.l || px >= b.l + b.w || py < b.t || py >= b.t + b.h) continue;
+    punch(world, a, p, 8);
+    sound(world, a, 'Snake');
+    a.attackDelay = 70;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * A snake in a clonk's hands keeps on with its Activity: it does nothing two
+ * times in three (it's contained), else it bites whoever holds it (Attack:
+ * pPrey = Contained()).
+ */
+function carriedSnakes(world: World): void {
+  for (const it of world.items) {
+    if (it.removed || it.def.animal !== 'snake' || !(it.container instanceof Clonk)) continue;
+    if (it.biteDelay > 0) it.biteDelay--;
+    if (world.tick % ACTIVITY_INTERVAL !== 0 || world.rng.int(3) || it.biteDelay > 0) continue;
+    const c = it.container;
+    if (!c.alive) continue;
+    punch(world, { dir: c.dir }, c, 8);
+    sound(world, c, 'Snake');
+    it.biteDelay = 70;
+  }
+}
+
+// ------------------------------------------------------------ fire monster
+
+/** FireMonster.c4d Activity: like the monster's, and now and then it spits fire. */
+function fireMonsterActivity(world: World, a: Animal): void {
+  const rng = world.rng;
+  if (rng.int(2) || (a.action.name !== 'Walk' && a.action.name !== 'Swim')) return;
+  if (!rng.int(a.def.reproductionRate)) reproduce(world, a);
+  if (a.action.name === 'Walk') {
+    if (!rng.int(3)) {
+      if (rng.int(2)) sound(world, a, 'Growl');
+      a.jump();
+      return;
+    }
+    if (!rng.int(8)) {
+      startFlame(world, a);
+      return;
+    }
+    if (!rng.int(8)) {
+      a.setAction('LookUp');
+      return;
+    }
+  }
+  turnRandom(world, a);
+}
+
+/** FireMonster.c4d StartFlame: at most every 140 ticks (IntNoAttack). */
+function startFlame(world: World, a: Animal): void {
+  if (a.action.name !== 'Walk' || a.attackDelay > 0) return;
+  a.attackDelay = 140;
+  a.setAction('Flame');
+  sound(world, a, 'Inflame');
+  sound(world, a, 'Growl');
+}
+
+/**
+ * FireMonster.c4d Flaming, every 2 ticks of the Flame action: a burning
+ * DuraFlame out of its mouth, flying 3 or 4 px a tick, until it has spat
+ * for 10 ticks.
+ */
+function flaming(world: World, a: Animal): void {
+  const right = a.dir > 0;
+  // Exit(pFlame, -15 + Dir * 30, +2, 0, -4 + Dir * 6 + Random(2)), the flame's top-left offset making it 9 px higher.
+  spitFlame(world, a.x + (right ? 15 : -15), a.y + 2 - 9, (right ? 2 : -4) + world.rng.int(2), 0);
+  if (a.actionTime > 10) a.setAction('Walk');
+}
+
+// ------------------------------------------------------------ zaps
+
+/** ZapNest.c4d BreakUp: the nest bursts into zaps, wherever there's room around it. */
+export function burstZapNest(world: World, nest: Item): void {
+  if (nest.removed || !nest.def.swarm) return;
+  const holder = nest.container as Clonk | null;
+  if (holder && holder.contents) holder.contents.splice(holder.contents.indexOf(nest), 1);
+  nest.container = null;
+  nest.removed = true;
+  for (let i = 0; i < nest.def.swarm; i++) {
+    const x = Math.round(nest.x) + world.rng.int(11) - 5;
+    const y = Math.round(nest.y) + world.rng.int(11) - 5;
+    if (world.land.isSolid(x, y)) continue;
+    const z = world.addAnimal('zap', x, y);
+    z.setAction('Fly');
+    z.phase = world.rng.int(6);
+  }
+  sound(world, nest, 'Bsss');
+}
+
+/** Zap.c4d Flying, each frame (every 3 ticks): one time in four a new random speed, towards its target if it has one. */
+function zapFlying(world: World, a: Animal): void {
+  const rng = world.rng;
+  if (rng.int(4)) return;
+  let xdir = rng.int(13) - 6;
+  let ydir = rng.int(9) - 4;
+  const t = a.chase;
+  if (t) {
+    xdir += clamp(Math.round(t.x - a.x), -11, 11);
+    ydir += clamp(Math.trunc((t.y - a.y) / 3), -7, 7);
+  }
+  // SetSpeed is in tenths of a pixel a tick.
+  if (world.land.isLiquid(a.x + xdir, a.y + ydir)) xdir = ydir = 0;
+  a.xdir = xdir / 10;
+  a.ydir = ydir / 10;
+}
+
+/** Zap.c4d Check, every 18 ticks: it dies buried, in water or of old age; it picks its victims, and stings them. */
+function zapCheck(world: World, a: Animal): void {
+  const rng = world.rng;
+  const land = world.land;
+  const semiSolid = (x: number, y: number): boolean => land.isSolid(Math.round(x), Math.round(y)) || land.isLiquid(Math.round(x), Math.round(y));
+  if (semiSolid(a.x, a.y) || !rng.int(160)) return zapDies(a);
+  if (!rng.int(50)) sound(world, a, 'Bsss');
+  if (!rng.int(10)) a.chase = zapTarget(world, a, 200);
+  if (!rng.int(30)) a.chase = null;
+  const t = a.chase as Clonk | Animal | null;
+  if (t && (t.removed || !t.alive || (t instanceof Clonk && t.contained) || semiSolid(t.x, t.y))) a.chase = null;
+  if (a.chase && !rng.int(5) && !pathFree(world, a.x, a.y, a.chase.x, a.chase.y)) a.chase = null;
+  if (rng.int(2)) return;
+  for (const p of preys(world)) {
+    const b = preyBox(p);
+    const px = a.x + 1;
+    if (px < b.l || px >= b.l + b.w || a.y < b.t || a.y >= b.t + b.h) continue;
+    // Sting.
+    punch(world, a, p, 3 + rng.int(2));
+    sound(world, a, 'Sting');
+    if (!rng.int(3)) zapDies(a);
+    return;
+  }
+}
+
+function zapDies(a: Animal): void {
+  a.alive = false;
+  a.removed = true;
+}
+
+/** Zap.c4d FindTarget: the nearest prey, if it's close enough and not in water. */
+function zapTarget(world: World, a: Animal, maxDist: number): Clonk | Animal | null {
+  let best: Clonk | Animal | null = null;
+  let bestD = Infinity;
+  for (const p of preys(world)) {
+    const d = Math.hypot(p.x - a.x, p.y - a.y);
+    if (d < bestD) {
+      bestD = d;
+      best = p;
+    }
+  }
+  if (!best || bestD >= maxDist) return null;
+  const land = world.land;
+  if (land.isSolid(Math.round(best.x), Math.round(best.y)) || land.isLiquid(Math.round(best.x), Math.round(best.y))) return null;
+  return best;
+}
+
+/** No solid pixel on the line between two points (PathFree). */
+function pathFree(world: World, x0: number, y0: number, x1: number, y1: number): boolean {
+  const n = Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)));
+  for (let i = 0; i <= n; i++) {
+    const k = n ? i / n : 0;
+    if (world.land.isSolid(Math.round(x0 + (x1 - x0) * k), Math.round(y0 + (y1 - y0) * k))) return false;
+  }
+  return true;
+}
+
 function activity(world: World, a: Animal): void {
   switch (a.def.id) {
     case 'wipf':
@@ -464,6 +838,11 @@ function activity(world: World, a: Animal): void {
       return sharkActivity(world, a);
     case 'monster':
       return monsterActivity(world, a);
+    case 'snake':
+      return snakeActivity(world, a);
+    case 'fireMonster':
+      return fireMonsterActivity(world, a);
+    // Zaps have no timer: they do everything in their action calls.
   }
 }
 
@@ -492,24 +871,35 @@ function contact(world: World, a: Animal, cnat: number): void {
   }
 }
 
-/** Head for the MoveTo target, if it has one. */
-function moveTo(a: Animal, x: number, y: number): void {
+/** Head for the MoveTo target, and then (a Call command) do something there. */
+function moveTo(a: Animal, x: number, y: number, then: Animal['then'] = null): void {
   a.target = { x: Math.round(x), y: Math.round(y) };
-  a.targetTicks = MOVE_TICKS;
+  a.targetTicks = then ? CALL_TICKS : MOVE_TICKS;
+  a.then = then;
 }
 
-function steer(a: Animal): void {
+function steer(world: World, a: Animal): void {
   const t = a.target;
   if (!t) return;
   if (--a.targetTicks <= 0) {
     a.target = null;
+    a.then = null;
     return;
   }
   const dx = t.x - a.x;
   const dy = t.y - a.y;
   if (Math.abs(dx) < 6 && Math.abs(dy) < 6) {
     a.target = null;
+    const then = a.then;
+    a.then = null;
+    if (then?.call === 'buildNest') buildNest(world, a, then.tree);
+    if (then?.call === 'breed') startBreeding(a);
     return;
+  }
+  // Flying, it slows down on the way in, so it doesn't overshoot (the engine's MoveTo for FLOAT).
+  if (a.action.procedure === 'float') {
+    if (Math.abs(dx) < 12) a.xdir *= 0.8;
+    if (Math.abs(dy) < 12) a.ydir *= 0.8;
   }
   const sx = Math.abs(dx) < 4 ? 0 : Math.sign(dx);
   const sy = Math.abs(dy) < 4 ? 0 : Math.sign(dy);
@@ -528,7 +918,7 @@ function clamp(v: number, lo: number, hi: number): number {
 export function stepAnimals(world: World): void {
   const land = world.land;
   for (const a of world.animals) {
-    if (a.removed) continue;
+    if (a.removed || a.inNest) continue;
     if (land.bottomOpen && a.y > land.height + 20) {
       a.removed = true;
       continue;
@@ -541,7 +931,7 @@ export function stepAnimals(world: World): void {
         a.timer = 0;
         activity(world, a);
       }
-      steer(a);
+      steer(world, a);
     }
     if (!a.alive && !a.corpse) died(world, a);
     if (a.removed) continue;
@@ -552,6 +942,8 @@ export function stepAnimals(world: World): void {
   }
   if (world.animals.some((a) => a.removed)) world.animals = world.animals.filter((a) => !a.removed);
   stepEggs(world);
+  carriedSnakes(world);
+  stepNests(world);
   releaseCarried(world);
 }
 
@@ -575,7 +967,16 @@ function actionCalls(world: World, a: Animal): void {
     case 'monster':
       if (a.actionStarted && (name === 'Walk' || name === 'Swim')) monsterHitCheck(world, a);
       break;
+    case 'fireMonster':
+      if (a.actionStarted && (name === 'Walk' || name === 'Swim')) monsterHitCheck(world, a);
+      if (a.actionStarted && name === 'Flame') flaming(world, a);
+      break;
+    case 'zap':
+      if (a.phaseStarted && name === 'Fly') zapFlying(world, a);
+      if (a.actionEnded === 'Fly') zapCheck(world, a);
+      break;
   }
+  if (a.def.id === 'bird' && a.actionEnded === 'BuildNest') buildStep(world, a);
 }
 
 /** Breathing, every 5 ticks (C4Object::ExecLife): out of air, it loses breath, then energy. */
@@ -596,8 +997,13 @@ function died(world: World, a: Animal): void {
   a.corpse = true;
   a.fire = null;
   if (a.def.id === 'wipf') sound(world, a, 'WipfDead');
-  if (a.def.id === 'monster') sound(world, a, 'DeathGrowl');
+  if (a.def.id === 'monster' || a.def.id === 'fireMonster') sound(world, a, 'DeathGrowl');
   const dead = a.def.dead;
+  if ('gone' in dead) {
+    a.removed = true;
+    return;
+  }
+  if (a.def.id === 'fireMonster') a.dir = -1;
   if ('item' in dead) {
     const it = world.spawnItem(dead.item, a.x, a.y, a.xdir, a.ydir);
     it.con = a.con * 1000;
@@ -618,18 +1024,21 @@ export function animalHurt(world: World, a: Animal): void {
 // ------------------------------------------------------------ eggs and carried animals
 
 /**
- * Monster eggs (MonsterEgg.c4d): now and then one hatches by itself, if
- * nothing solid is around it and nobody carries it.
+ * Monster eggs (MonsterEgg.c4d, FireMonsterEgg.c4d): now and then one hatches
+ * by itself, if nothing solid is around it and nobody carries it. A bird egg
+ * (BirdEgg.c4d) only broods in a nest, and hatches there.
  */
 function stepEggs(world: World): void {
   if (world.tick % ACTIVITY_INTERVAL !== 0) return;
   for (const it of world.items) {
     if (it.removed || !it.def.egg || it.container) continue;
-    if (!world.rng.int(EGG_HATCH)) breakEgg(world, it);
+    if (it.def.eggInNest) {
+      if (it.onNest && ++it.breed >= BIRD_EGG.hatch) breakEgg(world, it);
+    } else if (!world.rng.int(EGG_HATCH)) breakEgg(world, it);
   }
 }
 
-/** The egg breaks (DoBreak): a young monster comes out, unless it's buried in the ground. */
+/** The egg breaks (DoBreak): the young one comes out, unless it's buried in the ground (or a bird egg hasn't brooded long enough). */
 export function breakEgg(world: World, egg: Item): void {
   if (egg.removed || !egg.def.egg) return;
   const holder = egg.container as Clonk | null;
@@ -637,14 +1046,24 @@ export function breakEgg(world: World, egg: Item): void {
   egg.container = null;
   egg.removed = true;
   sound(world, egg, 'EggBreak');
+  if (egg.def.eggInNest && egg.breed < BIRD_EGG.alive) return;
   if (world.land.isSolid(egg.x, egg.y)) return;
   const child = world.addAnimal(egg.def.egg, egg.x, egg.y - 4, BIRTH_CON);
   birth(child, world.rng);
 }
 
-/** A thrown egg breaks one time in two when it lands (Hit). */
-export function eggHit(world: World, egg: Item): void {
-  if (egg.def.egg && world.rng.int(2)) breakEgg(world, egg);
+/** Something landed hard: an egg breaks one time in two, a zap nest bursts (their Hit). */
+export function itemLanded(world: World, it: Item): void {
+  if (it.def.egg && world.rng.int(2)) breakEgg(world, it);
+  if (it.def.swarm) burstZapNest(world, it);
+}
+
+/** A clonk picked it up: an egg out of its nest stops brooding, and the young one in it is gone (BirdEgg.c4d Entrance). */
+export function collected(it: Item): void {
+  if (!it.onNest && !it.def.eggInNest) return;
+  it.onNest = null;
+  it.breed = 0;
+  it.laid = false;
 }
 
 /**
@@ -656,7 +1075,7 @@ export function collectAnimal(world: World, c: Clonk): Item | null {
   if (!world.rules.has('collectibleAnimals') || c.contents.length >= CLONK.maxContents || c.action.disabled) return null;
   const r = CLONK.collection;
   for (const a of world.animals) {
-    if (!a.alive || a.removed || !a.def.collectible || !a.def.carried || a.action.name === 'Jump') continue;
+    if (!a.alive || a.removed || !a.def.collectible || !a.def.carried || a.action.name === 'Jump' || a.action.name === 'Tumble') continue;
     const dx = a.x - c.x;
     const dy = a.y - c.y;
     if (dx < r.x || dx >= r.x + r.w || dy < r.y || dy >= r.y + r.h) continue;
@@ -688,5 +1107,5 @@ function releaseCarried(world: World): void {
 /** True for item kinds that are animals (alive, dead, or an egg). */
 export function isAnimalItem(id: keyof typeof ITEMS): boolean {
   const d = ITEMS[id];
-  return !!(d.animal || d.egg || d.decay || id === 'deadBird');
+  return !!(d.animal || d.egg || d.decay || d.swarm || id === 'deadBird' || id === 'deadSnake');
 }

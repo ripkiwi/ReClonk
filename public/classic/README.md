@@ -29,6 +29,9 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `items/Meteor.png` | `Objects.c4d/Effects.c4d/Meteor.c4d/Graphics.png` (meteorite) |
 | `items/TFlint.png`, `items/SuperFlint.png`, `items/SuperTFlint.png`, `items/TeraFlint.png` | `Objects.c4d/Items.c4d/Weapons.c4d/TFlint.c4d`, `SuperFlint.c4d`, `SuperTFlint.c4d`, `TeraFlint.c4d` `/Graphics.png` |
 | `items/Wood.png` | `Objects.c4d/Items.c4d/Materials.c4d/Wood.c4d/Graphics.png` |
+| `items/Coal.png`, `Ore.png`, `Sulphur.png`, `Loam.png`, `Metal.png`, `Concrete.png`, `LiquidGranite.png`, `Earth.png`, `Sand.png`, `Ashes.png`, `Ice.png`, `Snowball.png` | `Objects.c4d/Items.c4d/Materials.c4d/<item>.c4d/Graphics.png` |
+| `items/Gunpowder.png` | `Objects.c4d/Items.c4d/Weapons.c4d/Gunpowder.c4d/Graphics.png` |
+| `items/LoamArrows.png`, `items/LoamSymbol.png` | `Objects.c4d/Items.c4d/Materials.c4d/Loam.c4d/Menu.c4d/Arrows.c4d`, `Symbol.c4d` `/Graphics.png` (the bridge menu) |
 | `vehicles/Sailboat.png`, `vehicles/SailboatSailing.png`, `vehicles/SailboatBurned.png` | `Objects.c4d/Vehicles.c4d/Sailboat.c4d/Graphics.png`, `Sailing.c4d/Graphics.png`, `Burned.c4d/Graphics.png` |
 | `vehicles/Balloon.png`, `vehicles/BalloonBurned.png` | `Objects.c4d/Vehicles.c4d/Balloon.c4d/Graphics.png`, `Burned.c4d/Graphics.png` |
 | `vehicles/Blimp.png`, `vehicles/BlimpBurned.png` | `Objects.c4d/Vehicles.c4d/Blimp.c4d/Graphics.png`, `Burned.c4d/Graphics.png` |
@@ -48,6 +51,7 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `magic/GravityDown.png`, `GravityUp.png`, `Bridge.png`, `BridgeSegment.png`, `Firetail.png` | `Objects.c4d/Magic.c4d/GravitationDown.c4d`, `GravitationUp.c4d`, `ForceFieldBrigde.c4d` and its segment, `Firefist.c4d/Firetail.c4d` `/Graphics.png` |
 | `rules/*.png` | `Objects.c4d/Rules.c4d/<rule>.c4d/Graphics.png` (rule pictures in the scenario properties) |
 | `sound/Magic1.wav`, `Electric.wav`, `Crystal1-3.wav`, `Wind2.wav`, `Energy.wav` | `Sound.c4g/` |
+| `sound/Dig1-5.wav`, `MetalHit1-3.wav` | `Sound.c4g/` (**renamed to lower-case `.wav`**; building a bridge, metal landing) |
 | `sound/Corrode.wav`, `Lava1-3.wav` | `Sound.c4g/` (**renamed to lower-case `.wav`** where the original was `.WAV`) |
 | `sound/VolcanoCast.wav` | `Objects.c4d/Effects.c4d/Volcano.c4d/VolcanoCast.wav` |
 | `goals/*.png` | `Objects.c4d/Goals.c4d/<goal>.c4d/Graphics.png` (goal pictures in the scenario properties and in the game) |
@@ -69,6 +73,8 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `animals/Wipf.png`, `animals/Bird.png`, `animals/Fish.png`, `animals/Shark.png`, `animals/Monster.png` | `Objects.c4d/Animals.c4d/Wipf.c4d`, `Bird.c4d`, `Fish.c4d`, `Shark.c4d`, `Monster.c4d` `/Graphics.png` (**the fish's `Overlay.png` is drawn into `Fish.png`**) |
 | `animals/WipfDead.png`, `animals/BirdDead.png`, `animals/FishDead.png`, `animals/SharkDead.png`, `animals/MonsterDead.png` | the same folders' `Dead.c4d/Graphics.png` (**the dead fish's `Overlay.png` is drawn into `FishDead.png`**) |
 | `animals/MonsterEgg.png` | `Objects.c4d/Animals.c4d/Monster.c4d/MonsterEgg.c4d/Graphics.png` |
+| `animals/Snake.png`, `animals/FireMonster.png`, `animals/FireMonsterDead.png`, `animals/FireMonsterEgg.png` | `Objects.c4d/Animals.c4d/Snake.c4d`, `FireMonster.c4d`, `FireMonster.c4d/Dead.c4d`, `FireMonster.c4d/FireMonsterEgg.c4d` `/Graphics.png` |
+| `animals/ZapNest.png`, `animals/Zap.png`, `animals/Nest.png`, `animals/BirdEgg.png` | `Objects.c4d/Animals.c4d/ZapNest.c4d`, `ZapNest.c4d/Zap.c4d`, `Bird.c4d/Nest.c4d`, `Bird.c4d/BirdEgg.c4d` `/Graphics.png` |
 | `sound/DeathGrowl.wav`, `EggBreak.wav`, `Growl1-3.wav`, `Munch1.wav`, `Raven1.wav`, `RavenHurt.wav`, `Snuff1-2.wav`, `WipfDead.wav`, `WipfHurt.wav` | `Sound.c4g/` (**renamed to lower-case `.wav`** where the original was `.WAV`) |
 | `vegetation/Palm1.png`, `Palm2.png`, `Cactus.png`, `Cactus2.png`, `Seaweed1.png`, `Seaweed2.png`, `Palm1Burned.png`, `Palm2Burned.png` | `Objects.c4d/Vegetation.c4d/Palm1.c4d`, `Palm2.c4d`, `Cactus.c4d`, `Cactus2.c4d`, `Seaweed1.c4d`, `Seaweed2.c4d` `/Graphics.png`, and `Palm1.c4d`, `Palm2.c4d` `/Burned.c4d/Graphics.png` |
 | `items/Shell.png`, `items/Bone.png`, `items/Skull.png` | `Objects.c4d/Vegetation.c4d/Shell.c4d`, `Bone.c4d`, `Skull.c4d` `/Graphics.png` |
