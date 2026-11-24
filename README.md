@@ -232,14 +232,37 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
 ## Roadmap
 
 1. **Foundations** (done): project setup, landscape sandbox, CI, deploy.
-2. **A clonk** (now): walk, jump, climb, swim, dig, throw rocks and flints that blast terrain;
-   menus, player profiles, crews, ranks and the first two scenarios.
-3. **Economy and bases** (started): huts and flags, healing, buying and selling, buying clonks, fights,
-   thrown-object hits, computer crews, the original's Scenario Properties and map creator, basements under
-   buildings, construction kits, elevators, guard towers, weather, T-flints, super- and tera-flints, trees,
-   chopping, wood, grass, fire and animals are in.
-4. **Modding and content:** a public modding API in TypeScript + JSON (the base game itself is a mod), boats, scenarios, a Classic content pack.
+2. **A clonk** (done): walk, jump, backjump, climb, swim, dig, throw, fight; menus, player profiles, crews,
+   ranks, both control styles with rebindable keys. Still to come: loam bridges, gamepad.
+3. **Economy and bases** (mostly done): huts and flags, healing, buying and selling, buying clonks, fights,
+   thrown-object hits, computer crews, the original's Scenario Properties and map creator, basements, construction
+   kits, elevators, guard towers, weather, all flints, trees and wood, fire, liquids, flags, vehicles, the lorry,
+   the sorcerer, rules, animals and the original menus are in.
+4. **Modding and content** (content well along, modding not started): a public modding API in TypeScript + JSON
+   (the base game itself as a mod), more of the original's scenarios.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
+
+### Still missing from the original
+
+In the order we plan to build them (checked 24 Nov 2026):
+
+1. **Goals:** Goldmine, Money Points, Settlement points, Wipf hunt, Monster kill, Race, Ore mining, Oil production,
+   Engineer (only melee exists; Gold Mine has no goal yet).
+2. **Castles and more homes:** small castle, castle, dark castle, small tower, cabin, bamboo hut, igloo, statues,
+   bridge segment, signal.
+3. **Loam and bridges.**
+4. **Ground materials:** coal, ore, sulphur and crystal veins, and the metal, concrete and gunpowder items.
+5. **Production and power:** sawmill, foundry, workshop, windmill, power plant, power lines, pump, oil derrick,
+   chemical plant, research lab, wizard tower, anvil.
+6. **Siege weapons and vehicles:** catapult, cannon, crossbow and arrows, fire bomb, cannon tower, wagon, steam
+   engine, submarine and torpedo, barrels, chest.
+7. **Animals and crew:** snake, fire monster, zap nest, bird nests; the Aqua Clonk.
+8. **Spells and rules:** force fields, warp, warp to base, volcano, eternal flame, camouflage, invisibility,
+   revaluation, random magic; the rules still greyed in Scenario Properties.
+9. **Vegetation and scenery:** cactus, palms, seaweed, bones, skulls, shells, day and night, birdsong and others.
+10. **More original scenarios:** 4 of about 90 so far; next the Worlds, Melees and the ten tutorials.
+11. **Savegames, replays and gamepad.**
+12. **Modding API**, then **multiplayer**, then the Knights, Western, Fantasy, Far Worlds and Hazard packs.
 
 ## License
 
