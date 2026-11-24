@@ -193,7 +193,7 @@ describe('Knockouts and the last crew standing', () => {
   });
 
   it('without that goal, the round goes on', () => {
-    const round = startRound(scenario('minor-melee', { goal: 'none' }), profileWithCrew(3));
+    const round = startRound(scenario('minor-melee', { goals: {} }), profileWithCrew(3));
     for (const c of round.world.crewOf(1)) round.world.hurt(c, 1000, null);
     run(round.world, 1);
     expect(round.world.winner).toBe(null);

@@ -16,7 +16,7 @@ describe('Lava Caves', () => {
     const l = s.landscape;
     expect([l.mapWidth.std, l.mapHeight.std, l.mapZoom.std, l.topOpen]).toEqual([95, 60, 15, false]);
     expect(l.mapScript).toContain('map LavaCaves');
-    expect([s.crewSize, s.opponents, s.homeBase, s.base.wealth, s.goal]).toEqual([1, 0, true, 30, 'none']);
+    expect([s.crewSize, s.opponents, s.homeBase, s.base.wealth, s.goals]).toEqual([1, 0, true, 30, { monsterkill: 1, value: 16 }]);
     expect(s.base.stock).toMatchObject({ conkit: 5, wood: 10, flint: 10, tflint: 14, supertflint: 6, superflint: 3, teraflint: 1, flag: 3, lorry: 1, clonk: 5 });
     expect([s.weather.climate.std, s.weather.volcano.std, s.weather.earthquake.std]).toEqual([0, 3, 5]);
   });

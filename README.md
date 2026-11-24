@@ -135,6 +135,13 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
 - **Last crew standing** (the original's Melee goal): a crew with no clonks left is out, and the round ends when only
   one is left. Victory and defeat show on the results screen, with the knockouts each clonk scored; a clonk is
   credited with a knockout when it was the last enemy to hurt the one that died.
+- **Goals**, the original's (Scenario Properties, Game; their pictures under the menu button in the game, click one
+  to read how far along it is): Melee, Goldmine (mine and sell all the gold), Money Points and Settlement points
+  (100 per goal), Wipf rescue, Monsterkill, Race (left to right, nobody fights) and Engineer (build everything a
+  construction kit can). Every goal fulfilled wins the round; computer crews don't have to help. Gold Mine and Lava
+  Caves have their original goals. Ore Mining and Oil Production wait for ore and oil barrels.
+- **Rivalry**: whoever fulfils every goal first wins, everyone else is out. **Release Clonk**: click its picture to let
+  the clonk you control go for the round. **Buildings can snow in**: otherwise buildings clear snow out of themselves.
 - Higher ranks have more energy (50, plus 5 per rank up to rank 10).
 - Lakes have sloping banks, so a clonk can always swim out.
 - **Animals**, with the original scripts and values: wipfs run about, dig and can be sold dead (or alive, with the

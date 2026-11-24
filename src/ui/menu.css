@@ -903,3 +903,57 @@ button {
 .key-settings .music-row { display: flex; align-items: center; gap: 18px; }
 .key-settings .volume-row { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .key-settings .volume-row input { width: 120px; accent-color: #7a5020; }
+
+/* The round's goals and rules, under the menu button (the original's goal and rule objects). */
+.goal-bar {
+  position: absolute;
+  right: 10px;
+  top: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  pointer-events: auto;
+}
+.goal-icon {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+.goal-icon:hover { background: rgba(0, 0, 0, 0.7); border-color: var(--gold); }
+.goal-icon img { width: 30px; height: 30px; display: block; }
+.goal-icon.rule { width: 28px; height: 28px; }
+.goal-icon.rule img { width: 22px; height: 22px; }
+.goal-icon.action { border-color: var(--gold); }
+.goal-progress {
+  position: absolute;
+  right: 40px;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: 12px;
+  color: #fff;
+  text-shadow: 0 0 3px #000, 0 0 2px #000;
+}
+.goal-message {
+  position: absolute;
+  right: 120px;
+  top: 44px;
+  max-width: 320px;
+  padding: 8px 12px;
+  border: 1px solid var(--gold);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 13px;
+  white-space: pre-line;
+  pointer-events: auto;
+  display: none;
+}
+.goal-message.show { display: block; }
+.goal-message::first-line { color: var(--gold); font-weight: bold; }
