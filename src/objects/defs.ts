@@ -749,6 +749,7 @@ export const BUILD_PLANS: readonly string[] = [
   'derrick',
   'anvil',
   'signal',
+  'cannonTower',
   'statue',
   'goldStatue',
 ];

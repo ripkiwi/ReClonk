@@ -33,7 +33,8 @@ export function pushersOf(world: World, v: Vehicle): Clonk[] {
 
 /** The vehicle a clonk standing here could hold on to (ObjectComDownDouble finds it at the clonk's position). */
 export function vehicleAt(world: World, c: Clonk): Vehicle | null {
-  for (const v of world.vehicles) if (!v.removed && !v.burned && !v.contained && v.inside(c.x, c.y)) return v;
+  // Not in the original: low ones like the tower cannons, below the clonk's middle, can be grabbed at its legs too.
+  for (const v of world.vehicles) if (!v.removed && !v.burned && !v.contained && (v.inside(c.x, c.y) || v.inside(c.x, c.y + 6))) return v;
   return null;
 }
 

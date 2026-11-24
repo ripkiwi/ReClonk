@@ -16,6 +16,7 @@ import { blastIgnite, igniteOil, stepLiquids, type OilFlame } from './liquids';
 import { buildStep, checkBreak, construct, grabOrBuild, grabTarget, pushControl, siteProblem, stepBuildings, stepElevator, stepGate } from './buildings';
 import { Vehicle, VEHICLES, type VehicleId } from '../objects/vehicle';
 import { grabVehicle, stepVehicle, takeOut, vehicleAt, vehicleBottom, vehicleControl } from './vehicles';
+import { mountGun, shootFromTower, stepGun, towerAmmo, towerControl } from './cannonTower';
 import { barrelHit, stepBarrels, useBarrel } from './barrels';
 import { collectArrow, enterVehicle, itemValue, ridingControl, siegeItemHit, stepArrows, type SiegeSound } from './siege';
 import { MagicState, openSpellMenu, spellList, startSpell, stepMagic, stepSorcerer, type SpellId } from './magic';
@@ -537,6 +538,11 @@ export class World {
 
     for (const v of this.vehicles) {
       if (v.removed) continue;
+      // On a cannon tower's roof.
+      if (v.mountedOn) {
+        stepGun(this, v);
+        continue;
+      }
       if (v.contained) {
         // Pushed into a building: it comes back out with whoever pushes it, or by itself if they're gone.
         if (!this.clonks.some((c) => c.vehicle === v && c.contained === v.contained && c.alive)) this.pushOut(v);
@@ -1114,6 +1120,8 @@ export class World {
     const s = this.structures.find((o) => o.atEntrance(v.x, v.y));
     if (!s) return false;
     if (!this.enter(c, s)) return true;
+    // A cannon pushed into a cannon tower is mounted on its roof.
+    if (mountGun(this, s, v)) return true;
     v.contained = s;
     v.mask?.remove(this.land);
     v.mask = null;
@@ -1234,7 +1242,7 @@ export class World {
     s.openDoor();
   }
 
-  private exitTo(c: Clonk, x: number, y: number): void {
+  exitTo(c: Clonk, x: number, y: number): void {
     c.contained = null;
     c.menu = null;
     c.setPosition(x, y);
@@ -1513,6 +1521,8 @@ export class World {
     // In a wagon or a submarine: its own controls (ContainedLeft, ContainedDig...).
     if (c.contained instanceof Vehicle) return ridingControl(this, c, ctl);
     const s = c.contained as Structure;
+    // A cannon tower's gun takes the arrow keys and dig.
+    if (towerControl(this, c, s, ctl)) return;
     const own = this.inOwnBase(c);
     const pf = s.def.platforms;
     if (ctl.pressedDown) this.exit(c);
@@ -1558,6 +1568,7 @@ export class World {
   menuList(c: Clonk): MenuEntry[] {
     const s = c.contained;
     if (!s || c.menu === null) return [];
+    if (c.menuKind === 'fire') return towerAmmo(this, c);
     if (c.menuKind === 'buy' && s instanceof Structure) {
       const p = this.players.get(s.base);
       return this.shopList(s.base).map((id) => ({ id, count: p?.stock[id] ?? 0, value: shopEntry(id).value }));
@@ -1571,7 +1582,7 @@ export class World {
    * it. It closes by itself if the base isn't yours any more.
    */
   private buildingMenuControl(c: Clonk, ctl: ControlState): void {
-    if (c.menuKind !== 'get' && !this.inOwnBase(c)) {
+    if (c.menuKind !== 'get' && c.menuKind !== 'fire' && !this.inOwnBase(c)) {
       c.menu = null;
       return;
     }
@@ -1583,7 +1594,8 @@ export class World {
     c.menu = menuMove(c.menu ?? 0, list.length, ctl);
     if (!ctl.pressedThrow || !list.length) return;
     const e = list[c.menu];
-    if (c.menuKind === 'buy') this.buy(c, e.id);
+    if (c.menuKind === 'fire') shootFromTower(this, c, e.id as ItemId);
+    else if (c.menuKind === 'buy') this.buy(c, e.id);
     else if (c.menuKind === 'sell') this.sellFromBase(c, e.id as ItemId);
     else this.getFrom(c, e.id as ItemId);
     c.menu = Math.min(c.menu, Math.max(0, this.menuList(c).length - 1));

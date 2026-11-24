@@ -208,20 +208,21 @@ export class BaseHud {
   private buildingMenu(c: Clonk, s: Structure | Vehicle): MenuView {
     const list = this.world.menuList(c);
     const kind = c.menuKind;
-    const verb = kind === 'buy' ? 'Buy' : kind === 'sell' ? 'Sell' : 'Get';
+    const verb = kind === 'buy' ? 'Buy' : kind === 'sell' ? 'Sell' : kind === 'fire' ? 'Shoot' : 'Get';
     const items: MenuItemView[] = list.map((e) => ({
       picture: () => this.picture(e.id),
       count: e.count,
-      caption: `${verb} ${shopEntry(e.id).name}`,
+      // A cannon tower's menu: how much gunpowder the shot takes.
+      caption: kind === 'fire' ? `${verb} ${shopEntry(e.id).name} (${e.value} gunpowder)` : `${verb} ${shopEntry(e.id).name}`,
       value: e.value,
       description: DESCRIPTIONS[e.id],
     }));
     return {
-      symbol: kind === 'get' ? this.structurePicture(s) : () => tradeSymbol(this.gfx, kind, this.color),
-      caption: kind === 'buy' ? 'There is nothing to buy.' : `${s.def.name} is empty.`,
+      symbol: kind === 'get' || kind === 'fire' ? this.structurePicture(s) : () => tradeSymbol(this.gfx, kind, this.color),
+      caption: kind === 'buy' ? 'There is nothing to buy.' : kind === 'fire' ? 'Nothing to shoot: put something in.' : `${s.def.name} is empty.`,
       items,
       selected: list.length ? Math.min(c.menu ?? 0, list.length - 1) : null,
-      extra: kind === 'get' ? undefined : 'value',
+      extra: kind === 'get' || kind === 'fire' ? undefined : 'value',
       keys: this.okCancel,
       color: this.color,
       key: `${kind}:${c.menu}:${list.map((e) => `${e.id}=${e.count}`).join(',')}`,

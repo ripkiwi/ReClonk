@@ -357,3 +357,69 @@ describe('Barrels and the fire bomb', () => {
     expect(world.items.some((o) => o.def.id === 'barrel')).toBe(true);
   });
 });
+
+describe('Cannon tower', () => {
+  function towerWithGun(id: VehicleId = 'towerCannon') {
+    const world = flatWorld();
+    const tower = world.addStructure('cannonTower', 100, GROUND - 22, -1);
+    const door = tower.exitPoint().x;
+    const gun = onGround(world, id, door);
+    const c = clonkAt(world, door);
+    grab(world, c);
+    run(world, 5);
+    tap(world, { up: true, pressedUp: true });
+    run(world, 2);
+    return { world, tower, gun, c };
+  }
+
+  it('a combat cannon pushed in is mounted on the roof, aimed towards the middle', () => {
+    const { tower, gun, c } = towerWithGun();
+    expect(c.contained).toBe(tower);
+    expect(gun.mountedOn).toBe(tower);
+    expect(gun.r).toBe(45);
+    expect([gun.x, gun.y]).toEqual([tower.x, tower.y - 19]);
+  });
+
+  it('turns while right is held, and shoots a rock with one gunpowder from the menu', () => {
+    const { world, tower, gun, c } = towerWithGun();
+    run(world, 20, { right: true });
+    expect(gun.r).toBeCloseTo(45 + 20 * 0.5, 0);
+    run(world, 1);
+    load(world, c, 'rock');
+    load(world, c, 'gunpowder');
+    expect(tower.contents.length).toBe(2);
+    tap(world, { pressedDig: true });
+    expect(c.menuKind).toBe('fire');
+    expect(world.menuList(c).map((e) => e.id)).toEqual(['rock']);
+    tap(world, { pressedThrow: true });
+    expect(tower.contents.length).toBe(0);
+    const rock = world.items.find((o) => o.def.id === 'rock')!;
+    expect(rock.container).toBeNull();
+    expect(rock.xdir).toBeGreaterThan(5);
+    expect(rock.ydir).toBeLessThan(-5);
+  });
+
+  it('up twice takes the gun off: it comes out at the door', () => {
+    const { world, tower, gun } = towerWithGun();
+    tap(world, { pressedUp: true, up: true });
+    run(world, 3);
+    tap(world, { pressedUp: true, up: true });
+    expect(gun.mountedOn).toBeNull();
+    expect(gun.contained).toBeNull();
+    expect(Math.abs(gun.x - tower.exitPoint().x)).toBeLessThan(2);
+  });
+
+  it('the artillery cannon shoots a clonk inside out over the land', () => {
+    const { world, tower, c } = towerWithGun('artillery');
+    const other = world.addClonk(tower.x, tower.y, 0);
+    other.contained = tower;
+    for (let i = 0; i < 4; i++) load(world, c, 'gunpowder');
+    tap(world, { pressedDig: true });
+    expect(world.menuList(c).map((e) => e.id)).toEqual(['clonk']);
+    tap(world, { pressedThrow: true });
+    expect(other.contained).toBeNull();
+    expect(c.contained).toBe(tower);
+    run(world, 20);
+    expect(other.x).toBeGreaterThan(tower.x + 40);
+  });
+});

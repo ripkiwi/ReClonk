@@ -63,7 +63,8 @@ export type CrewCommand =
   | { type: 'toggle'; index: number };
 
 /** The menus of a building a clonk is in. */
-export type BuildingMenu = 'buy' | 'sell' | 'get';
+/** The menus inside a building; 'fire' is a cannon tower's (what its gun can shoot). */
+export type BuildingMenu = 'buy' | 'sell' | 'get' | 'fire';
 
 export const NO_CONTROL: ControlState = {
   left: false, right: false, up: false, down: false,

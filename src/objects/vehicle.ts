@@ -15,7 +15,27 @@ import type { Structure } from './structure';
 
 export type VehicleId =
   | 'boat' | 'balloon' | 'blimp' | 'lorry'
-  | 'catapult' | 'cannon' | 'crossbow' | 'wagon' | 'engine' | 'sub' | 'chest' | 'bridge' | 'towerCannon';
+  | 'catapult' | 'cannon' | 'crossbow' | 'wagon' | 'engine' | 'sub' | 'chest' | 'bridge' | 'towerCannon' | 'artillery' | 'antiAir';
+
+/**
+ * A cannon tower's gun (CannonTower.c4d Cannon1-3 and their Attached
+ * selves): pushed into a cannon tower, it's mounted on its roof.
+ */
+export interface MountDef {
+  /** The mounted gun's graphic, a square of `size` (CTW2, CTW4, CTW6). */
+  file: string;
+  size: number;
+  /** Degrees it turns a tick (RotationSpeed, SetRDir in tenths). */
+  speed: number;
+  /** Combat and artillery cannons shoot what's in the tower with gunpowder; the anti-air cannon shoots arrows. */
+  kind: 'cannon' | 'arrows';
+  /** Shooting speed (CannonPower; the anti-air cannon's arrows fly at 15). */
+  power: number;
+  /** Gunpowder for each shot (CannonPowderNeeded). */
+  powder: number;
+  /** The artillery cannon can shoot clonks too, with 4 gunpowder at 18. */
+  clonks?: { powder: number; power: number };
+}
 
 /** A box relative to the centre. */
 export interface Box {
@@ -84,6 +104,8 @@ export interface VehicleDef {
   aim?: number;
   /** Wrecked by this much damage instead of burning (the submarine's Damage script). */
   wreckAt?: number;
+  /** A cannon tower's gun. */
+  mount?: MountDef;
 }
 
 const vtx = (xs: number[], ys: number[], cnat: number[], friction: number | number[]): Vertex[] =>
@@ -406,7 +428,52 @@ export const VEHICLES: Record<VehicleId, VehicleDef> = {
     blastIncinerate: 0,
     graphic: { file: 'vehicles/CombatCannon.png', facet: { x: 0, y: 0, w: 19, h: 8 }, sheet: [83, 64] },
     picture: { x: 19, y: 0, w: 64, h: 64 },
+    mount: { file: 'vehicles/CombatCannonAttached.png', size: 26, speed: 0.5, kind: 'cannon', power: 12, powder: 1 },
     burned: { file: 'vehicles/CombatCannon.png', mass: 80, float: 0, blastIncinerate: 0, contactIncinerate: 0 },
+  },
+  // Cannon2.c4d (CTW5): turns very slowly and needs lots of gunpowder, but shoots far, clonks too.
+  artillery: {
+    id: 'artillery',
+    name: 'Artillery cannon',
+    value: 55,
+    rebuy: true,
+    mass: 150,
+    width: 30,
+    height: 16,
+    offset: { x: -15, y: -8 },
+    vertices: vtx([-14, 9, -14, 9], [-8, -8, 7, 7], CORNERS, 40),
+    float: 0,
+    floatSpeed: 0,
+    noPushEnter: false,
+    grabbed: 1,
+    contactIncinerate: 0,
+    blastIncinerate: 0,
+    graphic: { file: 'vehicles/ArtilleryCannon.png', facet: { x: 0, y: 0, w: 30, h: 16 }, sheet: [94, 64] },
+    picture: { x: 30, y: 0, w: 64, h: 64 },
+    mount: { file: 'vehicles/ArtilleryCannonAttached.png', size: 52, speed: 0.1, kind: 'cannon', power: 20, powder: 2, clonks: { powder: 4, power: 18 } },
+    burned: { file: 'vehicles/ArtilleryCannon.png', mass: 150, float: 0, blastIncinerate: 0, contactIncinerate: 0 },
+  },
+  // Cannon3.c4d (CTW7): fends off balloons and blimps, turns fast, shoots two arrows at a time.
+  antiAir: {
+    id: 'antiAir',
+    name: 'Anti-air cannon',
+    value: 25,
+    rebuy: true,
+    mass: 80,
+    width: 17,
+    height: 10,
+    offset: { x: -8, y: -5 },
+    vertices: vtx([-7, -7, 6, 6], [5, -5, 5, -5], [CNAT.Bottom | CNAT.Left, CNAT.Top | CNAT.Left, CNAT.Bottom | CNAT.Right, CNAT.Top | CNAT.Right], 40),
+    float: 0,
+    floatSpeed: 0,
+    noPushEnter: false,
+    grabbed: 1,
+    contactIncinerate: 0,
+    blastIncinerate: 0,
+    graphic: { file: 'vehicles/AntiAirCannon.png', facet: { x: 0, y: 0, w: 17, h: 10 }, sheet: [81, 64] },
+    picture: { x: 17, y: 0, w: 64, h: 64 },
+    mount: { file: 'vehicles/AntiAirCannonAttached.png', size: 20, speed: 0.6, kind: 'arrows', power: 15, powder: 0 },
+    burned: { file: 'vehicles/AntiAirCannon.png', mass: 80, float: 0, blastIncinerate: 0, contactIncinerate: 0 },
   },
 };
 
@@ -528,6 +595,11 @@ export class Vehicle extends GameObject {
   subTurnEnd: Dir | null = null;
   /** A bridge segment anchored in the ground (is_locked). */
   locked = false;
+  /** A cannon tower's gun mounted on its tower (the ATTACH procedure): it turns there, `r` degrees from straight up. */
+  mountedOn: Structure | null = null;
+  r = 0;
+  /** Degrees a tick it's turning (-1 left, 1 right, 0 still, times its speed). */
+  turning: -1 | 0 | 1 = 0;
 
   constructor(
     readonly def: VehicleDef,
