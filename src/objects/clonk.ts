@@ -166,7 +166,7 @@ export class Clonk extends GameObject {
   energy = CLONK.energy;
   alive = true;
   /** The building the clonk is inside, if any. Contained clonks are hidden and don't move. */
-  contained: Structure | null = null;
+  contained: Structure | Vehicle | null = null;
   /** Selected item of the open building menu, or null when it's closed. */
   menu: number | null = null;
   /** Which building menu is open: buy (C4MN_Buy), sell (C4MN_Sell) or get something out (C4MN_Get). */

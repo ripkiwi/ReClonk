@@ -40,6 +40,22 @@ export class Item extends GameObject {
   laid = false;
   /** Ticks before a carried snake can bite again. */
   biteDelay = 0;
+  /** Arrows in a pack (PackCount). */
+  count = 1;
+  /** How much liquid is in a barrel, in pixels (iFillLevel). */
+  fill = 0;
+  /** An arrow shot from a crossbow, still in flight (its Shot action): it hits what lives on its way. */
+  shot = false;
+  /** An explosive arrow that was shot: it blows up when it lands (Armed). */
+  armed = false;
+  /** Where a shot arrow was last tick: it hits whatever is on the line from there (InFlight). */
+  lastX = 0;
+  lastY = 0;
+  /** A shot arrow doesn't hit the clonk who shot it for a few ticks (IntNoArrowHit). */
+  noHit: { id: number; until: number } | null = null;
+  /** A launched torpedo swims this way while it's in a liquid (its Swim action), and for how long it has. */
+  swimDir: -1 | 0 | 1 = 0;
+  swimTime = 0;
 
   constructor(
     readonly def: ItemDef,
@@ -89,7 +105,12 @@ export class Item extends GameObject {
       return false;
     }
     const g = land.gravity;
-    if (this.inLiquid(land)) {
+    if (this.swimDir && this.def.swim && this.inLiquid(land)) {
+      // A torpedo swims straight on (the SWIM procedure, SwimAccel 0.2), level after 25 ticks.
+      const lim = this.def.swim;
+      this.xdir = Math.max(-lim, Math.min(lim, this.xdir + this.swimDir * 0.2));
+      if (++this.swimTime > 25) this.ydir = 0;
+    } else if (this.inLiquid(land)) {
       // Sink slowly through liquids; light things like flags bob up instead (Float).
       this.ydir = this.def.float ? Math.max(this.ydir - g, -1) : Math.min(this.ydir + g, 1);
       this.xdir *= 0.9;

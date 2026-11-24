@@ -16,6 +16,7 @@ import { blastIgnite, igniteOil, stepLiquids, type OilFlame } from './liquids';
 import { buildStep, construct, grabOrBuild, grabTarget, pushControl, siteProblem, stepElevator, stepGate } from './buildings';
 import { Vehicle, VEHICLES, type VehicleId } from '../objects/vehicle';
 import { grabVehicle, stepVehicle, takeOut, vehicleAt, vehicleBottom, vehicleControl } from './vehicles';
+import { collectArrow, enterVehicle, ridingControl, siegeItemHit, stepArrows, type SiegeSound } from './siege';
 import { MagicState, openSpellMenu, spellList, startSpell, stepMagic, stepSorcerer, type SpellId } from './magic';
 import { stepRules, takeFlag, type RuleId } from './rules';
 import { breakApart, bridgeMenuControl, shockwaveHits, checkBridgeMenu, digOut, DIG_OUT_INTERVAL, openBridgeMenu, stepMaterialItems } from './materialItems';
@@ -95,7 +96,9 @@ export type WorldEvent =
   | { type: 'itemBreak'; item: Item; tick: number }
 
   /** An environment object made a sound: birds, cicadas or the owl (anywhere, x -1), a big rock where it is. */
-  | { type: 'environment'; sound: EnvSound; x: number; y: number; tick: number };
+  | { type: 'environment'; sound: EnvSound; x: number; y: number; tick: number }
+  /** A siege weapon or one of the later vehicles made a sound, maybe with a puff of smoke (smoke > 0). */
+  | { type: 'siege'; sound: SiegeSound; x: number; y: number; smoke: number; tick: number };
 
 /** Extra experience on top of the original's "1 per 5 commands", so promotions come at a fun pace. */
 export const EXPERIENCE = {
@@ -513,7 +516,7 @@ export class World {
       if (c.buildMenu !== null && (c.action.procedure !== 'walk' || c.carrying?.def.id !== 'conkit')) c.buildMenu = null;
       if (c.spellMenu !== null && !c.readyToMagic) c.spellMenu = null;
       stepSorcerer(this, c);
-      const got = c.tryCollect(this.items, this.land) ?? takeFlag(this, c) ?? collectAnimal(this, c);
+      const got = collectArrow(this, c) ?? c.tryCollect(this.items, this.land) ?? takeFlag(this, c) ?? collectAnimal(this, c);
       if (got) {
         collected(got);
         this.events.push({ type: 'collect', clonk: c, item: got, tick: this.tick });
@@ -552,7 +555,7 @@ export class World {
     }
     // The guard tower's door has shut behind them: out onto the roof (DoorClosed).
     for (const c of this.clonks) {
-      const s = c.contained;
+      const s = c.contained instanceof Structure ? c.contained : null;
       if (s?.def.exitTo && s.door === 0) this.exitTo(c, s.x + s.def.exitTo.x, s.y + s.def.exitTo.y);
     }
 
@@ -568,6 +571,7 @@ export class World {
         continue;
       }
       const hit = item.tick(this.land);
+      if (hit && siegeItemHit(this, item)) continue;
       if (hit && !item.def.explodeOnHit) this.events.push({ type: 'itemHit', item, tick: this.tick });
       // A T-flint lights on impact (TFlint.c4d Hit).
       if (hit && item.light()) this.events.push({ type: 'fuse', x: item.x, y: item.y, tick: this.tick });
@@ -583,6 +587,7 @@ export class World {
         if (by && freed && by.doExperience(freed * EXPERIENCE.blastedLoose)) this.promoted(by);
       }
     }
+    stepArrows(this);
     stepMaterialItems(this);
     if (this.items.some((i) => i.removed)) this.items = this.items.filter((i) => !i.removed);
     this.objectHits();
@@ -626,7 +631,10 @@ export class World {
     v.contents.length = 0;
     v.mask?.remove(this.land);
     v.mask = null;
-    for (const c of this.clonks) if (c.vehicle === v) c.letGo();
+    for (const c of this.clonks) {
+      if (c.vehicle === v) c.letGo();
+      if (c.contained === v) this.exit(c);
+    }
   }
 
   /** The clonk that threw an item last, if it's still around. */
@@ -652,7 +660,8 @@ export class World {
    */
   private objectHits(): void {
     for (const item of this.items) {
-      if (item.container || item.removed) continue;
+      // Shot arrows hit on their own (stepArrows).
+      if (item.container || item.removed || item.shot) continue;
       if (Math.abs(item.xdir) + Math.abs(item.ydir) < HIT_SPEED_2) continue;
       for (const c of this.clonks) {
         if (!c.alive || c.contained) continue;
@@ -1058,7 +1067,7 @@ export class World {
   /** Up in a doorway goes in (ObjectComUp: enter beats jumping). */
   private tryEnter(c: Clonk): boolean {
     const s = this.structureAt(c);
-    if (!s) return false;
+    if (!s) return enterVehicle(this, c);
     this.enter(c, s);
     return true;
   }
@@ -1094,8 +1103,8 @@ export class World {
     return true;
   }
 
-  /** Keep a thing in a building. */
-  store(s: Structure, it: Item): void {
+  /** Keep a thing in a building, a wagon or a submarine. */
+  store(s: Structure | Vehicle, it: Item): void {
     it.container = s;
     it.xdir = it.ydir = it.rdir = 0;
     it.setPosition(s.x, s.y);
@@ -1466,7 +1475,9 @@ export class World {
    */
   private containedControl(c: Clonk, ctl: ControlState): void {
     if (c.menu !== null) return this.buildingMenuControl(c, ctl);
-    const s = c.contained!;
+    // In a wagon or a submarine: its own controls (ContainedLeft, ContainedDig...).
+    if (c.contained instanceof Vehicle) return ridingControl(this, c, ctl);
+    const s = c.contained as Structure;
     const own = this.inOwnBase(c);
     if (ctl.pressedDown) this.exit(c);
     else if (ctl.pressedUp) {
@@ -1488,6 +1499,7 @@ export class World {
     const s = c.contained!;
     this.release(item);
     this.store(s, item);
+    if (!(s instanceof Structure)) return;
     const sold = this.autoSell(s);
     if (sold.count) this.say(c.owner, `Sold ${item.def.name} for ${sold.earned} gold`);
   }
@@ -1505,7 +1517,7 @@ export class World {
   menuList(c: Clonk): MenuEntry[] {
     const s = c.contained;
     if (!s || c.menu === null) return [];
-    if (c.menuKind === 'buy') {
+    if (c.menuKind === 'buy' && s instanceof Structure) {
       const p = this.players.get(s.base);
       return this.shopList(s.base).map((id) => ({ id, count: p?.stock[id] ?? 0, value: shopEntry(id).value }));
     }
@@ -1569,7 +1581,7 @@ export class World {
    * whoever bought it, not whoever carries it: a stolen flag is for selling.
    */
   private plantFlag(c: Clonk, flag: Item): void {
-    const s = c.contained!;
+    const s = c.contained as Structure;
     if (!s.def.canBeBase || !s.complete) return this.say(c.owner, 'No flag can go on this building');
     if (s.hasFlag) return this.say(c.owner, 'There is a flag here already');
     if (!this.players.has(flag.owner)) return this.say(c.owner, 'Nobody owns this flag: sell it');
@@ -1676,7 +1688,7 @@ export class World {
    */
   private healInBase(c: Clonk): void {
     const s = c.contained;
-    if (!s || !c.alive || s.base !== c.owner || c.energy >= c.maxEnergy) return;
+    if (!(s instanceof Structure) || !c.alive || s.base !== c.owner || c.energy >= c.maxEnergy) return;
     if (s.energy <= 0) {
       const p = this.players.get(s.base);
       if (p && p.wealth >= BASE.regenerateEnergyPrice) {

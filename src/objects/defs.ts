@@ -68,12 +68,36 @@ export interface ItemDef {
   eggInNest?: boolean;
   /** A zap nest: when it hits the ground it breaks and lets out this many zaps (ZapNest.c4d Hit, BreakUp(28)). */
   swarm?: number;
+  /**
+   * An arrow (Arrow.c4d and its kinds): shot from a crossbow it hurts what
+   * lives for `strength` (plus up to `random` less one) times its speed / 50.
+   * One time in `tumble` the target tumbles. A normal arrow stops in what it
+   * hits; a fire arrow burns; an explosive one blows up where it lands.
+   * Picked up, it goes into a `pack`.
+   */
+  arrow?: { pack: ItemId; strength: number; random: number; tumble: number; stops: boolean; burns?: boolean; explode?: number };
+  /** A pack of up to `max` arrows of this kind (ArrowPack.c4d): a crossbow takes them out one by one. */
+  pack?: { arrow: ItemId; max: number };
+  /** Swims along at this speed once a submarine launches it (Torpedo.c4d, Physical Swim). */
+  swim?: number;
+  /** Bursts into this many flames where it lands (FireBomb.c4d Hit: CastObjects DFLM). */
+  flames?: number;
+  /**
+   * A barrel (Barrel.c4d): empty, it fills with a liquid it's in, up to 200
+   * pixels; full, it pours out where it lands or when it's used.
+   */
+  barrel?: { mat: Mat | null };
 }
 
 const itemVertex: Vertex[] = [{ x: 0, y: 0, cnat: CNAT.None, friction: 50 }];
 const itemFacet: Facet = { x: 0, y: 0, w: 6, h: 6 };
 /** The 64x64 picture under the 6x6 in-game frame of most items. */
 const picture6: Facet = { x: 0, y: 6, w: 64, h: 64 };
+/** Arrows and arrow packs: 8x7, pointing up. */
+const arrowFacet: Facet = { x: 0, y: 0, w: 8, h: 7 };
+/** Barrels: 8x10, with the picture beside it. */
+const barrelFacet: Facet = { x: 0, y: 0, w: 8, h: 10 };
+const barrelPicture: Facet = { x: 8, y: 0, w: 60, h: 80 };
 
 export const ITEMS: Record<ItemId, ItemDef> = {
   rock: { id: 'rock', name: 'Rock', value: 1, rebuy: true, mass: 10, vertices: itemVertex, graphic: { file: 'items/Rock.png', facet: itemFacet }, picture: picture6 },
@@ -298,6 +322,70 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   zapNest: {
     id: 'zapNest', name: 'Zap nest', value: 5, rebuy: true, mass: 3, vertices: [{ x: 0, y: 1, cnat: CNAT.None, friction: 100 }], swarm: 28,
     graphic: { file: 'animals/ZapNest.png', facet: { x: 0, y: 0, w: 6, h: 6 } }, picture: { x: 6, y: 0, w: 64, h: 64 },
+  },
+  // Arrow.c4d (ARRW): shot from a crossbow. Picked up, it goes into a pack.
+  arrow: {
+    id: 'arrow', name: 'Arrow', value: 2, rebuy: true, mass: 3, vertices: itemVertex, float: true,
+    arrow: { pack: 'arrows', strength: 10, random: 0, tumble: 2, stops: true },
+    graphic: { file: 'items/Arrow.png', facet: arrowFacet }, picture: { x: 0, y: 7, w: 64, h: 64 },
+  },
+  // FireArrow.c4d (FARW): it burns as it flies, and may set what it hits alight.
+  fireArrow: {
+    id: 'fireArrow', name: 'Fire arrow', value: 3, rebuy: true, mass: 3, vertices: itemVertex, float: true, contactIncinerate: 1, blastIncinerate: 1,
+    arrow: { pack: 'fireArrows', strength: 2, random: 2, tumble: 3, stops: true, burns: true },
+    graphic: { file: 'items/FireArrow.png', facet: arrowFacet }, picture: { x: 0, y: 7, w: 64, h: 64 },
+  },
+  // ExplosiveArrow.c4d (XARW): blows up where it lands, once it has been shot.
+  explosiveArrow: {
+    id: 'explosiveArrow', name: 'Explosive arrow', value: 3, rebuy: true, mass: 3, vertices: itemVertex, float: true,
+    arrow: { pack: 'explosiveArrows', strength: 2, random: 2, tumble: 2, stops: false, explode: 10 },
+    graphic: { file: 'items/ExplosiveArrow.png', facet: arrowFacet }, picture: { x: 0, y: 7, w: 64, h: 64 },
+  },
+  // ArrowPack.c4d (ARWP) and its kinds: ten arrows.
+  arrows: {
+    id: 'arrows', name: 'Arrows', value: 20, rebuy: true, mass: 15, vertices: itemVertex, pack: { arrow: 'arrow', max: 10 },
+    graphic: { file: 'items/ArrowPack.png', facet: arrowFacet }, picture: { x: 0, y: 8, w: 64, h: 64 },
+  },
+  fireArrows: {
+    id: 'fireArrows', name: 'Fire arrows', value: 30, rebuy: true, mass: 25, vertices: itemVertex, pack: { arrow: 'fireArrow', max: 10 },
+    graphic: { file: 'items/FireArrowPack.png', facet: arrowFacet }, picture: { x: 0, y: 8, w: 64, h: 64 },
+  },
+  explosiveArrows: {
+    id: 'explosiveArrows', name: 'Explosive arrows', value: 35, rebuy: true, mass: 30, vertices: itemVertex, pack: { arrow: 'explosiveArrow', max: 10 },
+    graphic: { file: 'items/ExplosiveArrowPack.png', facet: arrowFacet }, picture: { x: 0, y: 8, w: 64, h: 64 },
+  },
+  // Torpedo.c4d (TRP1): a submarine launches it; it swims straight on and blows up on what it hits.
+  torpedo: {
+    id: 'torpedo', name: 'Torpedo', value: 15, rebuy: true, mass: 25, explodeOnHit: 30, swim: 4,
+    vertices: [{ x: -12, y: 1, cnat: CNAT.None, friction: 100 }, { x: 12, y: 1, cnat: CNAT.None, friction: 100 }],
+    graphic: { file: 'items/Torpedo.png', facet: { x: 0, y: 0, w: 32, h: 9 } }, picture: { x: 0, y: 9, w: 64, h: 64 },
+  },
+  // FireBomb.c4d (FBMP): bursts into flames where it lands.
+  firebomb: {
+    id: 'firebomb', name: 'Firebomb', value: 25, rebuy: true, mass: 12, vertices: [{ x: 0, y: 1, cnat: CNAT.None, friction: 20 }], flames: 20,
+    graphic: { file: 'items/FireBomb.png', facet: itemFacet }, picture: picture6,
+  },
+  // Barrel.c4d (BARL) and the full ones: water, oil, acid and lava.
+  barrel: {
+    id: 'barrel', name: 'Barrel', value: 8, rebuy: true, mass: 20, vertices: itemVertex, barrel: { mat: null },
+    graphic: { file: 'items/Barrel.png', facet: barrelFacet }, picture: barrelPicture,
+  },
+  waterBarrel: {
+    id: 'waterBarrel', name: 'Water barrel', value: 8, rebuy: true, mass: 30, vertices: itemVertex, barrel: { mat: Mat.Water },
+    graphic: { file: 'items/WaterBarrel.png', facet: barrelFacet }, picture: barrelPicture,
+  },
+  // OilBarrel.c4d: blows up when it takes damage (Damage: Explode 15, flames and the empty barrel fly).
+  oilBarrel: {
+    id: 'oilBarrel', name: 'Oil barrel', value: 25, rebuy: true, mass: 30, vertices: itemVertex, barrel: { mat: Mat.Oil }, blastIncinerate: 1, explodeOnDamage: 15,
+    graphic: { file: 'items/OilBarrel.png', facet: { x: 0, y: 0, w: 8, h: 12 } }, picture: barrelPicture,
+  },
+  acidBarrel: {
+    id: 'acidBarrel', name: 'Acid barrel', value: 10, rebuy: true, mass: 30, vertices: itemVertex, barrel: { mat: Mat.Acid },
+    graphic: { file: 'items/AcidBarrel.png', facet: barrelFacet }, picture: barrelPicture,
+  },
+  lavaBarrel: {
+    id: 'lavaBarrel', name: 'Lava barrel', value: 10, rebuy: true, mass: 30, vertices: itemVertex, barrel: { mat: Mat.Lava },
+    graphic: { file: 'items/LavaBarrel.png', facet: barrelFacet }, picture: barrelPicture,
   },
 };
 
