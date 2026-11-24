@@ -136,6 +136,10 @@ export class Structure {
   gone = false;
   /** What's kept inside: put in by clonks, emptied out of a lorry, or bought (the original's Contents). */
   contents: Item[] = [];
+  /** A windmill's wing: its angle in degrees, turned by the wind. */
+  wingR = 0;
+  /** The building that put this one up with itself (the castle of its small tower). */
+  annexOf: Structure | null = null;
 
   constructor(
     readonly def: StructureDef,
@@ -179,6 +183,14 @@ export class Structure {
     const dx = px - this.x;
     const dy = py - this.y;
     return dx >= e.x && dx < e.x + e.w && dy >= e.y && dy < e.y + e.h;
+  }
+
+  /** The roof or platform way in (hatch) at a point, if the building is finished. */
+  hatchAt(px: number, py: number): NonNullable<StructureDef['hatches']>[number] | undefined {
+    if (!this.complete) return undefined;
+    const dx = px - this.x;
+    const dy = py - this.y;
+    return this.def.hatches?.find((e) => dx >= e.x && dx < e.x + e.w && dy >= e.y && dy < e.y + e.h);
   }
 
   /** Where a clonk stands when it comes out: in the doorway, feet on the ground. */

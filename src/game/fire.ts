@@ -71,7 +71,7 @@ export function contactIncinerate(o: Burnable): number {
   if (o instanceof Item) return o.def.contactIncinerate ?? 0;
   if (o instanceof Plant) return o.def.contactIncinerate;
   if (o instanceof Vehicle) return o.burned ? o.def.burned.contactIncinerate : o.def.contactIncinerate;
-  return (o.burned ? o.def.burned.contactIncinerate : o.def.contactIncinerate) ?? 0;
+  return (o.burned ? o.def.burned?.contactIncinerate : o.def.contactIncinerate) ?? 0;
 }
 
 /** Blast damage it takes to set it alight (0: blasts don't). */
@@ -80,7 +80,7 @@ export function blastIncinerate(o: Burnable): number {
   if (o instanceof Item) return o.def.blastIncinerate ?? 0;
   if (o instanceof Plant) return o.def.blastIncinerate;
   if (o instanceof Vehicle) return o.burned ? o.def.burned.blastIncinerate : o.def.blastIncinerate;
-  return o.burned ? o.def.burned.blastIncinerate : o.def.blastIncinerate;
+  return (o.burned ? o.def.burned?.blastIncinerate : o.def.blastIncinerate) ?? 0;
 }
 
 /** Its shape, for the whoosh: things over 500 square pixels catch fire loudly. */
@@ -106,7 +106,7 @@ function inWater(world: World, o: Burnable): boolean {
  * gates are gone. Returns false if it didn't catch fire.
  */
 export function incinerate(world: World, o: Burnable, by: Clonk | null, blasted = false): boolean {
-  if (o.fire || o.removed || ((o instanceof Clonk || o instanceof Animal) && !o.alive) || (o instanceof Structure && o.gone)) return false;
+  if (o.fire || o.removed || ((o instanceof Clonk || o instanceof Animal) && !o.alive) || (o instanceof Structure && (o.gone || !o.def.burned))) return false;
   const wet = inWater(world, o);
   if (wet && !blasted) return false;
   burnTo(world, o);

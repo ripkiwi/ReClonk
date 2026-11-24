@@ -51,7 +51,7 @@ describe('Construction kits', () => {
     const c = withKit(world);
     tap(world, USE);
     expect(c.buildMenu).toBe(0);
-    tap(world, RIGHT);
+    for (let i = 0; i < BUILD_PLANS.indexOf('elevator'); i++) tap(world, RIGHT);
     expect(BUILD_PLANS[c.buildMenu!]).toBe('elevator');
     tap(world, { pressedThrow: true });
     expect(c.buildMenu).toBeNull();

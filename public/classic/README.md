@@ -25,6 +25,12 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `structures/Tower2.png` | `Objects.c4d/Structures.c4d/Tower2.c4d/Graphics.png` (guard tower) |
 | `structures/GateLeft.png`, `structures/GateRight.png` | `Objects.c4d/Structures.c4d/Tower2.c4d/GateLeft.c4d/Graphics.png`, `GateRight.c4d/Graphics.png` |
 | `structures/Basement48.png` | `Objects.c4d/Structures.c4d/Basements.c4d/Basement48.c4d/Graphics.png` (the guard tower's stone basement) |
+| `structures/Hut.png`, `Hut3.png`, `Igloo.png`, `Castle1.png`, `Castle2.png`, `Castle3.png`, `Tower1.png`, `WizardTower.png`, `Sawmill.png`, `Foundry.png`, `Workshop.png`, `Chemical.png`, `Research.png`, `PowerPlant.png`, `Windmill.png`, `Pump.png`, `Derrick.png`, `Anvil.png`, `Idol.png`, `GoldIdol.png`, `Signal.png` | `Objects.c4d/Structures.c4d/<Hut, Hut3, Igloo, Castle1, Castle2, Castle3, Tower1, WizardTower, Sawmill, Foundry, Workshop, Chemical, Research, PowerPlant, Windmill, Pump, Derrick, Anvil, Idol, Goldidol, Signal>.c4d/Graphics.png` |
+| `structures/<name>Burned.png` | `Objects.c4d/Structures.c4d/<building>.c4d/Burned.c4d/Graphics.png` (the burned ruins) |
+| `structures/WindmillWing.png`, `WindmillWingBurned.png` | `Objects.c4d/Structures.c4d/Windmill.c4d/Wing.c4d/Graphics.png`, `Burned.c4d/Graphics.png` |
+| `structures/CastleEntrance.png` | `Objects.c4d/Structures.c4d/Castle3.c4d/Entrance.c4d/Graphics.png` (the railing over a way down) |
+| `structures/Basement26.png`, `Basement42.png`, `Basement68.png`, `Basement72.png`, `Basement80.png`, `Basement90.png` | `Objects.c4d/Structures.c4d/Basements.c4d/Basement<n>.c4d/Graphics.png` |
+| `structures/BasementDerrick.png` | `Objects.c4d/Structures.c4d/Derrick.c4d/Basement.c4d/Graphics.png` |
 | `items/Conkit.png` | `Objects.c4d/Items.c4d/Equipment.c4d/Conkit.c4d/Graphics.png` (construction kit) |
 | `items/Meteor.png` | `Objects.c4d/Effects.c4d/Meteor.c4d/Graphics.png` (meteorite) |
 | `items/TFlint.png`, `items/SuperFlint.png`, `items/SuperTFlint.png`, `items/TeraFlint.png` | `Objects.c4d/Items.c4d/Weapons.c4d/TFlint.c4d`, `SuperFlint.c4d`, `SuperTFlint.c4d`, `TeraFlint.c4d` `/Graphics.png` |

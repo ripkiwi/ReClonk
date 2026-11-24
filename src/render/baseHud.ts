@@ -5,7 +5,7 @@ import { groupItems, isCrewId, isVehicleId, shopEntry, type ShopId, type World }
 import type { Clonk, ControlStyle } from '../objects/clonk';
 import { keyName } from '../input/bindings';
 import { LAYOUTS, type KeyLayout } from '../input/keyboard';
-import { BUILD_PLANS, CLONK, CLONK_KINDS, ITEMS, MAGIC_UNIT, STRUCTURES } from '../objects/defs';
+import { CLONK, CLONK_KINDS, ITEMS, MAGIC_UNIT, STRUCTURES } from '../objects/defs';
 import { DESCRIPTIONS } from '../objects/descriptions';
 import { BRIDGE_MENU, BRIDGE_MENU_GRAPHICS } from '../game/materialItems';
 import type { Structure } from '../objects/structure';
@@ -238,7 +238,7 @@ export class BaseHud {
     return {
       symbol: () => sheetPicture(this.assets.items[kit.graphic.file], kit.picture, SYMBOL),
       caption: 'Construction',
-      items: BUILD_PLANS.map((id) => {
+      items: this.world.plans().map((id) => {
         const def = STRUCTURES[id];
         return {
           picture: () => sheetPicture(this.assets.items[def.graphic.file], def.graphic.picture, SYMBOL),
