@@ -192,7 +192,7 @@ function punch(world: World, a: Animal, p: Clonk | Animal, points: number): void
 }
 
 /** Animal.c4d Reproduction: grown up, the right action, and not too many of its kind around. */
-function reproduce(world: World, a: Animal): void {
+export function reproduce(world: World, a: Animal): void {
   if (!a.alive || a.con < 100) return;
   const id = a.def.id;
   if ((id === 'fish' || id === 'shark') && a.action.name !== 'Swim') return;

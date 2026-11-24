@@ -84,7 +84,7 @@ function look(o: Burning): Look | null {
   }
   if (o instanceof Plant) {
     const c = o.center;
-    const b = o.def.burned;
+    const b = o.def.burned ?? { ...o.def, fireTop: 0 };
     return { mode: 'living', x: c.x, y: c.y, w: b.width, h: b.height, fireTop: b.fireTop, con: o.scale * 100, stretch: true, r: o.r, xdir: 0, ydir: 0 };
   }
   if (o instanceof Vehicle) {

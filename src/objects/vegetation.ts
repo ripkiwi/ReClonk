@@ -1,6 +1,7 @@
-// Trees, bushes and grass, from the original Clonk Rage content
+// Trees, bushes, palms, cacti, seaweed and grass, from the original Clonk Rage content
 // (Objects.c4d/Vegetation.c4d: Tree.c4d's tree control script, Tree1-4.c4d,
-// Bush1.c4d, Grass.c4d; Environment.c4d/Grass.c4d) and engine
+// Bush1.c4d, Palm1-2.c4d, Cactus.c4d, Cactus2.c4d, Seaweed1-2.c4d, Grass.c4d;
+// Environment.c4d/Grass.c4d) and engine
 // (C4Game::PlaceVegetation, C4Object::ExecLife growth, C4Object::Chop).
 // See licenses/clonk_engine_license.txt.
 
@@ -10,7 +11,7 @@ import { LIQUID, MATERIALS, Mat } from '../landscape/materials';
 import type { Facet } from './defs';
 import type { FireState } from './fire';
 
-export type PlantId = 'tree1' | 'tree2' | 'tree3' | 'tree4' | 'bush';
+export type PlantId = 'tree1' | 'tree2' | 'tree3' | 'tree4' | 'bush' | 'palm1' | 'palm2' | 'cactus' | 'cactus2' | 'seaweed1' | 'seaweed2';
 
 /** A stretch of frames in a plant's graphics strip, like an ActMap action. */
 export interface AnimSegment {
@@ -21,6 +22,8 @@ export interface AnimSegment {
   delay: number;
   /** Play from the last frame to the first. */
   reverse?: boolean;
+  /** Row of the strip, if not the first (Palm2's Storm). */
+  row?: number;
 }
 
 export interface PlantDef {
@@ -45,6 +48,19 @@ export interface PlantDef {
   still: AnimSegment[];
   /** Swaying in a strong wind (Breeze), as a loop. */
   breeze: AnimSegment | null;
+  /** Bending in a storm (Palm2's Storm: wind over 74 plus its threshold). */
+  storm?: AnimSegment;
+  /** Where it grows (DefCore Placement): on soil, or on the bottom of a lake. */
+  placement: 'surface' | 'liquid';
+  /** A clonk can fell it and chop it into wood (DefCore Chop). */
+  chop: boolean;
+  /** Seaweed wiggles under water and hangs limp out of it (Seaweed1.c4d Wiggle and Dry). */
+  seaweed?: { wiggle: AnimSegment; dry: AnimSegment };
+  /**
+   * How it spreads: like a tree (Tree.c4d Seed, every 350 ticks one time in
+   * 500), or like a cactus (Cactus.c4d Life, every 35 ticks one time in 20000).
+   */
+  spread: 'tree' | 'cactus' | null;
   /** Its picture for the scenario settings (DefCore Picture), and the size of the whole file. */
   picture: Facet;
   sheet: [number, number];
@@ -54,9 +70,10 @@ export interface PlantDef {
   blastIncinerate: number;
   /**
    * What it turns into when it catches fire (DefCore BurnTo, the Burned.c4d
-   * dead tree): one picture, a bit less wood, and it doesn't grow.
+   * dead tree): one picture, a bit less wood, and it doesn't grow. Cacti and
+   * seaweed don't burn.
    */
-  burned: { file: string; width: number; height: number; offset: { x: number; y: number }; wood: number; fireTop: number };
+  burned: { file: string; width: number; height: number; offset: { x: number; y: number }; wood: number; fireTop: number } | null;
 }
 
 /** Con of a fully grown plant (FullCon). */
@@ -81,6 +98,8 @@ export const TREE = {
   chopDamage: 10,
   /** Small trees are as hard to fell as a 30% tree. */
   minStrengthCon: 30,
+  /** A cactus spreads one time in this many every 35 ticks (Cactus.c4d Life)... */
+  cactusRate: 20000,
   /** Placement tries for each tree (PlaceVegetation). */
   placeTries: 20,
   /** Trees only come up this far from the top and bottom of the map. */
@@ -103,7 +122,7 @@ export const PLANTS: Record<PlantId, PlantDef> = {
     ],
     breeze: rows(40, 2),
     picture: { x: 0, y: 0, w: 73, h: 71 }, sheet: [2920, 71],
-    contactIncinerate: 2, blastIncinerate: 10,
+    contactIncinerate: 2, blastIncinerate: 10, placement: 'surface', chop: true, spread: 'tree',
     burned: { file: 'vegetation/Tree1Burned.png', width: 73, height: 71, offset: { x: -36, y: -36 }, wood: 5, fireTop: 10 },
   },
   // Tree2.c4d: a conifer.
@@ -112,7 +131,7 @@ export const PLANTS: Record<PlantId, PlantDef> = {
     growth: 2, value: 3, wood: 5, strength: 150, file: 'vegetation/Tree2.png',
     still: [rows(40, 10)], breeze: rows(40, 2),
     picture: { x: 0, y: 0, w: 40, h: 56 }, sheet: [1600, 56],
-    contactIncinerate: 2, blastIncinerate: 10,
+    contactIncinerate: 2, blastIncinerate: 10, placement: 'surface', chop: true, spread: 'tree',
     burned: { file: 'vegetation/Tree2Burned.png', width: 40, height: 56, offset: { x: -20, y: -28 }, wood: 3, fireTop: 20 },
   },
   // Tree3.c4d: a tall leafy tree.
@@ -121,7 +140,7 @@ export const PLANTS: Record<PlantId, PlantDef> = {
     growth: 2, value: 5, wood: 5, strength: 150, file: 'vegetation/Tree3.png',
     still: [rows(40, 10)], breeze: rows(40, 2),
     picture: { x: 0, y: 0, w: 52, h: 75 }, sheet: [2080, 75],
-    contactIncinerate: 2, blastIncinerate: 10,
+    contactIncinerate: 2, blastIncinerate: 10, placement: 'surface', chop: true, spread: 'tree',
     burned: { file: 'vegetation/Tree3Burned.png', width: 52, height: 75, offset: { x: -26, y: -37 }, wood: 3, fireTop: 40 },
   },
   // Tree4.c4d: a young tree.
@@ -130,7 +149,7 @@ export const PLANTS: Record<PlantId, PlantDef> = {
     growth: 2, value: 4, wood: 3, strength: 150, file: 'vegetation/Tree4.png',
     still: [rows(1, 50)], breeze: rows(20, 5),
     picture: { x: 0, y: 0, w: 40, h: 56 }, sheet: [800, 56],
-    contactIncinerate: 2, blastIncinerate: 10,
+    contactIncinerate: 2, blastIncinerate: 10, placement: 'surface', chop: true, spread: 'tree',
     burned: { file: 'vegetation/Tree4Burned.png', width: 40, height: 56, offset: { x: -20, y: -28 }, wood: 2, fireTop: 5 },
   },
   // Bush1.c4d: "a little something for the practised clonk".
@@ -139,12 +158,89 @@ export const PLANTS: Record<PlantId, PlantDef> = {
     growth: 4, value: 2, wood: 1, strength: 40, file: 'vegetation/Bush1.png',
     still: [rows(1, 50)], breeze: null,
     picture: { x: 0, y: 0, w: 41, h: 39 }, sheet: [42, 39],
-    contactIncinerate: 1, blastIncinerate: 10,
+    contactIncinerate: 1, blastIncinerate: 10, placement: 'surface', chop: true, spread: null,
     burned: { file: 'vegetation/Bush1Burned.png', width: 48, height: 39, offset: { x: -24, y: -19 }, wood: 1, fireTop: 5 },
+  },
+  // Palm1.c4d: a small palm, a tree in all else (it includes the tree control script).
+  palm1: {
+    id: 'palm1', name: 'Palm', width: 40, height: 50, offset: { x: -20, y: -25 }, root: { x: -2, y: 20 },
+    growth: 2, value: 4, wood: 3, strength: 150, file: 'vegetation/Palm1.png',
+    still: [rows(1, 50)], breeze: rows(20, 5),
+    picture: { x: 0, y: 0, w: 40, h: 50 }, sheet: [800, 50],
+    contactIncinerate: 2, blastIncinerate: 10, placement: 'surface', chop: true, spread: 'tree',
+    burned: { file: 'vegetation/Palm1Burned.png', width: 40, height: 50, offset: { x: -20, y: -25 }, wood: 2, fireTop: 10 },
+  },
+  // Palm2.c4d: a tall palm, a little easier to fell (TreeStrength 100), that bends in a storm.
+  palm2: {
+    id: 'palm2', name: 'Tall palm', width: 48, height: 65, offset: { x: -20, y: -32 }, root: { x: 2, y: 23 },
+    growth: 3, value: 4, wood: 2, strength: 100, file: 'vegetation/Palm2.png',
+    still: [rows(1, 50)], breeze: rows(20, 5), storm: { from: 0, length: 20, delay: 3, row: 1 },
+    picture: { x: 0, y: 0, w: 40, h: 65 }, sheet: [960, 130],
+    contactIncinerate: 2, blastIncinerate: 10, placement: 'surface', chop: true, spread: 'tree',
+    burned: { file: 'vegetation/Palm2Burned.png', width: 48, height: 65, offset: { x: -20, y: -32 }, wood: 1, fireTop: 40 },
+  },
+  // Cactus.c4d: can't be chopped and doesn't burn; now and then a new one comes up nearby.
+  cactus: {
+    id: 'cactus', name: 'Cactus', width: 16, height: 30, offset: { x: -8, y: -15 }, root: { x: 0, y: 5 },
+    growth: 4, value: 1, wood: 0, strength: 150, file: 'vegetation/Cactus.png',
+    still: [rows(1, 50)], breeze: null,
+    picture: { x: 0, y: 0, w: 16, h: 30 }, sheet: [16, 30],
+    contactIncinerate: 0, blastIncinerate: 0, placement: 'surface', chop: false, spread: 'cactus',
+    burned: null,
+  },
+  // Cactus2.c4d: a taller one.
+  cactus2: {
+    id: 'cactus2', name: 'Tall cactus', width: 16, height: 34, offset: { x: -8, y: -17 }, root: { x: 0, y: 3 },
+    growth: 3, value: 1, wood: 0, strength: 150, file: 'vegetation/Cactus2.png',
+    still: [rows(1, 50)], breeze: null,
+    picture: { x: 0, y: 0, w: 16, h: 34 }, sheet: [16, 34],
+    contactIncinerate: 0, blastIncinerate: 0, placement: 'surface', chop: false, spread: 'cactus',
+    burned: null,
+  },
+  // Seaweed1.c4d: grows on the bottom of lakes and wiggles in the water.
+  seaweed1: {
+    id: 'seaweed1', name: 'Seaweed', width: 16, height: 20, offset: { x: -8, y: -10 }, root: { x: 0, y: 9 },
+    growth: 0, value: 1, wood: 0, strength: 150, file: 'vegetation/Seaweed1.png',
+    still: [rows(8, 3)], breeze: null,
+    seaweed: { wiggle: rows(8, 3), dry: { from: 0, length: 1, delay: 1, row: 1 } },
+    picture: { x: 0, y: 0, w: 16, h: 20 }, sheet: [144, 40],
+    contactIncinerate: 0, blastIncinerate: 0, placement: 'liquid', chop: false, spread: null,
+    burned: null,
+  },
+  // Seaweed2.c4d: another kind.
+  seaweed2: {
+    id: 'seaweed2', name: 'Seaweed', width: 16, height: 20, offset: { x: -8, y: -10 }, root: { x: 0, y: 9 },
+    growth: 0, value: 1, wood: 0, strength: 150, file: 'vegetation/Seaweed2.png',
+    still: [rows(8, 3)], breeze: null,
+    seaweed: { wiggle: rows(8, 3), dry: { from: 0, length: 1, delay: 1, row: 1 } },
+    picture: { x: 0, y: 0, w: 16, h: 20 }, sheet: [144, 40],
+    contactIncinerate: 0, blastIncinerate: 0, placement: 'liquid', chop: false, spread: null,
+    burned: null,
   },
 };
 
 export const PLANT_IDS = Object.keys(PLANTS) as PlantId[];
+
+/** The dead trees a scenario can place as vegetation (Tree1-4.c4d/Burned.c4d, TRB1-4). */
+export type BurnedTreeId = 'burnedTree1' | 'burnedTree2' | 'burnedTree3' | 'burnedTree4';
+export const BURNED_TREES: Record<BurnedTreeId, PlantId> = { burnedTree1: 'tree1', burnedTree2: 'tree2', burnedTree3: 'tree3', burnedTree4: 'tree4' };
+
+/** Objects that are vegetation too (C4D_SelectVegetation): placed like plants, then they're ordinary loose objects. */
+export type VegetationItemId = 'shell' | 'bone' | 'skull';
+export const VEGETATION_ITEMS: Record<VegetationItemId, { width: number; height: number; placement: 'surface' | 'liquid' }> = {
+  // Shell.c4d (Placement=1): on the bottom of lakes.
+  shell: { width: 12, height: 8, placement: 'liquid' },
+  // Bone.c4d and Skull.c4d: on the ground (and buried in the earth, as InEarth objects).
+  bone: { width: 6, height: 6, placement: 'surface' },
+  skull: { width: 24, height: 14, placement: 'surface' },
+};
+
+/** Everything a scenario's Vegetation list can hold, in the settings' order. */
+export type VegetationId = PlantId | BurnedTreeId | VegetationItemId;
+export const VEGETATION_IDS: VegetationId[] = [
+  'tree1', 'tree2', 'tree3', 'tree4', 'bush', 'palm1', 'palm2', 'cactus', 'cactus2', 'seaweed1', 'seaweed2',
+  'burnedTree1', 'burnedTree2', 'burnedTree3', 'burnedTree4', 'shell', 'bone', 'skull',
+];
 
 /** Grass.c4d: three tufts of 40x30, placed every 12 pixels along earth (Environment.c4d/Grass.c4d). */
 export const GRASS = {
@@ -182,6 +278,10 @@ export class Plant {
   readonly timerOffset: number;
   /** Swaying in a strong wind. */
   breeze = false;
+  /** Bending in a storm (Palm2). */
+  storm = false;
+  /** Seaweed under water wiggles; out of it, it hangs limp. */
+  wet = true;
   /** Burned (or burning): a dead tree that doesn't grow (BurnTo). */
   burned = false;
   fire: FireState | null = null;
@@ -190,8 +290,8 @@ export class Plant {
     readonly def: PlantDef,
     /** Centre x. */
     readonly x: number,
-    /** Bottom edge of the shape: it stays put as the plant grows (StretchGrowth). */
-    readonly bottom: number,
+    /** Bottom edge of the shape: it stays put as the plant grows (StretchGrowth). Seaweed sinks down when its ground goes. */
+    public bottom: number,
     con: number,
     /** -1 or 1: drawn mirrored or not. */
     readonly dir: -1 | 1,
@@ -263,7 +363,7 @@ export class Plant {
 
   /** Wood in it at its size: a burned one has less (DefCore Components, cut down with its con). */
   get woodAtCon(): number {
-    return Math.trunc(((this.burned ? this.def.burned.wood : this.def.wood) * this.con) / FULL_CON);
+    return Math.trunc(((this.burned && this.def.burned ? this.def.burned.wood : this.def.wood) * this.con) / FULL_CON);
   }
 
   /** A point along the trunk, `t` from the root (0) to the top (1), tilted by `r`. */
@@ -326,20 +426,33 @@ export class Plant {
     return false;
   }
 
+  /** The loop it plays now: calm, breeze or storm; seaweed wiggling or dry. */
+  private get anim(): AnimSegment[] {
+    const d = this.def;
+    if (d.seaweed) return [this.wet ? d.seaweed.wiggle : d.seaweed.dry];
+    if (this.storm && d.storm) return [d.storm];
+    return this.breeze && d.breeze ? [d.breeze] : d.still;
+  }
+
   /** The animation frame for this tick: the calm or breeze loop. */
   frame(tick: number): number {
-    const segs = this.breeze && this.def.breeze ? [this.def.breeze] : this.def.still;
+    return this.cell(tick)[0];
+  }
+
+  /** Column and row of this tick's frame in the plant's strip. */
+  cell(tick: number): [number, number] {
+    const segs = this.anim;
     const total = segs.reduce((n, s) => n + s.length * s.delay, 0);
     let t = (tick + this.animOffset) % total;
     for (const s of segs) {
       const len = s.length * s.delay;
       if (t < len) {
         const i = Math.floor(t / s.delay);
-        return s.reverse ? s.from + s.length - 1 - i : s.from + i;
+        return [s.reverse ? s.from + s.length - 1 - i : s.from + i, s.row ?? 0];
       }
       t -= len;
     }
-    return 0;
+    return [0, 0];
   }
 }
 
@@ -387,10 +500,144 @@ function aboveSemiSolid(land: Landscape, x: number, y: number): number | null {
   return null;
 }
 
+function liquid(land: Landscape, x: number, y: number): boolean {
+  return land.isLiquid(x, y);
+}
+
+/** Is (x, y) free (not semi-solid) with something semi-solid right below? Moves y there (AboveSemiSolid). */
+function aboveSemiSolidAt(land: Landscape, x: number, y: number): number | null {
+  return aboveSemiSolid(land, x, y);
+}
+
+/**
+ * The middle of a stretch `width` columns wide where the surface is liquid
+ * `height` pixels deep, searching left and right from x (FindSurfaceLiquid).
+ * Returns the surface point.
+ */
+export function findSurfaceLiquid(land: Landscape, x: number, y: number, width: number, height: number): { x: number; y: number } | null {
+  let l = x;
+  let r = x;
+  let ly = y;
+  let ry = y;
+  let runL = 0;
+  let runR = 0;
+  const deep = (cx: number, cy: number): boolean => {
+    for (let i = 0; i < height; i++) if (!liquid(land, cx, cy + 1 + i)) return false;
+    return true;
+  };
+  for (; l > 0 || r < land.width; l--, r++) {
+    if (l > 0) {
+      const a = aboveSemiSolidAt(land, l, ly);
+      if (a === null) l = -1;
+      else {
+        ly = a;
+        runL = deep(l, ly) ? runL + 1 : 0;
+      }
+    }
+    if (r < land.width) {
+      const a = aboveSemiSolidAt(land, r, ry);
+      if (a === null) r = land.width;
+      else {
+        ry = a;
+        runR = deep(r, ry) ? runR + 1 : 0;
+      }
+    }
+    if (runL >= width) return { x: l + Math.trunc(runL / 2), y: aboveSemiSolid(land, l + Math.trunc(runL / 2), ly) ?? ly };
+    if (runR >= width) return { x: r - Math.trunc(runR / 2), y: aboveSemiSolid(land, r - Math.trunc(runR / 2), ry) ?? ry };
+  }
+  return null;
+}
+
+/** The middle of `height` liquid pixels in a row, searching up and down column x from y (FindLiquidHeight). */
+function liquidHeight(land: Landscape, x: number, y: number, height: number): number | null {
+  let up = y;
+  let down = y;
+  let runUp = 0;
+  let runDown = 0;
+  while (up >= 0 || down < land.height) {
+    if (up >= 0) {
+      if (liquid(land, x, up)) {
+        if (++runUp >= height) return up + Math.trunc(height / 2);
+      } else runUp = 0;
+    }
+    if (down + 1 < land.height) {
+      if (liquid(land, x, down)) {
+        if (++runDown >= height) return down - Math.trunc(height / 2);
+      } else runDown = 0;
+    }
+    up--;
+    down++;
+  }
+  return null;
+}
+
+/** Liquid `height` deep in `width` columns side by side, searching left and right from x (FindLiquid). */
+export function findLiquid(land: Landscape, x: number, y: number, width: number, height: number): { x: number; y: number } | null {
+  let runL = 0;
+  let runR = 0;
+  let ly = y;
+  let ry = y;
+  for (let l = x, r = x; l > 0 || r < land.width; l--, r++) {
+    if (l > 0) {
+      const h = liquidHeight(land, l, ly, height);
+      if (h !== null) {
+        ly = h;
+        runL++;
+      } else runL = 0;
+    }
+    if (r < land.width) {
+      const h = liquidHeight(land, r, ry, height);
+      if (h !== null) {
+        ry = h;
+        runR++;
+      } else runR = 0;
+    }
+    if (runL >= width) return { x: l + Math.trunc(runL / 2), y: ly };
+    if (runR >= width) return { x: r - Math.trunc(runR / 2), y: ry };
+  }
+  return null;
+}
+
+/** The nearest free or liquid pixel right above something solid, searching up and down from y (SemiAboveSolid). */
+export function semiAboveSolid(land: Landscape, x: number, y: number): number | null {
+  let up = y;
+  let down = y;
+  while (up >= 0 || down < land.height) {
+    if (up >= 0 && !land.isSolid(x, up) && land.isSolid(x, up + 1)) return up;
+    if (down + 1 < land.height && !land.isSolid(x, down) && land.isSolid(x, down + 1)) return down;
+    up--;
+    down++;
+  }
+  return null;
+}
+
+/**
+ * Find a place on the bottom of a lake for seaweed or a shell, and say where
+ * its bottom goes (C4Game::PlaceVegetation, liquid placement): one try, a spot
+ * of liquid as big as it is near a random point, then down to the ground, 3
+ * pixels into it.
+ */
+export function findLiquidSpot(
+  land: Landscape,
+  rng: Rng,
+  size: { width: number; height: number },
+  area: { x: number; y: number; w: number; h: number },
+): { x: number; bottom: number } | null {
+  const x = area.x + rng.int(Math.max(1, area.w));
+  const y = area.y + rng.int(Math.max(1, area.h));
+  if (x < 0 || x >= land.width || y < 0 || y >= land.height) return null;
+  const spot = findSurfaceLiquid(land, x, y, size.width, size.height) ?? findLiquid(land, x, y, size.width, size.height);
+  if (!spot) return null;
+  const top = semiAboveSolid(land, spot.x, spot.y);
+  if (top === null) return null;
+  return { x: spot.x, bottom: top + 3 };
+}
+
 /**
  * Find a place for a plant on soil in the given area and say where its
  * bottom goes (C4Game::PlaceVegetation, surface placement): open above,
- * open to the upper left and right, 2 pixels into earth or sand.
+ * open to the upper left and right, 2 pixels into earth or sand. Seaweed
+ * goes to the bottom of a lake instead.
  */
 export function findPlantSpot(
   land: Landscape,
@@ -398,6 +645,9 @@ export function findPlantSpot(
   def: PlantDef,
   area: { x: number; y: number; w: number; h: number },
 ): { x: number; bottom: number } | null {
+  if (def.placement === 'liquid') {
+    return findLiquidSpot(land, rng, def, area);
+  }
   for (let i = 0; i < TREE.placeTries; i++) {
     const x = area.x + rng.int(Math.max(1, area.w));
     let y = area.y + rng.int(Math.max(1, area.h));
@@ -415,29 +665,51 @@ export function findPlantSpot(
   return null;
 }
 
+/** A plant placed at the start (or a dead tree, if `burned`). */
+export interface PlacedPlant {
+  id: PlantId;
+  x: number;
+  bottom: number;
+  con: number;
+  dir: -1 | 1;
+  burned?: boolean;
+}
+
 /**
- * The scenario's trees at the start (C4Game::InitVegetation): one try per 50
- * pixels of map width at amount 100, each picking one of the listed kinds by
- * its share. A third of them are only partly grown.
+ * The scenario's vegetation at the start (C4Game::InitVegetation): one try per
+ * 50 pixels of map width at amount 100, each picking one of the listed kinds by
+ * its share. A third of those that grow are only partly grown. Dead trees
+ * (TRB1-4), bones, skulls and shells are vegetation too.
  */
 export function placeVegetation(
   land: Landscape,
   rng: Rng,
-  shares: Partial<Record<PlantId, number>>,
+  shares: Partial<Record<VegetationId, number>>,
   level: number,
-): { id: PlantId; x: number; bottom: number; con: number; dir: -1 | 1 }[] {
-  const kinds = PLANT_IDS.flatMap((id) => Array<PlantId>(Math.max(0, Math.round(shares[id] ?? 0))).fill(id));
-  const out: { id: PlantId; x: number; bottom: number; con: number; dir: -1 | 1 }[] = [];
-  if (!kinds.length) return out;
+): { plants: PlacedPlant[]; items: { id: VegetationItemId; x: number; y: number }[] } {
+  const kinds = VEGETATION_IDS.flatMap((id) => Array<VegetationId>(Math.max(0, Math.round(shares[id] ?? 0))).fill(id));
+  const plants: PlacedPlant[] = [];
+  const items: { id: VegetationItemId; x: number; y: number }[] = [];
+  if (!kinds.length) return { plants, items };
   const amount = Math.trunc((Math.trunc(land.width / 50) * level) / 100);
+  const all = { x: 0, y: 0, w: land.width, h: land.height };
   for (let i = 0; i < amount; i++) {
-    const def = PLANTS[kinds[rng.int(kinds.length)]];
-    const con = def.growth && rng.int(3) === 0 ? rng.int(FULL_CON) + 1 : FULL_CON;
-    const spot = findPlantSpot(land, rng, def, { x: 0, y: 0, w: land.width, h: land.height });
+    const kind = kinds[rng.int(kinds.length)];
+    const thing = VEGETATION_ITEMS[kind as VegetationItemId];
+    if (thing) {
+      const spot = thing.placement === 'liquid' ? findLiquidSpot(land, rng, thing, all) : findPlantSpot(land, rng, { ...PLANTS.bush, ...thing, placement: 'surface' }, all);
+      if (spot) items.push({ id: kind as VegetationItemId, x: spot.x, y: spot.bottom - Math.ceil(thing.height / 2) });
+      continue;
+    }
+    const burnedOf = BURNED_TREES[kind as BurnedTreeId];
+    const def = PLANTS[burnedOf ?? (kind as PlantId)];
+    // Dead trees don't grow (no Growth in their DefCore): always full size.
+    const con = def.growth && !burnedOf && rng.int(3) === 0 ? rng.int(FULL_CON) + 1 : FULL_CON;
+    const spot = findPlantSpot(land, rng, burnedOf ? { ...def, ...def.burned! } : def, all);
     if (!spot) continue;
-    out.push({ id: def.id, ...spot, con, dir: rng.bool() ? 1 : -1 });
+    plants.push({ id: def.id, ...spot, con, dir: rng.bool() ? 1 : -1, ...(burnedOf ? { burned: true } : {}) });
   }
-  return out;
+  return { plants, items };
 }
 
 /** How high the ground is at x near y: the solid offset the grass script measures (GetSolidOffset). */

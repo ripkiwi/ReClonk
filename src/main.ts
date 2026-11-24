@@ -18,7 +18,8 @@ import { ANIMALS } from './objects/animal';
 import { GRASS, PLANTS } from './objects/vegetation';
 import { CONTENT_BASE, loadAssets } from './render/assets';
 import { FIRE_PARTICLES } from './render/fireView';
-import { MAGIC_SPRITES } from './render/worldView';
+import { FISH_OVERLAY, MAGIC_SPRITES } from './render/worldView';
+import { ENV_SPRITES } from './render/environmentView';
 import { fitStage, h, setCssImages } from './ui/dom';
 import { GameScreen } from './ui/gameScreen';
 import { Menu, type CrewOutcome } from './ui/menu';
@@ -98,11 +99,13 @@ async function start(): Promise<void> {
         SAIL.file,
         FLAG.graphic.file,
         FLAG.graphic.overlay,
-        ...Object.values(PLANTS).flatMap((p) => [p.file, p.burned.file]),
+        ...Object.values(PLANTS).flatMap((p) => [p.file, ...(p.burned ? [p.burned.file] : [])]),
         GRASS.file,
         FIRE_PARTICLES.fire.file,
         FIRE_PARTICLES.fire2.file,
         MAGIC_SPRITES.bridge,
+        ...Object.values(ENV_SPRITES),
+        FISH_OVERLAY,
         ...Object.values(SPELLS).map((s) => s.icon),
         ...Object.values(MENU_GRAPHICS),
       ],

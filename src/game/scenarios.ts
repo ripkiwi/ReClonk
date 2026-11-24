@@ -1,11 +1,12 @@
 import { texIndex, type ItemId } from '../landscape/materials';
 import { DEFAULT_LANDSCAPE, MAX_MAP_PLAYER_EXTEND, sval, type LandscapeDef, type SVal } from '../landscape/mapCreator';
-import { PLANT_IDS } from '../objects/vegetation';
+import { VEGETATION_IDS } from '../objects/vegetation';
 import { SPELL_IDS, type SpellId } from './magic';
 import { RULE_IDS, type RuleId } from './rules';
 import { LAVA_CAVES_MAP } from './maps/lavaCaves';
 import { DEFAULT_WEATHER, type WeatherDef } from './weather';
 import { ANIMAL_IDS, type AnimalId } from '../objects/animal';
+import { ENV_IDS, ENVIRONMENT, type EnvId } from './environment';
 import type { Goal, ShopId } from './world';
 
 /** Starting gold and what the home base's shop has in stock (Scenario.txt Wealth and HomeBaseMaterial). */
@@ -53,6 +54,8 @@ export interface ScenarioDef {
   animals: Partial<Record<AnimalId, number>>;
   /** Nests buried in the earth: monster eggs (Scenario.txt [Animals] Nest). */
   nests: Partial<Record<NestId, number>>;
+  /** Environment objects and how many of each: day and night, stars, bird song, rockfall... (Scenario.txt [Environment] Objects). */
+  environment: Partial<Record<EnvId, number>>;
   /** Set on a player's own scenario: the original it was copied from. */
   basedOn?: string;
 }
@@ -126,6 +129,8 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     weather: { ...DEFAULT_WEATHER, climate: sval(40, 10), yearSpeed: sval(20, 10), wind: sval(1, 100, -100, 100) },
     animals: {},
     nests: {},
+    // [Environment] Objects=EGLN=1;EGRS=1: glinting gold (and the grass).
+    environment: { glint: 1 },
   },
   {
     id: 'minor-melee',
@@ -161,6 +166,8 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     // Its two zap nests (Nest=ZAPN=2) wait for zaps.
     animals: {},
     nests: {},
+    // [Environment] Objects=EGRS=1;EGLN=1;BRDS=4: grass, glinting gold and lots of bird song.
+    environment: { glint: 1, birdSong: 4 },
   },
   {
     // Melees.c4f/SharkLake.c4s, with its five sharks (Animal=SHRK=5).
@@ -180,11 +187,11 @@ export const SCENARIOS: readonly ScenarioDef[] = [
       liquidLevel: sval(55),
       mapPlayerExtend: true,
       layers: LAYERS(7, 5),
-      // InEarth=ROCK=4;GOLD=4;FLNT=4 (its loam, bones and skulls aren't in the game yet).
-      inEarth: { rock: 4, gold: 4, flint: 4 },
+      // InEarth=ROCK=4;GOLD=4;FLNT=4;LOAM=4;BONE=1;SKUL=1 (its loam isn't in the game yet).
+      inEarth: { rock: 4, gold: 4, flint: 4, bone: 1, skull: 1 },
       inEarthLevel: sval(65),
-      // Vegetation=TRE1=2;TRE2=2;TRE3=2 (its shells and seaweed aren't in the game yet), and grass.
-      vegetation: { tree1: 2, tree2: 2, tree3: 2 },
+      // Vegetation=SHEL=1;SWD1=5;SWD2=5;TRE1=2;TRE2=2;TRE3=2, and grass.
+      vegetation: { shell: 1, seaweed1: 5, seaweed2: 5, tree1: 2, tree2: 2, tree3: 2 },
       vegetationLevel: sval(100),
       grass: true,
     },
@@ -214,6 +221,8 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     },
     animals: { shark: 5 },
     nests: {},
+    // [Environment] Objects=EGRS=1: just the grass.
+    environment: {},
   },
   {
     // Worlds.c4f/Lavacaves.c4s, with its monsters and monster eggs (its snake, fire monster, fire monster eggs and zap nests come later), without its goals.
@@ -249,8 +258,8 @@ export const SCENARIOS: readonly ScenarioDef[] = [
       // InEarth=ROCK=4;GOLD=1;FLNT=8 (its loam isn't in the game yet).
       inEarth: { rock: 4, gold: 1, flint: 8 },
       inEarthLevel: sval(28, 5),
-      // Its bones, skulls and burnt trees aren't in the game yet.
-      vegetation: {},
+      // Vegetation=BONE=6;SKUL=6;TRB1=1;TRB2=1: bones, skulls and dead trees.
+      vegetation: { bone: 6, skull: 6, burnedTree1: 1, burnedTree2: 1 },
       vegetationLevel: sval(14),
       grass: false,
     },
@@ -283,6 +292,7 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     // Animal=SNKE=1;FMNS=1;MONS=3 and Nest=FMEG=4;MEGG=4;ZAPN=3: the monsters and their eggs.
     animals: { monster: 3 },
     nests: { monsterEgg: 4 },
+    environment: {},
   },
 ];
 
@@ -339,7 +349,7 @@ export const LIMITS = {
 };
 
 /** Objects a scenario can hand out, bury or scatter, in the settings' order. */
-export const ITEM_IDS: ItemId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'gold', 'wood', 'crystal'];
+export const ITEM_IDS: ItemId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'gold', 'wood', 'crystal', 'shell', 'bone', 'skull'];
 /** What a home base can sell, in the settings' and the shop's order. */
 export const SHOP_IDS: ShopId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'wood', 'conkit', 'lorry', 'boat', 'balloon', 'blimp', 'flag', 'crystal', 'clonk', 'sorcerer'];
 
@@ -358,6 +368,13 @@ function counts<K extends string>(ids: readonly K[], raw: unknown, lim: { min: n
     const n = clamp(v, lim, 0);
     out[id] = whole ? Math.round(n) : n;
   }
+  return out;
+}
+
+/** Environment object counts, each within its own most (MaxUserSelect). */
+function envCounts(raw: unknown): Partial<Record<EnvId, number>> {
+  const out = counts(ENV_IDS, raw, { min: 0, max: 10 });
+  for (const id of ENV_IDS) if (out[id] !== undefined) out[id] = Math.min(out[id]!, ENVIRONMENT[id].max);
   return out;
 }
 
@@ -405,7 +422,7 @@ function landscapeIn(raw: unknown, f: LandscapeDef): LandscapeDef {
     inEarthLevel: svalIn(r.inEarthLevel, f.inEarthLevel, P),
     onSurface: r.onSurface ? counts(ITEM_IDS, r.onSurface, LIMITS.objects, false) : { ...f.onSurface },
     gravity: svalIn(r.gravity, f.gravity, LIMITS.gravity),
-    vegetation: r.vegetation ? counts(PLANT_IDS, r.vegetation, LIMITS.share) : { ...f.vegetation },
+    vegetation: r.vegetation ? counts(VEGETATION_IDS, r.vegetation, LIMITS.share) : { ...f.vegetation },
     vegetationLevel: svalIn(r.vegetationLevel, f.vegetationLevel, P),
     grass: bool(r.grass, f.grass),
     // The map script: kept as it is (the settings don't edit it); a saved landscape without one has none.
@@ -480,6 +497,8 @@ export function normalizeScenario(raw: Partial<ScenarioDef>, fallback: ScenarioD
     // Scenarios saved before animals existed take the original's.
     animals: raw.animals ? counts(ANIMAL_IDS, raw.animals, LIMITS.animals) : { ...f.animals },
     nests: raw.nests ? counts(NEST_IDS, raw.nests, LIMITS.animals) : { ...f.nests },
+    // Scenarios saved before environment objects existed take the original's.
+    environment: raw.environment ? envCounts(raw.environment) : { ...f.environment },
     ...(raw.basedOn ? { basedOn: String(raw.basedOn) } : {}),
   };
 }

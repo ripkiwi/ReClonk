@@ -35,6 +35,10 @@ const TREE_DOWN = ['TreeDown1', 'TreeDown2', 'TreeDown3'] as const;
 const ROCK_HITS = ['RockHit1', 'RockHit2', 'RockHit3'] as const;
 const WOOD_HITS = ['WoodHit1', 'WoodHit2', 'WoodHit3'] as const;
 const CRYSTAL_HITS = ['Crystal1', 'Crystal2', 'Crystal3'] as const;
+const METAL_HITS = ['MetalHit1', 'MetalHit2', 'MetalHit3'] as const;
+const BIRD_SONGS = ['BirdSong1', 'BirdSong2', 'BirdSong3', 'BirdSong4', 'BirdSong5'] as const;
+const CICADAS = ['Cicada1', 'Cicada2', 'Cicada3'] as const;
+const ROCK_BREAKS = ['RockBreak1', 'RockBreak2', 'RockBreak3'] as const;
 /** The original's DeathAnnounce messages. */
 const DEATH_MESSAGES = ['%s is dead.', '%s has\ndeceased.', '%s\nrests in peace.'];
 /** How long the round goes on after it's decided before the results show: 3.5 seconds. */
@@ -209,9 +213,18 @@ export class GameScreen {
       else if (e.type === 'animal') {
         const id = e.sound === 'Snuff' ? pick(['Snuff1', 'Snuff2'] as const) : e.sound === 'Growl' ? pick(['Growl1', 'Growl2', 'Growl3'] as const) : e.sound === 'Raven' ? 'Raven1' : e.sound;
         this.env.sounds.play(id, volumeAt(e.x, e.y) * 0.8);
+      } else if (e.type === 'environment') {
+        // Birds, cicadas and the owl are heard everywhere (global sounds); rocks where they are.
+        if (e.sound === 'BirdSong') this.env.sounds.play(pick(BIRD_SONGS), 0.5);
+        else if (e.sound === 'Cicada') this.env.sounds.play(pick(CICADAS), 0.5);
+        else if (e.sound === 'Owl') this.env.sounds.play('Owl', 0.6);
+        else if (e.sound === 'RockHit') this.env.sounds.play(pick(ROCK_HITS), volumeAt(e.x, e.y) * 0.8);
+        else if (e.sound === 'RockBreak') this.env.sounds.play(pick(ROCK_BREAKS), volumeAt(e.x, e.y));
+        else this.env.sounds.play('Earthquake', volumeAt(e.x, e.y));
       } else if (e.type === 'itemHit') {
         const id = e.item.def.id;
-        const set = id === 'crystal' ? CRYSTAL_HITS : id === 'wood' ? WOOD_HITS : id === 'rock' || id === 'gold' || e.item.def.fuse ? ROCK_HITS : null;
+        // Bones and skulls knock like wood, a shell clinks like metal (their Hit scripts).
+        const set = id === 'crystal' ? CRYSTAL_HITS : id === 'wood' || id === 'bone' || id === 'skull' ? WOOD_HITS : id === 'shell' ? METAL_HITS : id === 'rock' || id === 'gold' || e.item.def.fuse ? ROCK_HITS : null;
         if (set) this.env.sounds.play(pick(set), volumeAt(e.item.x, e.item.y) * 0.5);
       }
     }

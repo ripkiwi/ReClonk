@@ -9,6 +9,7 @@ import { evaluate } from '../landscape/mapCreator';
 import { crewCount, type ScenarioDef } from './scenarios';
 import { Weather } from './weather';
 import { initAnimals } from './animals';
+import { Environment } from './environment';
 import { World } from './world';
 
 /** The local player's number in the world. Multiplayer will hand out more. */
@@ -151,6 +152,11 @@ export function startRound(
   });
   // The animals come last, with random numbers of their own, so they don't change the map or the crews.
   initAnimals(world, scenario.animals, scenario.nests, seed);
+  // Then the environment objects (Scenario.txt [Environment]), also with random numbers of their own.
+  if (Object.values(scenario.environment).some((n) => n && n > 0)) {
+    world.environment = new Environment(scenario.environment, world, seed ^ 0xe1f0);
+    world.environment.colorFish(world);
+  }
   return {
     scenario,
     seed,

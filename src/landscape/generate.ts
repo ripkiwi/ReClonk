@@ -2,7 +2,7 @@ import { Rng } from '../core/rng';
 import type { Landscape } from './landscape';
 import { createMap, DEFAULT_LANDSCAPE, evaluate, mapToLandscape, type LandscapeDef, type MapData } from './mapCreator';
 import { MapScriptError, runMapScript } from './mapScript';
-import { placeGrass, placeVegetation, type Grass, type PlantId } from '../objects/vegetation';
+import { placeGrass, placeVegetation, type Grass, type PlacedPlant } from '../objects/vegetation';
 import { LIQUID, MATERIALS, Mat, type ItemId } from './materials';
 
 export interface GeneratedMap {
@@ -18,8 +18,8 @@ export interface GeneratedMap {
   cave: boolean;
   /** Height of the ground (first non-sky pixel) per column. */
   surface: Int32Array;
-  /** Trees and bushes: centre x, bottom, how grown (con) and which way they face. */
-  plants: { id: PlantId; x: number; bottom: number; con: number; dir: -1 | 1 }[];
+  /** Trees, bushes, palms, cacti and seaweed: centre x, bottom, how grown (con), which way they face, and dead trees. */
+  plants: PlacedPlant[];
   grass: Grass[];
 }
 
@@ -91,8 +91,9 @@ export function generateMap(l: LandscapeDef = DEFAULT_LANDSCAPE, seed = 0, ctx: 
   if (open < width / 4) {
     const spawn = caveStart(land, new Rng(seed ^ 0xca7e));
     const vegRng = new Rng(seed ^ 0x7ee5);
-    const plants = placeVegetation(land, vegRng, l.vegetation, evaluate(l.vegetationLevel, vegRng));
-    return { land, map, zoom, items, spawn, cave: true, surface, plants, grass: [] };
+    const veg = placeVegetation(land, vegRng, l.vegetation, evaluate(l.vegetationLevel, vegRng));
+    items.push(...veg.items);
+    return { land, map, zoom, items, spawn, cave: true, surface, plants: veg.plants, grass: [] };
   }
 
   // Start a third of the way in, on dry ground.
@@ -106,9 +107,10 @@ export function generateMap(l: LandscapeDef = DEFAULT_LANDSCAPE, seed = 0, ctx: 
   }
   // Trees and grass get random numbers of their own, so they don't change the rest of the map.
   const vegRng = new Rng(seed ^ 0x7ee5);
-  const plants = placeVegetation(land, vegRng, l.vegetation, evaluate(l.vegetationLevel, vegRng));
+  const veg = placeVegetation(land, vegRng, l.vegetation, evaluate(l.vegetationLevel, vegRng));
+  items.push(...veg.items);
   const grass = l.grass ? placeGrass(land, vegRng, surface) : [];
-  return { land, map, zoom, items, spawn: { x: sx, y: surface[sx] - 10 }, cave: false, surface, plants, grass };
+  return { land, map, zoom, items, spawn: { x: sx, y: surface[sx] - 10 }, cave: false, surface, plants: veg.plants, grass };
 }
 
 /** The map drawn by the landscape's map script, or null if there is none or it can't be read (then the map creator draws it). */

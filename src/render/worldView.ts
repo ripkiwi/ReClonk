@@ -13,6 +13,7 @@ import { GRASS, type Grass, type Plant } from '../objects/vegetation';
 import { Animal, DEAD_DELAY } from '../objects/animal';
 import { BALLOON_FLAG, BLIMP, SAIL, isSailing, type Vehicle } from '../objects/vehicle';
 import { colorByOwner, frame, type GameAssets } from './assets';
+import { EnvironmentView, nightRamp, sunRamp } from './environmentView';
 import { FireView } from './fireView';
 import { LandscapeView } from './landscapeView';
 
@@ -75,6 +76,12 @@ export const MAGIC_SPRITES = { bridge: 'magic/BridgeSegment.png' };
 /** How long a message above a clonk stays up, in ticks. */
 const MESSAGE_TICKS = 36 * 4;
 
+/** The fish's overlay (Fish.c4d/Overlay.png), for coloured fish. */
+export const FISH_OVERLAY = 'animals/FishOverlay.png';
+
+/** The sky's colour behind the clouds (the app's background). */
+const SKY_COLOR = 0x9fc8ef;
+
 /** The original's season colour ramps (C4Weather SeasonColors): dark, middle and light for winter, spring, summer, autumn. */
 const SEASON_COLORS = [
   [0x000000, 0x7f7f90, 0xefefff],
@@ -124,6 +131,12 @@ function fitRamp(p: number[]): [number, number] {
 export class WorldView {
   readonly root = new Container();
   private readonly sky: TilingSprite;
+  /** The sky's own colour behind the clouds: it darkens at night (Time.c4d SetSkyAdjust). */
+  private readonly skyBack = new Graphics();
+  /** Stars, the sun, glints and big rocks. */
+  private readonly envView: EnvironmentView;
+  /** The colour of coloured fish (ColoredFishes.c4d): their overlay, tinted. */
+  private readonly fishOverlays = new Map<Animal, Sprite>();
   private readonly layer = new Container();
   private readonly landscape: LandscapeView;
   private readonly clonkSprites = new Map<Clonk, { body: Sprite; shirt: Sprite }>();
@@ -174,10 +187,11 @@ export class WorldView {
   ) {
     this.sky = new TilingSprite({ texture: assets.sky, width: 1, height: 1 });
     this.sky.alpha = 0.7;
-    this.root.addChild(this.sky, this.layer);
+    this.envView = new EnvironmentView(world, assets);
+    this.root.addChild(this.skyBack, this.sky, this.envView.back, this.layer);
     this.landscape = new LandscapeView(world.land, assets.materials);
     this.fire = new FireView(world, assets.items);
-    this.layer.addChild(this.landscape.sprite, this.grassLayer, this.fire.back, this.plantLayer, this.structureLayer, this.vehicleLayer, this.animalLayer, this.pxs);
+    this.layer.addChild(this.envView.behind, this.landscape.sprite, this.grassLayer, this.fire.back, this.plantLayer, this.structureLayer, this.envView.middle, this.vehicleLayer, this.animalLayer, this.pxs);
   }
 
   /**
@@ -236,6 +250,13 @@ export class WorldView {
     this.sky.tileScale.set(this.zoom * 1.5);
     const skyX = this.world.weather?.skyX ?? 0;
     this.sky.tilePosition.set((-(this.camX + sx) * 0.4 + skyX) * this.zoom, -(this.camY + sy) * 0.4 * this.zoom);
+    // At night the sky goes dark (Time.c4d: the sky's colour and its clouds by the light, in percent).
+    const env = this.world.environment;
+    const light = env?.has('time') ? env.light / 100 : 1;
+    const gray = Math.round(255 * light);
+    this.sky.tint = (gray << 16) | (gray << 8) | gray;
+    this.skyBack.clear().rect(0, 0, screenW, screenH).fill({ color: SKY_COLOR, alpha: 1 }).rect(0, 0, screenW, screenH).fill({ color: 0x000000, alpha: 1 - light });
+    this.envView.update(this.camX + sx, this.camY + sy, viewW, viewH, this.zoom);
 
     this.landscape.update();
     this.updatePlants();
@@ -250,6 +271,7 @@ export class WorldView {
     this.updatePxs(viewW, viewH);
     this.fire.update();
     this.layer.addChild(this.fire.front);
+    this.layer.addChild(this.envView.front);
     this.updateSparks();
     this.updateTint();
     this.updateEffects(events);
@@ -261,9 +283,16 @@ export class WorldView {
    */
   private quakeShake(follow: Clonk | undefined): [number, number] {
     const w = this.world.weather;
-    if (!w?.quakes.length) return [0, 0];
     let x = 0;
     let y = 0;
+    // A big rock crashing shakes the view, less the further away (ShakeViewPort).
+    for (const s of this.world.environment?.shakes ?? []) {
+      const level = follow ? (s.level * 300) / Math.max(300, Math.hypot(follow.x - s.x, follow.y - s.y)) : s.level;
+      if (level < 1) continue;
+      x += (Math.random() * 2 - 1) * level * 0.5;
+      y += (Math.random() * 2 - 1) * level * 0.5;
+    }
+    if (!w?.quakes.length) return [x, y];
     for (const q of w.quakes) {
       let level = Weather.shake(q);
       if (level <= 0) continue;
@@ -430,13 +459,24 @@ export class WorldView {
     const w = this.world.weather;
     const season = w?.def.seasonColors ? seasonRamp(w.season, w.temperature) : null;
     const flash = w?.flash ?? 0;
-    if (!season && !flash) {
+    const env = this.world.environment;
+    const night = env?.has('time') && env.light < 100 ? nightRamp(env.light) : null;
+    // Looking right at the sun alone, the view turns yellow (only with one player, like the original).
+    const sun = env?.sun ? sunRamp(this.envView.sunDistance) : null;
+    if (!season && !flash && !night && !sun) {
       if (this.root.filters) this.root.filters = null;
       return;
     }
     const m = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0];
     for (let ch = 0; ch < 3; ch++) {
-      let [a, b] = season ? fitRamp(season[ch]) : [1, 0];
+      // Ramps one after the other: time of day, the sun, then the season.
+      let [a, b] = [1, 0];
+      for (const r of [night, sun, season]) {
+        if (!r) continue;
+        const [ra, rb] = fitRamp(r[ch]);
+        a = ra * a;
+        b = ra * b + rb;
+      }
       if (flash) {
         // Lightning: dark brightened to the flash, middle half way (ramp 5).
         const [la, lb] = fitRamp([flash, 128 + flash / 2, 255]);
@@ -454,6 +494,7 @@ export class WorldView {
   destroy(): void {
     const tex = this.landscape.sprite.texture;
     this.fire.destroy();
+    this.envView.destroy();
     this.root.destroy({ children: true });
     tex.destroy(true);
   }
@@ -622,11 +663,31 @@ export class WorldView {
         s.scale.set((-a.dir * a.con) / 100, a.con / 100);
       }
       s.position.set(a.x, a.y);
+      // A coloured fish: its overlay in its own colour over it (ColoredFishes.c4d).
+      const color = a.alive ? this.world.environment?.fishColors.get(a) : undefined;
+      let o = this.fishOverlays.get(a);
+      if (color !== undefined) {
+        if (!o) {
+          o = new Sprite();
+          o.anchor.set(0.5);
+          o.tint = color;
+          this.animalLayer.addChild(o);
+          this.fishOverlays.set(a, o);
+        }
+        o.texture = frame(this.assets.items[FISH_OVERLAY], s.texture.frame.x, s.texture.frame.y, s.texture.frame.width, s.texture.frame.height);
+        o.position.copyFrom(s.position);
+        o.scale.copyFrom(s.scale);
+      } else if (o) {
+        o.destroy();
+        this.fishOverlays.delete(a);
+      }
     }
     for (const [a, s] of this.animalSprites) {
       if (seen.has(a)) continue;
       s.destroy();
       this.animalSprites.delete(a);
+      this.fishOverlays.get(a)?.destroy();
+      this.fishOverlays.delete(a);
     }
   }
 
@@ -730,15 +791,15 @@ export class WorldView {
         this.plantSprites.set(p, s);
       }
       // A burned tree is one picture of a dead tree, its own size, on the same root.
-      const b = p.burned ? d.burned : d;
+      const b = p.burned && d.burned ? d.burned : d;
       if (s.burned !== p.burned) {
         s.burned = p.burned;
         s.body.position.set((b.offset.x + b.width / 2 - d.root.x) * p.dir, b.offset.y + b.height / 2 - d.root.y);
       }
-      if (p.burned) s.body.texture = frame(tex[d.burned.file], 0, 0, b.width, b.height);
+      if (p.burned && d.burned) s.body.texture = frame(tex[d.burned.file], 0, 0, b.width, b.height);
       else {
-        const f = p.state === 'standing' ? p.frame(this.world.tick) : 0;
-        s.body.texture = frame(tex[d.file], f * d.width, 0, d.width, d.height);
+        const [f, row] = p.state === 'standing' ? p.cell(this.world.tick) : [0, 0];
+        s.body.texture = frame(tex[d.file], f * d.width, row * d.height, d.width, d.height);
       }
       const pv = p.pivot;
       s.holder.position.set(pv.x, pv.y);
