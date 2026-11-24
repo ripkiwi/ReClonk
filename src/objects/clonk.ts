@@ -199,6 +199,10 @@ export class Clonk extends GameObject {
   fightTarget: Clonk | null = null;
   /** Who hurt this clonk last, credited if it dies (the original's LastEnergyLossCausePlayer). */
   lastHurtBy: Clonk | null = null;
+  /** Being released (the Release Clonk rule): how far it has faded, 0 to 255. */
+  releasing = 0;
+  /** Released: gone for the rest of the round. */
+  released = false;
   /** Ticks before a new dig breaks ground (see startDig). */
   private digWait = 0;
   /** Pixels of each material dug so far, for the chunks digging drops (the original's MaterialContents). */

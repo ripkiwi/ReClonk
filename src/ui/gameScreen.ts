@@ -11,6 +11,7 @@ import { BaseHud } from '../render/baseHud';
 import { WorldView } from '../render/worldView';
 import { bigButton, h } from './dom';
 import { Hud } from './hud';
+import { GoalBar } from './goalBar';
 
 export interface GameEnv {
   app: Application;
@@ -51,6 +52,8 @@ export class GameScreen {
   private readonly keyboard: Keyboard;
   private readonly loop: FixedLoop;
   private readonly hud: Hud;
+  /** The round's goals and rules, under the menu button. */
+  private readonly goalBar: GoalBar;
   /** Building panel (enter, buy, sell) and shop messages, drawn in Pixi. */
   private readonly baseHud: BaseHud;
   private paused = false;
@@ -99,6 +102,7 @@ export class GameScreen {
     }, (owner) => colors.get(owner) ?? color);
     this.baseHud = new BaseHud(round.world, assets, LOCAL_PLAYER, style, color, layout);
     app.stage.addChild(this.baseHud.root);
+    this.goalBar = new GoalBar(env.ui, round.world, LOCAL_PLAYER);
     this.announce = h('div', { class: 'announce' });
     env.ui.append(this.announce);
     addEventListener('keydown', this.onKey);
@@ -121,12 +125,22 @@ export class GameScreen {
         const fresh = this.round.recruited.has(e.clonk.info.memberId);
         this.view.say(e.clonk, fresh ? `${e.clonk.info.name}\njoins the crew!` : `${e.clonk.info.name}\nreporting!`);
       } else if (e.type === 'death') {
-        this.view.say(e.clonk, pick(DEATH_MESSAGES).replace('%s', e.clonk.info?.name ?? 'Clonk'));
+        if (!e.clonk.released) this.view.say(e.clonk, pick(DEATH_MESSAGES).replace('%s', e.clonk.info?.name ?? 'Clonk'));
       } else if (e.type === 'eliminated') {
         this.show(e.player === LOCAL_PLAYER ? 'Your crew is out!' : `${this.playerName(e.player)} is eliminated.`);
         if (e.player === LOCAL_PLAYER) this.endSoon();
       } else if (e.type === 'gameOver') {
-        this.show(e.winner === LOCAL_PLAYER ? 'Victory!' : e.winner < 0 ? 'Nobody is left standing.' : `${this.playerName(e.winner)} wins.`);
+        this.show(
+          e.winner === LOCAL_PLAYER
+            ? 'Victory!'
+            : e.winner >= 0
+              ? `${this.playerName(e.winner)} wins.`
+              : e.fulfilled
+                ? 'Goal fulfilled!'
+                : world.eliminated.has(LOCAL_PLAYER)
+                  ? 'The round is lost.'
+                  : 'Nobody is left standing.',
+        );
         this.endSoon();
       }
     }
@@ -134,6 +148,7 @@ export class GameScreen {
     world.events.length = 0;
     const lead = this.follow;
     this.hud.update(lead, world.players.get(LOCAL_PLAYER), crew, cursor);
+    this.goalBar.update();
     if (lead) this.baseHud.update(this.env.app.screen.width, this.env.app.screen.height, lead);
     if (world.tick >= this.endAt) this.end();
   }
@@ -177,7 +192,7 @@ export class GameScreen {
         if (c.alive && Math.random() < 1 / 5) this.env.sounds.play(pick(HURTS), volumeAt(c.x, c.y));
       } else if (e.type === 'death') this.env.sounds.play('Die', volumeAt(e.clonk.x, e.clonk.y));
       else if (e.type === 'eliminated') this.env.sounds.play('Eliminated');
-      else if (e.type === 'gameOver' && e.winner === LOCAL_PLAYER) this.env.sounds.play('Trumpet');
+      else if (e.type === 'gameOver' && (e.winner === LOCAL_PLAYER || (e.fulfilled && e.winner < 0))) this.env.sounds.play('Trumpet');
       else if (e.type === 'construct' || e.type === 'building') {
         const st = e.structure;
         this.env.sounds.play(Math.random() < 0.5 ? 'Build1' : 'Build2', volumeAt(st.x, st.y) * 0.8);
@@ -316,6 +331,7 @@ export class GameScreen {
     this.keyboard.dispose();
     removeEventListener('keydown', this.onKey);
     this.hud.dispose();
+    this.goalBar.destroy();
     this.onEnd(this.round);
   }
 
@@ -328,6 +344,7 @@ export class GameScreen {
       this.keyboard.dispose();
       removeEventListener('keydown', this.onKey);
       this.hud.dispose();
+    this.goalBar.destroy();
       this.pauseEl?.remove();
       this.announce.remove();
     }

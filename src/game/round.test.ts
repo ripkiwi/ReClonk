@@ -87,7 +87,7 @@ describe('Scenarios', () => {
     const s = scenarioById('shark-lake')!;
     const l = s.landscape;
     expect([l.mapWidth.std, l.mapHeight.std, l.amplitude.std, l.phase.std, l.period.std, l.liquidLevel.std]).toEqual([64, 60, 45, 43, 9, 55]);
-    expect([s.crewSize, s.opponents, s.goal, s.homeBase, s.base.wealth]).toEqual([5, 1, 'melee', true, 100]);
+    expect([s.crewSize, s.opponents, s.goals, s.homeBase, s.base.wealth]).toEqual([5, 1, { melee: 1 }, true, 100]);
     for (const seed of [1, 2, 3]) {
       const round = startRound(s, profile(), NAMES, seed);
       const { world } = round;

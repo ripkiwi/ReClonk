@@ -1,7 +1,7 @@
 import { Rng } from '../core/rng';
 import type { GeneratedMap } from '../landscape/generate';
 import type { Landscape } from '../landscape/landscape';
-import { MATERIALS, type ItemId } from '../landscape/materials';
+import { Mat, MATERIALS, type ItemId } from '../landscape/materials';
 import { Clonk, NO_CONTROL, type BuildingMenu, type ControlState, type CrewCommand, type CrewInfo } from '../objects/clonk';
 import { BASE, BASEMENT, BUILD_PLANS, CLONK, CLONK_KINDS, ITEMS, STRUCTURES, type ClonkKind } from '../objects/defs';
 import type { GameObject } from '../objects/gameObject';
@@ -18,6 +18,7 @@ import { grabVehicle, stepVehicle, takeOut, vehicleAt, vehicleBottom, vehicleCon
 import { MagicState, openSpellMenu, spellList, startSpell, stepMagic, stepSorcerer, type SpellId } from './magic';
 import { stepRules, takeFlag, type RuleId } from './rules';
 import { breakApart, bridgeMenuControl, shockwaveHits, checkBridgeMenu, digOut, DIG_OUT_INTERVAL, openBridgeMenu, stepMaterialItems } from './materialItems';
+import { activeGoals, GoalState, stepGoals, type Goals } from './goals';
 import { menuMove } from './menus';
 import type { Weather } from './weather';
 import { Animal, ANIMALS, type AnimalId } from '../objects/animal';
@@ -40,8 +41,12 @@ export type WorldEvent =
   | { type: 'death'; clonk: Clonk; killer: Clonk | null; tick: number }
   /** A player has no clonk left standing (last crew standing). */
   | { type: 'eliminated'; player: number; tick: number }
-  /** The round's goal is decided: `winner` is the last player standing, or -1 if nobody is. */
-  | { type: 'gameOver'; winner: number; tick: number }
+  /**
+   * The round is decided: `winner` is the player who won (the last one
+   * standing, the first to fulfil the goals), or -1 if nobody did. `fulfilled`:
+   * the goals were reached, by everyone together unless `winner` is set.
+   */
+  | { type: 'gameOver'; winner: number; fulfilled?: boolean; tick: number }
   /** A construction site went up, is being worked on (every second), or is finished. */
   | { type: 'construct' | 'building' | 'built'; structure: Structure; tick: number }
   /** A guard tower gate starts moving, an elevator case rides on, something was switched. */
@@ -153,6 +158,15 @@ export interface CrewCursor {
   selected: Set<Clonk>;
 }
 
+/** What buildings clear out of their shape (MSnow; the original also clears FlyAshes, which we don't have). */
+const SNOW_MATS: ReadonlySet<Mat> = new Set([Mat.Snow]);
+
+/** Take the given materials out of a rectangle (C4Landscape::DigFreeMat). */
+function digFreeMats(land: Landscape, x: number, y: number, w: number, h: number, mats: ReadonlySet<Mat>): void {
+  for (let py = y; py < y + h; py++)
+    for (let px = x; px < x + w; px++) if (land.inBounds(px, py) && mats.has(land.get(px, py))) land.set(px, py, Mat.Sky);
+}
+
 /** Ticks a thrown or dropped item can't be picked straight back up. */
 const NO_COLLECT_TICKS = 20;
 /**
@@ -161,8 +175,6 @@ const NO_COLLECT_TICKS = 20;
  */
 export const HIT_DAMAGE = 3;
 
-/** How a round is won. 'melee': the last crew standing wins (the original's Melee goal). */
-export type Goal = 'none' | 'melee';
 
 /** Controls for a computer player's clonks, one clonk at a time. */
 export interface Brain {
@@ -198,11 +210,18 @@ export class World {
   recruit: ((player: number, kind: ClonkKind) => CrewInfo | null) | null = null;
   /** Computer players, by player number. Their clonks follow these instead of the controls. */
   readonly brains = new Map<number, Brain>();
-  goal: Goal = 'none';
+  /** How the round is won (Scenario.txt Goals), see goals.ts. None: it goes on until the player ends it. */
+  goals: Goals = {};
+  /** What the goal checks keep track of. */
+  readonly goalState = new GoalState();
   /** Players whose crews were wiped out. */
   readonly eliminated = new Set<number>();
-  /** Set when the goal is decided: the winning player, or -1 if nobody is left. */
+  /** Set when the round is decided: the winning player, or -1 if nobody won (or everyone did, see `fulfilled`). */
   winner: number | null = null;
+  /** The goals were fulfilled. */
+  fulfilled = false;
+  /** The players' names, for messages. Set by the round. */
+  readonly names = new Map<number, string>();
   private readonly deaths = new Set<Clonk>();
   /** Spells and their effects: heals, force bridges, fireballs, bolts. */
   readonly magic = new MagicState();
@@ -270,9 +289,16 @@ export class World {
     return this.clonks.filter((c) => c.owner === player);
   }
 
-  /** Players fight each other: every player is an enemy of every other one, like in a melee. */
+  /**
+   * Players fight each other: every player is an enemy of every other one,
+   * like in a melee. In a race nobody is (Race.c4d InitializePlayer).
+   */
   hostile(a: number, b: number): boolean {
-    return a !== b && a >= 0 && b >= 0;
+    return a !== b && a >= 0 && b >= 0 && !this.goals.race;
+  }
+
+  playerName(player: number): string {
+    return this.names.get(player) ?? `Player ${player + 1}`;
   }
 
   /** The player's crew cursor, kept valid: a living leader that's always selected. */
@@ -560,9 +586,12 @@ export class World {
     this.land.pxs.step(this.rng);
     this.land.step(this.tick, this.rng);
     stepRules(this);
+    this.stepReleases();
+    if (this.tick % 35 === 0 && !this.rules.has('constructionSnowIn')) this.structuresDigSnow();
     for (const fx of this.land.fx) this.events.push({ type: fx.type, x: fx.x, y: fx.y, tick: this.tick });
     this.land.fx.length = 0;
     this.afterDeaths();
+    stepGoals(this);
     this.tick++;
   }
 
@@ -716,19 +745,65 @@ export class World {
       this.events.push({ type: 'death', clonk: c, killer, tick: this.tick });
     }
     // A crew is out when it's wiped out in a melee, or when a rule eliminated it.
-    if ((this.goal !== 'melee' && !this.eliminated.size) || this.winner !== null) return;
+    const melee = !!this.goals.melee;
+    if ((!melee && !this.eliminated.size) || this.winner !== null) return;
     const players = new Set(this.clonks.map((c) => c.owner));
     if (players.size < 2) return;
     const standing = new Set(this.clonks.filter((c) => c.alive).map((c) => c.owner));
     for (const p of players) {
-      if (this.goal !== 'melee' || standing.has(p) || this.eliminated.has(p)) continue;
+      if (!melee || standing.has(p) || this.eliminated.has(p)) continue;
       this.eliminated.add(p);
       this.events.push({ type: 'eliminated', player: p, tick: this.tick });
     }
     for (const p of this.eliminated) standing.delete(p);
-    if (standing.size <= 1) {
-      this.winner = standing.size ? [...standing][0] : -1;
-      this.events.push({ type: 'gameOver', winner: this.winner, tick: this.tick });
+    // With other goals too, the goal checks decide the round (goals.ts).
+    const others = activeGoals(this).some((g) => g !== 'melee');
+    if (standing.size <= 1 && (!others || !standing.size)) this.decide(standing.size ? [...standing][0] : -1, melee && !!standing.size);
+  }
+
+  /** The round is over (Goal.c4d: GameOver). */
+  decide(winner: number, fulfilled: boolean): void {
+    if (this.winner !== null) return;
+    this.winner = winner;
+    this.fulfilled = fulfilled;
+    this.events.push({ type: 'gameOver', winner, fulfilled, tick: this.tick });
+  }
+
+  /**
+   * The Release Clonk rule (ReleaseClonk.c4d): the player's leader fades
+   * away and is gone for the round, as if it had died, with nobody to blame.
+   */
+  releaseClonk(player: number): Clonk | null {
+    if (!this.rules.has('releaseClonk')) return null;
+    const c = this.cursor(player).leader;
+    if (!c?.alive || c.releasing || c.released) return null;
+    c.releasing = 1;
+    this.say(player, `${c.info?.name ?? 'Clonk'} released.`);
+    return c;
+  }
+
+  /** Released clonks fade out, 15 of 255 a tick, then they're gone (FxReleaseClonkFadeOutTimer). */
+  private stepReleases(): void {
+    for (const c of this.clonks) {
+      if (!c.releasing || c.released) continue;
+      c.releasing += 15;
+      if (c.releasing < 255) continue;
+      c.released = true;
+      c.lastHurtBy = null;
+      if (c.contained) this.exit(c);
+      this.dropAll(c);
+      this.hurt(c, 1e6, null);
+    }
+  }
+
+  /**
+   * Buildings dig the snow and flying ashes out of their shape every 35
+   * ticks, unless the Buildings can snow in rule is on (C4Object::ExecLife).
+   */
+  private structuresDigSnow(): void {
+    for (const s of this.structures) {
+      if (s.gone || !s.complete) continue;
+      digFreeMats(this.land, s.left, s.top, s.def.width, s.def.height, SNOW_MATS);
     }
   }
 

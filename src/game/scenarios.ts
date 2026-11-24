@@ -6,7 +6,8 @@ import { RULE_IDS, type RuleId } from './rules';
 import { LAVA_CAVES_MAP } from './maps/lavaCaves';
 import { DEFAULT_WEATHER, type WeatherDef } from './weather';
 import { ANIMAL_IDS, type AnimalId } from '../objects/animal';
-import type { Goal, ShopId } from './world';
+import type { ShopId } from './world';
+import { GOAL_IDS, GOALS, type Goals } from './goals';
 
 /** Starting gold and what the home base's shop has in stock (Scenario.txt Wealth and HomeBaseMaterial). */
 export interface BaseSettings {
@@ -45,8 +46,8 @@ export interface ScenarioDef {
   base: BaseSettings;
   /** Computer crews to play against, each as big as the player's crew. */
   opponents: number;
-  /** How the round is won: 'melee' ends it when only one crew is left standing. */
-  goal: Goal;
+  /** How the round is won (Scenario.txt Goals): how many of each goal, see goals.ts. None: the round goes on until the player ends it. */
+  goals: Goals;
   /** Seasons, wind, rain, thunderstorms and disasters (the Weather page). */
   weather: WeatherDef;
   /** Animals running, swimming and flying about at the start, how many of each (Scenario.txt [Animals] Animal). */
@@ -121,7 +122,8 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     homeBase: true,
     base: DEFAULT_BASE,
     opponents: 0,
-    goal: 'none',
+    // Gold Mine's Scenario.txt: Goals=GLDM=1.
+    goals: { goldmine: 1 },
     // Gold Mine's Scenario.txt: a cool climate, a slow year, gusty winds.
     weather: { ...DEFAULT_WEATHER, climate: sval(40, 10), yearSpeed: sval(20, 10), wind: sval(1, 100, -100, 100) },
     animals: {},
@@ -155,7 +157,7 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     homeBase: false,
     base: { wealth: 0, stock: { loam: 5, metal: 1, flint: 5, clonk: 5 } },
     opponents: 1,
-    goal: 'melee',
+    goals: { melee: 1 },
     // Minor Melee's Scenario.txt: always late spring, gusty winds.
     weather: { ...DEFAULT_WEATHER, climate: sval(19), startSeason: sval(23), yearSpeed: sval(0), wind: sval(1, 100, -100, 100) },
     // Its two zap nests (Nest=ZAPN=2) wait for zaps.
@@ -200,7 +202,7 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     // Wealth=100; HomeBaseMaterial without its catapult.
     base: { wealth: 100, stock: { conkit: 3, loam: 5, wood: 5, metal: 1, flint: 5, tflint: 5, lorry: 1, clonk: 5, boat: 2, balloon: 1 } },
     opponents: 1,
-    goal: 'melee',
+    goals: { melee: 1 },
     // Shark Lake's Scenario.txt: always summer, the odd shower, thunderstorm and meteorite, gusty winds.
     weather: {
       ...DEFAULT_WEATHER,
@@ -216,7 +218,7 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     nests: {},
   },
   {
-    // Worlds.c4f/Lavacaves.c4s, with its monsters and monster eggs (its snake, fire monster, fire monster eggs and zap nests come later), without its goals.
+    // Worlds.c4f/Lavacaves.c4s, with its monsters and monster eggs (its snake, fire monster, fire monster eggs and zap nests come later).
     id: 'lava-caves',
     title: 'Lava Caves',
     description:
@@ -272,7 +274,8 @@ export const SCENARIOS: readonly ScenarioDef[] = [
       stock: { conkit: 5, loam: 10, wood: 10, metal: 5, concrete: 10, liquidGranite: 10, gunpowder: 10, flint: 10, tflint: 14, supertflint: 6, superflint: 3, teraflint: 1, flag: 3, lorry: 1, clonk: 5 },
     },
     opponents: 0,
-    goal: 'none',
+    // Lava Caves' Scenario.txt: Goals=MNTK=1;VALG=16.
+    goals: { monsterkill: 1, value: 16 },
     // Lava Caves' Scenario.txt: a hot climate, a slow year, gusty winds, the odd volcano and earthquake.
     weather: {
       ...DEFAULT_WEATHER,
@@ -357,6 +360,21 @@ function clamp(v: unknown, lim: { min: number; max: number }, fallback: number):
 }
 
 /** Per-item numbers within limits. Object densities keep their fractions, so an unchanged copy makes the same map. */
+/** The goals of a saved scenario. Ones saved before there were more goals than the melee had `goal`. */
+function goalsIn(raw: Partial<ScenarioDef> & { goal?: unknown }, fallback: Goals): Goals {
+  if (raw.goals && typeof raw.goals === 'object') {
+    const out: Goals = {};
+    for (const id of GOAL_IDS) {
+      const n = Math.round(clamp((raw.goals as Record<string, unknown>)[id], { min: 0, max: GOALS[id].max }, 0));
+      if (n > 0) out[id] = n;
+    }
+    return out;
+  }
+  if (raw.goal === 'melee') return { melee: 1 };
+  if (raw.goal === 'none') return {};
+  return { ...fallback };
+}
+
 function counts<K extends string>(ids: readonly K[], raw: unknown, lim: { min: number; max: number }, whole = true): Partial<Record<K, number>> {
   const out: Partial<Record<K, number>> = {};
   if (!raw || typeof raw !== 'object') return out;
@@ -483,7 +501,7 @@ export function normalizeScenario(raw: Partial<ScenarioDef>, fallback: ScenarioD
       stock: counts(SHOP_IDS, base?.stock, LIMITS.stock),
     },
     opponents: Math.round(clamp(raw.opponents, LIMITS.opponents, f.opponents)),
-    goal: raw.goal === 'melee' || raw.goal === 'none' ? raw.goal : f.goal,
+    goals: goalsIn(raw, f.goals),
     weather: weatherIn(raw.weather, f.weather),
     // Scenarios saved before animals existed take the original's.
     animals: raw.animals ? counts(ANIMAL_IDS, raw.animals, LIMITS.animals) : { ...f.animals },

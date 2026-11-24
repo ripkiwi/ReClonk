@@ -1,6 +1,7 @@
 import { crewCount, ITEM_IDS, LIMITS, NEST_IDS, SHOP_IDS, type ScenarioDef } from '../game/scenarios';
 import { SPELL_IDS, SPELLS, LATER_SPELLS, type SpellId } from '../game/magic';
 import { LATER_RULES, RULE_IDS, RULES } from '../game/rules';
+import { GOAL_IDS, GOALS, LATER_GOALS, type GoalId } from '../game/goals';
 import { shopEntry, type ShopId } from '../game/world';
 import { MAX_MAP_PLAYER_EXTEND, type SVal } from '../landscape/mapCreator';
 import { MATERIALS, Mat, TEXMAP, texIndex, TUNNEL, type ItemId, type TexEntry } from '../landscape/materials';
@@ -165,6 +166,8 @@ interface IdEntry {
   max: number;
   /** Not in the game yet: shown greyed in the Add menu, and can't be added. */
   later?: boolean;
+  /** Its count on the tile, if it means more than "2x". */
+  format?: (n: number) => string;
 }
 
 /** A whole picture file as an ID list icon (rules, spells). */
@@ -359,7 +362,7 @@ function idList(entries: IdEntry[], o: { x: number; y: number; w: number; hgt: n
             ondblclick: () => change(1),
           },
           e.icon(),
-          h('span', { class: 'idl-count' }, fmt(e.get())),
+          h('span', { class: 'idl-count' }, (e.format ?? fmt)(e.get())),
         );
       }),
       ...(vis.length ? [] : [h('div', { class: 'idl-empty' }, 'Empty: + adds')]),
@@ -592,9 +595,27 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
   // ---- Game
   const description = h('textarea', { class: 'pp-desc', maxLength: 400, style: at(6, 133, 186, 62), oninput: () => (d.description = description.value) });
   description.value = d.description;
-  const goalNote = h('div', { class: 'pp-hint', style: at(6, 53, 186, 20) });
+  const goalNote = h('div', { class: 'pp-hint', style: at(6, 53, 186, 30) });
   const showGoal = (): void => {
-    goalNote.textContent = d.goal === 'melee' && d.opponents === 0 ? 'Melee needs computer crews to fight.' : d.goal === 'melee' ? 'The last crew standing wins.' : '';
+    const g = d.goals;
+    const on = GOAL_IDS.filter((id) => (g[id] ?? 0) > 0);
+    const rivalry = d.rules.includes('rivalry');
+    goalNote.textContent =
+      g.melee && d.opponents === 0
+        ? 'Melee needs computer crews to fight.'
+        : g.race && d.opponents === 0
+          ? 'Race: run to the right edge. Add computer crews to race against.'
+          : g.wipfhunt && !d.rules.includes('collectibleAnimals')
+            ? 'Wipf rescue needs the Collectible animals rule to catch wipfs.'
+            : (g.wealth || g.value || g.goldmine) && !d.homeBase
+              ? 'Selling needs a home base (Equipment, Buildings).'
+              : !on.length
+                ? 'No goal: play until you end the round.'
+                : on.length === 1 && g.melee
+                  ? 'The last crew standing wins.'
+                  : rivalry
+                    ? 'Rivalry: whoever fulfils every goal first wins.'
+                    : 'Fulfil every goal to win.';
   };
   showGoal();
   const ruleNote = h('div', { class: 'pp-hint', style: at(199, 124, 186, 76) });
@@ -611,8 +632,30 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     'div',
     { class: 'pp-page' },
     ...idList(
-      [{ name: 'Melee: the last crew standing wins', icon: () => picture(PICTURES.melee, 28), get: () => (d.goal === 'melee' ? 1 : 0), set: (v) => (d.goal = v ? 'melee' : 'none'), max: 1 }],
-      { x: 6, y: 19, w: 171, hgt: 30, label: 'Goals:', format: (n) => (n ? 'on' : 'off'), onChange: showGoal },
+      [
+        ...GOAL_IDS.map((id: GoalId) => ({
+          name: `${GOALS[id].name}: ${GOALS[id].description}`,
+          icon: () => wholePicture(GOALS[id].icon, 64, 28),
+          get: () => d.goals[id] ?? 0,
+          set: (v: number) => {
+            const goals = { ...d.goals };
+            if (v > 0) goals[id] = v;
+            else delete goals[id];
+            d.goals = goals;
+          },
+          max: GOALS[id].max,
+          format: GOALS[id].count ?? ((n: number) => (GOALS[id].max > 1 ? `${n}x` : 'on')),
+        })),
+        ...LATER_GOALS.map((g) => ({
+          name: `${g.name}: comes later, it needs ${g.needs}`,
+          icon: () => wholePicture(g.icon, 64, 28),
+          get: () => 0,
+          set: () => {},
+          max: 0,
+          later: true,
+        })),
+      ],
+      { x: 6, y: 19, w: 171, hgt: 30, label: 'Goals:', onChange: showGoal },
     ),
     goalNote,
     h('div', { class: 'pp-label', style: at(6, 123, 186) }, 'Description:'),
@@ -636,7 +679,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
           later: true,
         })),
       ],
-      { x: 199, y: 19, w: 171, hgt: 102, label: 'Rules:', format: (n) => (n ? 'on' : 'off'), onChange: showRules },
+      { x: 199, y: 19, w: 171, hgt: 102, label: 'Rules:', format: (n) => (n ? 'on' : 'off'), onChange: () => { showRules(); showGoal(); } },
     ),
     ruleNote,
     h('div', { class: 'pp-label', style: at(6, 86, 120) }, 'Computer crews:'),

@@ -7,7 +7,18 @@ import type { Item } from '../objects/item';
 import { dropFlag } from './fire';
 import type { World } from './world';
 
-export type RuleId = 'flagRemoveable' | 'captureTheFlag' | 'lossOfBase' | 'killTheCaptain' | 'constructionMaterial' | 'collectibleAnimals' | 'snowballs' | 'noMetalTrick';
+export type RuleId =
+  | 'flagRemoveable'
+  | 'captureTheFlag'
+  | 'lossOfBase'
+  | 'killTheCaptain'
+  | 'constructionMaterial'
+  | 'collectibleAnimals'
+  | 'rivalry'
+  | 'constructionSnowIn'
+  | 'releaseClonk'
+  | 'snowballs'
+  | 'noMetalTrick';
 
 export interface RuleDef {
   id: RuleId;
@@ -67,6 +78,24 @@ export const RULES: Record<RuleId, RuleDef> = {
     description: 'The highest rank clonk of each player will be the captain. If this captain is killed, the player will be eliminated.',
     icon: 'rules/KillTheCaptain.png',
   },
+  rivalry: {
+    id: 'rivalry',
+    name: 'Rivalry',
+    description: 'The Player who fullfills all goals first, wins. All the others lose.',
+    icon: 'rules/Rivalry.png',
+  },
+  constructionSnowIn: {
+    id: 'constructionSnowIn',
+    name: 'Buildings can snow in',
+    description: "Buildings won't clear snow in front of them and thus can snow in.",
+    icon: 'rules/ConstructionSnowIn.png',
+  },
+  releaseClonk: {
+    id: 'releaseClonk',
+    name: 'Release Clonk',
+    description: 'Select this item in the rule menu to release the controlled clonk.',
+    icon: 'rules/ReleaseClonk.png',
+  },
 };
 
 export const RULE_IDS = Object.keys(RULES) as RuleId[];
@@ -74,8 +103,6 @@ export const RULE_IDS = Object.keys(RULES) as RuleId[];
 /** The original's other rules, shown greyed in the scenario settings with what they wait for. */
 export const LATER_RULES: readonly { name: string; icon: string; needs: string }[] = [
   { name: 'Power usage', icon: 'rules/Energy.png', needs: 'windmills and power lines' },
-  { name: 'Buildings can snow in', icon: 'rules/ConstructionSnowIn.png', needs: 'buildings that clear their doorstep' },
-  { name: 'Rivalry', icon: 'rules/Rivalry.png', needs: 'goals other than the melee' },
   { name: 'Team account', icon: 'rules/TeamAccount.png', needs: 'allied players' },
   { name: 'Team home base material', icon: 'rules/TeamHomebase.png', needs: 'allied players' },
   { name: 'Team knowledge', icon: 'rules/TeamKnowledge.png', needs: 'allied players' },
