@@ -70,3 +70,10 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `animals/WipfDead.png`, `animals/BirdDead.png`, `animals/FishDead.png`, `animals/SharkDead.png`, `animals/MonsterDead.png` | the same folders' `Dead.c4d/Graphics.png` (**the dead fish's `Overlay.png` is drawn into `FishDead.png`**) |
 | `animals/MonsterEgg.png` | `Objects.c4d/Animals.c4d/Monster.c4d/MonsterEgg.c4d/Graphics.png` |
 | `sound/DeathGrowl.wav`, `EggBreak.wav`, `Growl1-3.wav`, `Munch1.wav`, `Raven1.wav`, `RavenHurt.wav`, `Snuff1-2.wav`, `WipfDead.wav`, `WipfHurt.wav` | `Sound.c4g/` (**renamed to lower-case `.wav`** where the original was `.WAV`) |
+| `vegetation/Palm1.png`, `Palm2.png`, `Cactus.png`, `Cactus2.png`, `Seaweed1.png`, `Seaweed2.png`, `Palm1Burned.png`, `Palm2Burned.png` | `Objects.c4d/Vegetation.c4d/Palm1.c4d`, `Palm2.c4d`, `Cactus.c4d`, `Cactus2.c4d`, `Seaweed1.c4d`, `Seaweed2.c4d` `/Graphics.png`, and `Palm1.c4d`, `Palm2.c4d` `/Burned.c4d/Graphics.png` |
+| `items/Shell.png`, `items/Bone.png`, `items/Skull.png` | `Objects.c4d/Vegetation.c4d/Shell.c4d`, `Bone.c4d`, `Skull.c4d` `/Graphics.png` |
+| `environment/Time.png`, `Stars.png`, `BirdSong.png`, `Cicadas.png`, `Owl.png`, `ColoredFishes.png`, `Driftwood.png`, `Glint.png`, `Lenseflare.png`, `Rockfall.png`, `SeaLevel.png`, `Reproduction.png`, `Grass.png` | `Objects.c4d/Environment.c4d/` the same names `.c4d/Graphics.png` |
+| `environment/Star.png`, `environment/MaterialSpark.png`, `environment/BigRock.png` | `Objects.c4d/Environment.c4d/Stars.c4d/Star.c4d`, `Glint.c4d/MaterialSpark.c4d`, `Rockfall.c4d/BigRock.c4d` `/Graphics.png` |
+| `animals/FishOverlay.png` | `Objects.c4d/Animals.c4d/Fish.c4d/Overlay.png` (tinted for coloured fish) |
+| `sound/BirdSong1-5.wav`, `Cicada1-3.wav`, `RockBreak1-3.wav` | `Objects.c4d/Environment.c4d/BirdSong.c4d`, `Cicadas.c4d`, `Rockfall.c4d/BigRock.c4d` (`BirdSong1.WAV` **renamed to lower-case `.wav`**) |
+| `sound/Owl.wav`, `sound/MetalHit1-3.wav` | `Sound.c4g/Owl.WAV`, `MetalHit1-3.WAV` (**renamed to lower-case `.wav`**) |

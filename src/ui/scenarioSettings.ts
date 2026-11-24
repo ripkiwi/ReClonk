@@ -884,7 +884,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
   };
   const ground = h(
     'select',
-    { class: 'pp-select', style: at(205, 194, 80), onchange: () => {
+    { class: 'pp-select', style: at(205, 186, 80), onchange: () => {
       l.material = ground.value;
       changed();
     } },
@@ -893,7 +893,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
   ground.value = GROUNDS.includes(l.material) ? l.material : 'Earth';
   const liquid = h(
     'select',
-    { class: 'pp-select', style: at(295, 194, 90), title: 'What fills the lakes below the water level (Landscape page)', onchange: () => {
+    { class: 'pp-select', style: at(295, 186, 90), title: 'What fills the lakes below the water level (Landscape page)', onchange: () => {
       l.liquid = liquid.value;
       changed();
     } },
@@ -901,7 +901,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
   );
   // Names like "Water" or "Water-Liquid" pick the matching entry.
   liquid.value = LIQUIDS.find(([v]) => v.split('-')[0].toLowerCase() === l.liquid.split('-')[0].toLowerCase())?.[0] ?? 'Water-Smooth';
-  const inEarthLevel = slider({ x: 205, y: 84, w: 170, color: 'rgb(130,90,40)', label: 'Objects in earth amount:', value: l.inEarthLevel, random: true, show: plain, onChange: changed });
+  const inEarthLevel = slider({ x: 205, y: 56, w: 170, color: 'rgb(130,90,40)', label: 'Objects in earth amount:', value: l.inEarthLevel, random: true, show: plain, onChange: changed });
   const vegetationLevel = slider({ x: 5, y: 132, w: 170, color: 'rgb(40,140,40)', label: 'Vegetation amount:', value: l.vegetationLevel, random: true, show: plain, onChange: changed });
   const environmentPage = h(
     'div',
@@ -916,9 +916,9 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
       })),
       { x: 5, y: 15, w: 170, hgt: 58, label: 'Material layers:', title: 'Veins of other materials drawn into the ground: how many per 15000 map pixels', format: String, onChange: changed },
     ),
-    h('div', { class: 'pp-label', style: at(205, 184, 80) }, 'Ground:'),
+    h('div', { class: 'pp-label', style: at(205, 176, 80) }, 'Ground:'),
     ground,
-    h('div', { class: 'pp-label', style: at(295, 184, 90) }, 'Liquid:'),
+    h('div', { class: 'pp-label', style: at(295, 176, 90) }, 'Liquid:'),
     liquid,
     ...idList(
       ITEM_NAMES.map(([id, name]) => ({
@@ -928,7 +928,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         set: (v: number) => (l.inEarth[id] = v),
         max: LIMITS.share.max,
       })),
-      { x: 205, y: 15, w: 170, hgt: 58, label: 'Objects in earth types:', category: 'In earth', onChange: changed },
+      { x: 205, y: 15, w: 170, hgt: 30, label: 'Objects in earth types:', category: 'In earth', onChange: changed },
     ),
     ...inEarthLevel,
     ...idList(
@@ -939,7 +939,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         set: (v: number) => (l.onSurface[id] = v),
         max: LIMITS.objects.max,
       })),
-      { x: 205, y: 104, w: 170, hgt: 28, label: 'Objects on the surface:', category: 'On the surface', title: 'Per 1000 pixels of map width', format: String, onChange: changed },
+      { x: 205, y: 80, w: 170, hgt: 30, label: 'Objects on the surface:', category: 'On the surface', title: 'Per 1000 pixels of map width', format: String, onChange: changed },
     ),
     ...idList(
       ENV_IDS.map((id) => ({
@@ -949,7 +949,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         set: (v: number) => (d.environment[id] = v),
         max: ENVIRONMENT[id].max,
       })),
-      { x: 205, y: 140, w: 170, hgt: 28, label: 'Environment:', category: 'Environment', title: 'Day and night, stars, bird song, rockfall and more: more of one does more', format: String, onChange: changed },
+      { x: 205, y: 124, w: 170, hgt: 34, label: 'Environment:', category: 'Environment', title: 'Day and night, stars, bird song, rockfall and more: more of one does more', format: String, onChange: changed },
     ),
     ...idList(
       [

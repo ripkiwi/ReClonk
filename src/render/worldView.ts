@@ -473,7 +473,8 @@ export class WorldView {
       let [a, b] = [1, 0];
       for (const r of [night, sun, season]) {
         if (!r) continue;
-        const [ra, rb] = fitRamp(r[ch]);
+        // The night and sun ramps only bend the dark and middle tones: follow those (most of the picture).
+        const [ra, rb] = r === season ? fitRamp(r[ch]) : [(r[ch][1] - r[ch][0]) / 128, r[ch][0] / 255];
         a = ra * a;
         b = ra * b + rb;
       }
