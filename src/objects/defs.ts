@@ -255,6 +255,25 @@ export const ITEMS: Record<ItemId, ItemDef> = {
     id: 'monsterEgg', name: 'Monster egg', value: 10, mass: 10, vertices: itemVertex, egg: 'monster',
     graphic: { file: 'animals/MonsterEgg.png', facet: { x: 0, y: 0, w: 6, h: 6 } }, picture: { x: 6, y: 0, w: 40, h: 40 },
   },
+  // Shell.c4d: lies on the bottom of lakes; worth 10 gold (it holds a pearl).
+  shell: {
+    id: 'shell', name: 'Shell', value: 10, mass: 5, vertices: [{ x: 0, y: 2, cnat: CNAT.None, friction: 50 }],
+    graphic: { file: 'items/Shell.png', facet: { x: 0, y: 0, w: 12, h: 8 } }, picture: { x: 12, y: 0, w: 64, h: 64 },
+  },
+  // Bone.c4d: lies about on the ground or buried in the earth.
+  bone: {
+    id: 'bone', name: 'Bone', value: 1, mass: 10,
+    vertices: [
+      { x: -2, y: 2, cnat: CNAT.None, friction: 20 },
+      { x: 2, y: -2, cnat: CNAT.None, friction: 20 },
+    ],
+    graphic: { file: 'items/Bone.png', facet: { x: 0, y: 0, w: 6, h: 6 } }, picture: { x: 6, y: 0, w: 64, h: 64 },
+  },
+  // Skull.c4d: the same, a bit more valuable.
+  skull: {
+    id: 'skull', name: 'Skull', value: 2, mass: 5, vertices: [{ x: 0, y: 6, cnat: CNAT.None, friction: 50 }],
+    graphic: { file: 'items/Skull.png', facet: { x: 0, y: 0, w: 24, h: 14 } }, picture: { x: 24, y: 0, w: 64, h: 64 },
+  },
   // A snake picked up alive (Snake.c4d is Collectible, with the Collectible animals rule). It bites whoever holds it.
   snake: {
     id: 'snake', name: 'Snake', value: 7, mass: 5, vertices: [{ x: 0, y: 4, cnat: CNAT.Bottom, friction: 100 }], animal: 'snake', float: true,

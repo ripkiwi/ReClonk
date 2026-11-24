@@ -57,7 +57,9 @@ export type ItemId = 'rock' | 'gold' | 'flint' | 'tflint' | 'superflint' | 'supe
   | 'loam' | 'metal' | 'coal' | 'ore' | 'sulphur' | 'concrete' | 'liquidGranite' | 'gunpowder' | 'earth' | 'sand' | 'ashes' | 'ice' | 'snowball'
   // Animals a clonk carries: alive (wipf, fish), dead, and the monster's egg.
   | 'wipf' | 'fish' | 'deadWipf' | 'deadFish' | 'deadBird' | 'monsterEgg'
-  | 'snake' | 'deadSnake' | 'fireMonsterEgg' | 'birdEgg' | 'zapNest';
+  | 'snake' | 'deadSnake' | 'fireMonsterEgg' | 'birdEgg' | 'zapNest'
+  // Vegetation that is an object: shells, bones and skulls.
+  | 'shell' | 'bone' | 'skull';
 
 export interface Material {
   name: string;

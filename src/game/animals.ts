@@ -201,7 +201,7 @@ function punch(world: World, a: { dir: -1 | 1 }, p: Clonk | Animal, points: numb
 }
 
 /** Animal.c4d Reproduction: grown up, the right action, and not too many of its kind around. */
-function reproduce(world: World, a: Animal): void {
+export function reproduce(world: World, a: Animal): void {
   if (!a.alive || a.con < 100) return;
   const id = a.def.id;
   if ((id === 'fish' || id === 'shark') && a.action.name !== 'Swim') return;
@@ -486,7 +486,7 @@ function birdNesting(world: World, a: Animal): void {
     if (tree) {
       // A nice spot in its crown.
       const s = tree.shape;
-      const fireTop = tree.def.burned.fireTop * tree.scale;
+      const fireTop = (tree.def.burned?.fireTop ?? 0) * tree.scale;
       const x = s.x + world.rng.int(Math.max(1, Math.trunc(s.w - 20))) + 10;
       const y = s.y + world.rng.int(Math.max(1, Math.trunc(s.h - fireTop - 20))) + 10;
       moveTo(a, x, y, { call: 'buildNest', tree });
@@ -503,7 +503,7 @@ function birdNesting(world: World, a: Animal): void {
 /** Bird.c4d FindTree: a standing, grown tree within 500 px, not burning, not under water, without a nest. */
 function findTree(world: World, a: Animal): Plant | null {
   for (const p of world.plants) {
-    if (!p.def.id.startsWith('tree') || p.state !== 'standing' || p.removed || p.fire || p.con < FULL_CON) continue;
+    if (!p.def.id.startsWith('tree') || p.burned || p.state !== 'standing' || p.removed || p.fire || p.con < FULL_CON) continue;
     const c = p.center;
     if (Math.hypot(c.x - a.x, c.y - a.y) >= 500) continue;
     if (world.land.isSolid(Math.round(c.x), Math.round(c.y)) || world.land.isLiquid(Math.round(c.x), Math.round(c.y))) continue;

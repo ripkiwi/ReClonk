@@ -85,6 +85,13 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
   damage every 30 ticks, so a grown tree falls after about 13 seconds; flints damage and fell trees too, and a
   tree whose ground is blasted away falls over. Double dig at a felled tree to chop it into wood (7 for the big
   one), which sells for 2 gold. Grass grows along the earth and blows away in blasts.
+- **More vegetation:** palms (the tall one bends in a storm), cacti (can't be chopped, don't burn, spread
+  slowly), seaweed on the bottom of lakes (wiggles under water, hangs limp out of it), dead trees, and shells,
+  bones and skulls to find and sell. Shark Lake and Lava Caves now have the original's.
+- **Environment objects, like the original's Environment list:** day and night (the sky darkens and stars
+  come out), bird song by day, cicadas and an owl by night, coloured fish, driftwood, glinting gold, crystal and
+  ice, the sun with its lens flare, rockfall (big rocks that bounce, crush clonks and break apart), sea level
+  drains and animal reproduction. More of one does more, like the original's counts.
 - **Fire, like the original:** a flint that hits a tree sets it alight (10 blast damage; lightning does it too),
   and it turns into a black dead tree that burns away in about 28 seconds, falling over on the way. Burning
   things set fire to whatever their middle is in, every 35 ticks: a burning tree lights the trees it reaches
@@ -268,7 +275,8 @@ In the order we plan to build them (checked 24 Nov 2026):
 7. **Animals and crew:** the Aqua Clonk (the snake, fire monster, zap nest and bird nests are in).
 8. **Spells and rules:** force fields, warp, warp to base, volcano, eternal flame, camouflage, invisibility,
    revaluation, random magic; the rules still greyed in Scenario Properties.
-9. **Vegetation and scenery:** cactus, palms, seaweed, bones, skulls, shells, day and night, birdsong and others.
+9. ~~**Vegetation and scenery:** cactus, palms, seaweed, bones, skulls, shells, day and night, birdsong and others.~~
+   Done (24 Nov 2026).
 10. **More original scenarios:** 4 of about 90 so far; next the Worlds, Melees and the ten tutorials.
 11. **Savegames, replays and gamepad.**
 12. **Modding API**, then **multiplayer**, then the Knights, Western, Fantasy, Far Worlds and Hazard packs.

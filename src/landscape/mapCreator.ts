@@ -12,7 +12,7 @@
  */
 import type { Rng } from '../core/rng';
 import { Landscape } from './landscape';
-import type { PlantId } from '../objects/vegetation';
+import type { VegetationId } from '../objects/vegetation';
 import { MATERIALS, Mat, TEXMAP, texIndex, type ItemId } from './materials';
 
 /**
@@ -72,8 +72,8 @@ export interface LandscapeDef {
   onSurface: Partial<Record<ItemId, number>>;
   /** Gravity in percent of normal, 10 to 200 (shown on the Weather page, like the original's). */
   gravity: SVal;
-  /** Trees and bushes at the start, by relative share (the original's Vegetation)... */
-  vegetation: Partial<Record<PlantId, number>>;
+  /** Trees, bushes, palms, cacti, seaweed, dead trees, shells and bones at the start, by relative share (the original's Vegetation)... */
+  vegetation: Partial<Record<VegetationId, number>>;
   /** ...and how many: one try per 50 pixels of landscape width at 100 (VegetationLevel). */
   vegetationLevel: SVal;
   /** Grass along the earth surface (the original's Grass environment object). */

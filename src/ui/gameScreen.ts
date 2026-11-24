@@ -37,6 +37,9 @@ const ROCK_HITS = ['RockHit1', 'RockHit2', 'RockHit3'] as const;
 const WOOD_HITS = ['WoodHit1', 'WoodHit2', 'WoodHit3'] as const;
 const CRYSTAL_HITS = ['Crystal1', 'Crystal2', 'Crystal3'] as const;
 const METAL_HITS = ['MetalHit1', 'MetalHit2', 'MetalHit3'] as const;
+const BIRD_SONGS = ['BirdSong1', 'BirdSong2', 'BirdSong3', 'BirdSong4', 'BirdSong5'] as const;
+const CICADAS = ['Cicada1', 'Cicada2', 'Cicada3'] as const;
+const ROCK_BREAKS = ['RockBreak1', 'RockBreak2', 'RockBreak3'] as const;
 const DIGS = ['Dig1', 'Dig2', 'Dig3', 'Dig4', 'Dig5'] as const;
 /** What each kind of item sounds like when it lands (its Hit: RockHit, WoodHit, MetalHit). */
 const ROCK_SOUND = new Set(['rock', 'gold', 'coal', 'ore', 'ice', 'loam']);
@@ -236,9 +239,18 @@ export class GameScreen {
           : e.sound === 'Raven' ? 'Raven1'
           : e.sound;
         this.env.sounds.play(id, volumeAt(e.x, e.y) * 0.8);
+      } else if (e.type === 'environment') {
+        // Birds, cicadas and the owl are heard everywhere (global sounds); rocks where they are.
+        if (e.sound === 'BirdSong') this.env.sounds.play(pick(BIRD_SONGS), 0.5);
+        else if (e.sound === 'Cicada') this.env.sounds.play(pick(CICADAS), 0.5);
+        else if (e.sound === 'Owl') this.env.sounds.play('Owl', 0.6);
+        else if (e.sound === 'RockHit') this.env.sounds.play(pick(ROCK_HITS), volumeAt(e.x, e.y) * 0.8);
+        else if (e.sound === 'RockBreak') this.env.sounds.play(pick(ROCK_BREAKS), volumeAt(e.x, e.y));
+        else this.env.sounds.play('Earthquake', volumeAt(e.x, e.y));
       } else if (e.type === 'itemHit') {
         const id = e.item.def.id;
-        const set = id === 'crystal' ? CRYSTAL_HITS : id === 'metal' ? METAL_HITS : WOOD_SOUND.has(id) ? WOOD_HITS : ROCK_SOUND.has(id) || e.item.def.fuse ? ROCK_HITS : null;
+        // Bones and skulls knock like wood, a shell clinks like metal (their Hit scripts).
+        const set = id === 'crystal' ? CRYSTAL_HITS : id === 'metal' || id === 'shell' ? METAL_HITS : WOOD_SOUND.has(id) || id === 'bone' || id === 'skull' ? WOOD_HITS : ROCK_SOUND.has(id) || e.item.def.fuse ? ROCK_HITS : null;
         if (set) this.env.sounds.play(pick(set), volumeAt(e.item.x, e.item.y) * 0.5);
       }
     }

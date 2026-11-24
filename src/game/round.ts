@@ -9,6 +9,7 @@ import { evaluate } from '../landscape/mapCreator';
 import { crewCount, type ScenarioDef } from './scenarios';
 import { Weather } from './weather';
 import { initAnimals } from './animals';
+import { Environment } from './environment';
 import { initGoals, RACE_OFFSET } from './goals';
 import { World } from './world';
 
@@ -157,6 +158,11 @@ export function startRound(
   initAnimals(world, scenario.animals, scenario.nests, seed);
   // Then what the goals bring along: monsters to hunt, wipfs to rescue.
   initGoals(world, new Rng(seed ^ 0x90a1));
+  // Then the environment objects (Scenario.txt [Environment]), also with random numbers of their own.
+  if (Object.values(scenario.environment).some((n) => n && n > 0)) {
+    world.environment = new Environment(scenario.environment, world, seed ^ 0xe1f0);
+    world.environment.colorFish(world);
+  }
   return {
     scenario,
     seed,

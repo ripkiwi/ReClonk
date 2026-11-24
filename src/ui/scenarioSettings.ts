@@ -6,7 +6,8 @@ import { shopEntry, type ShopId } from '../game/world';
 import { MAX_MAP_PLAYER_EXTEND, type SVal } from '../landscape/mapCreator';
 import { MATERIALS, Mat, TEXMAP, texIndex, TUNNEL, type ItemId, type TexEntry } from '../landscape/materials';
 import { ITEMS, STRUCTURES } from '../objects/defs';
-import { PLANT_IDS, PLANTS, type PlantId } from '../objects/vegetation';
+import { BURNED_TREES, PLANTS, VEGETATION_IDS, VEGETATION_ITEMS, type BurnedTreeId, type PlantId, type VegetationId, type VegetationItemId } from '../objects/vegetation';
+import { ENV_IDS, ENVIRONMENT } from '../game/environment';
 import { VEHICLES, type VehicleId } from '../objects/vehicle';
 import { ANIMALS, SCENARIO_ANIMAL_IDS } from '../objects/animal';
 import { CONTENT_BASE } from '../render/assets';
@@ -68,6 +69,9 @@ const ITEM_SHEETS: Record<ItemId, [number, number]> = {
   deadFish: [144, 64],
   deadBird: [92, 64],
   monsterEgg: [92, 40],
+  shell: [76, 64],
+  bone: [70, 64],
+  skull: [88, 64],
   loam: [64, 70],
   metal: [72, 64],
   coal: [45, 35],
@@ -94,6 +98,21 @@ const vehiclePicture = (id: VehicleId): Picture => ({
   ...VEHICLES[id].picture,
 });
 const plantPicture = (id: PlantId): Picture => ({ file: PLANTS[id].file, sheet: PLANTS[id].sheet, ...PLANTS[id].picture });
+/** What each entry of the Vegetation list is called and looks like: plants, dead trees and objects. */
+function vegetationEntry(id: VegetationId): { name: string; desc: string; picture: Picture } {
+  if (id in VEGETATION_ITEMS) {
+    const desc = VEGETATION_ITEMS[id as VegetationItemId].placement === 'liquid' ? 'on the bottom of lakes' : 'on the ground';
+    return { name: ITEMS[id as VegetationItemId].name, desc, picture: itemPicture(id as VegetationItemId) };
+  }
+  const burned = BURNED_TREES[id as BurnedTreeId];
+  if (burned) {
+    const b = PLANTS[burned].burned!;
+    return { name: `Dead ${PLANTS[burned].name.toLowerCase()}`, desc: 'a burnt tree', picture: { file: b.file, sheet: [b.width, b.height], x: 0, y: 0, w: b.width, h: b.height } };
+  }
+  const d = PLANTS[id as PlantId];
+  const desc = d.placement === 'liquid' ? 'grows on the bottom of lakes' : d.chop ? 'can be chopped into wood' : 'cannot be chopped';
+  return { name: d.name, desc, picture: plantPicture(id as PlantId) };
+}
 
 const PICTURES: Record<ItemId | VehicleId | 'clonk' | 'sorcerer' | 'hut' | 'elevator' | 'tower' | 'melee' | 'grass', Picture> = {
   ...(Object.fromEntries((Object.keys(ITEM_SHEETS) as ItemId[]).map((id) => [id, itemPicture(id)])) as Record<ItemId, Picture>),
@@ -900,7 +919,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
   );
   // Names like "Water" or "Water-Liquid" pick the matching entry.
   liquid.value = LIQUIDS.find(([v]) => v.split('-')[0].toLowerCase() === l.liquid.split('-')[0].toLowerCase())?.[0] ?? 'Water-Smooth';
-  const inEarthLevel = slider({ x: 205, y: 84, w: 170, color: 'rgb(130,90,40)', label: 'Objects in earth amount:', value: l.inEarthLevel, random: true, show: plain, onChange: changed });
+  const inEarthLevel = slider({ x: 205, y: 56, w: 170, color: 'rgb(130,90,40)', label: 'Objects in earth amount:', value: l.inEarthLevel, random: true, show: plain, onChange: changed });
   const vegetationLevel = slider({ x: 5, y: 132, w: 170, color: 'rgb(40,140,40)', label: 'Vegetation amount:', value: l.vegetationLevel, random: true, show: plain, onChange: changed });
   const environmentPage = h(
     'div',
@@ -927,7 +946,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         set: (v: number) => (l.inEarth[id] = v),
         max: LIMITS.share.max,
       })),
-      { x: 205, y: 15, w: 170, hgt: 58, label: 'Objects in earth types:', category: 'In earth', onChange: changed },
+      { x: 205, y: 15, w: 170, hgt: 30, label: 'Objects in earth types:', category: 'In earth', onChange: changed },
     ),
     ...inEarthLevel,
     ...idList(
@@ -938,17 +957,30 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         set: (v: number) => (l.onSurface[id] = v),
         max: LIMITS.objects.max,
       })),
-      { x: 205, y: 104, w: 170, hgt: 58, label: 'Objects on the surface:', category: 'On the surface', title: 'Per 1000 pixels of map width', format: String, onChange: changed },
+      { x: 205, y: 80, w: 170, hgt: 30, label: 'Objects on the surface:', category: 'On the surface', title: 'Per 1000 pixels of map width', format: String, onChange: changed },
+    ),
+    ...idList(
+      ENV_IDS.map((id) => ({
+        name: `${ENVIRONMENT[id].name}: ${ENVIRONMENT[id].desc}`,
+        icon: () => picture({ file: ENVIRONMENT[id].file, sheet: [64, 64], x: 0, y: 0, w: 64, h: 64 }, 22),
+        get: () => d.environment[id] ?? 0,
+        set: (v: number) => (d.environment[id] = v),
+        max: ENVIRONMENT[id].max,
+      })),
+      { x: 205, y: 124, w: 170, hgt: 34, label: 'Environment:', category: 'Environment', title: 'Day and night, stars, bird song, rockfall and more: more of one does more', format: String, onChange: changed },
     ),
     ...idList(
       [
-        ...PLANT_IDS.map((id) => ({
-          name: `${PLANTS[id].name}: share of the trees and bushes`,
-          icon: () => picture(plantPicture(id), 24),
-          get: () => l.vegetation[id] ?? 0,
-          set: (v: number) => (l.vegetation[id] = v),
-          max: LIMITS.share.max,
-        })),
+        ...VEGETATION_IDS.map((id) => {
+          const e = vegetationEntry(id);
+          return {
+            name: `${e.name}: share of the vegetation (${e.desc})`,
+            icon: () => picture(e.picture, 24),
+            get: () => l.vegetation[id] ?? 0,
+            set: (v: number) => (l.vegetation[id] = v),
+            max: LIMITS.share.max,
+          };
+        }),
         {
           name: 'Grass: along the earth surface',
           icon: () => picture(PICTURES.grass, 24),
@@ -957,7 +989,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
           max: 1,
         },
       ],
-      { x: 5, y: 88, w: 170, hgt: 30, label: 'Vegetation types:', category: 'Vegetation', title: 'Trees and bushes by share, and grass on or off', onChange: changed },
+      { x: 5, y: 88, w: 170, hgt: 30, label: 'Vegetation types:', category: 'Vegetation', title: 'Trees, bushes, palms, cacti, seaweed, shells and bones by share, and grass on or off', onChange: changed },
     ),
     ...vegetationLevel,
     ...idList(

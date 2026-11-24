@@ -1,3 +1,4 @@
+import type { Environment, EnvSound } from './environment';
 import { Rng } from '../core/rng';
 import type { GeneratedMap } from '../landscape/generate';
 import type { Landscape } from '../landscape/landscape';
@@ -91,7 +92,10 @@ export type WorldEvent =
   /** A clonk started on a loam or metal bridge. */
   | { type: 'bridge'; clonk: Clonk; tick: number }
   /** A chunk of earth, sand or concrete burst where it landed. */
-  | { type: 'itemBreak'; item: Item; tick: number };
+  | { type: 'itemBreak'; item: Item; tick: number }
+
+  /** An environment object made a sound: birds, cicadas or the owl (anywhere, x -1), a big rock where it is. */
+  | { type: 'environment'; sound: EnvSound; x: number; y: number; tick: number };
 
 /** Extra experience on top of the original's "1 per 5 commands", so promotions come at a fun pace. */
 export const EXPERIENCE = {
@@ -237,6 +241,8 @@ export class World {
   tick = 0;
   /** Seasons, wind, rain and disasters; null plays without weather (tests). */
   weather: Weather | null = null;
+  /** Day and night, stars, bird song, rockfall and the scenario's other environment objects; null without any. */
+  environment: Environment | null = null;
   /** Things that happened this tick, for effects and sound. The renderer drains it. */
   readonly events: WorldEvent[] = [];
 
@@ -250,7 +256,10 @@ export class World {
   static fromMap(map: GeneratedMap, seed: number): World {
     const world = new World(map.land, new Rng(seed ^ 0x5eed));
     for (const it of map.items) world.spawnItem(it.id, it.x, it.y);
-    for (const p of map.plants) world.addPlant(PLANTS[p.id].id, p.x, p.bottom, p.con, p.dir);
+    for (const p of map.plants) {
+      const plant = world.addPlant(PLANTS[p.id].id, p.x, p.bottom, p.con, p.dir);
+      if (p.burned) plant.burned = true;
+    }
     world.grass = map.grass.map((g) => ({ ...g }));
     return world;
   }
@@ -277,7 +286,7 @@ export class World {
 
   /** The tree or felled tree a clonk standing here could chop (Clonk.c4d FindTree, Find_AtPoint). */
   choppableAt(c: Clonk): Plant | null {
-    for (const p of this.plants) if (!p.removed && p.isAt(c.x, c.y)) return p;
+    for (const p of this.plants) if (!p.removed && p.def.chop && p.isAt(c.x, c.y)) return p;
     return null;
   }
 
@@ -586,6 +595,7 @@ export class World {
     if (this.vehicles.some((v) => v.removed)) this.vehicles = this.vehicles.filter((v) => !v.removed);
     if (this.plants.some((p) => p.removed)) this.plants = this.plants.filter((p) => !p.removed);
     this.weather?.step(this);
+    this.environment?.step(this);
     stepMagic(this);
     this.land.pxs.step(this.rng);
     this.land.step(this.tick, this.rng);
@@ -1283,22 +1293,56 @@ export class World {
         continue;
       }
       const t = this.tick + p.timerOffset;
+      if (p.def.seaweed) {
+        this.stepSeaweed(p, t);
+        continue;
+      }
       if (t % TREE.growthInterval === 0) {
         // Dead trees don't grow, nor do burning ones (C4Object::ExecLife).
         if (p.con < FULL_CON && !p.burned && !p.fire) p.con = Math.min(FULL_CON, p.con + p.def.growth * 100);
         if (!plantRooted(land, p)) this.fell(p, this.rng.bool() ? 1 : -1);
+        // Now and then a cactus comes up nearby (Cactus.c4d Life).
+        if (p.def.spread === 'cactus' && this.rng.int(TREE.cactusRate) === 0) this.spreadCactus(p);
       }
-      // Sway in the wind (Tree.c4d Still and Breeze).
-      if (t % 10 === 0 && this.weather) {
+      // Sway in the wind (Tree.c4d Still and Breeze), and a tall palm bends in a storm (Palm2.c4d Storm).
+      if (t % 10 === 0 && this.weather && p.def.breeze) {
         const wind = Math.abs(this.weather.windAt(this, p.x, p.shape.y));
+        if (p.storm) {
+          if (wind < 75 + p.threshold) p.storm = false;
+        } else if (p.breeze && p.def.storm && wind > 74 + p.threshold) p.storm = true;
         if (wind > 49 + p.threshold) p.breeze = true;
-        else if (wind < 50 + p.threshold) p.breeze = false;
+        else if (wind < 50 + p.threshold) p.breeze = p.storm = false;
       }
-      if (t % TREE.seedInterval === 0 && !p.burned && this.rng.int(TREE.reproductionRate) === 0) this.reproduce(p);
+      if (p.def.spread === 'tree' && t % TREE.seedInterval === 0 && !p.burned && this.rng.int(TREE.reproductionRate) === 0) this.reproduce(p);
     }
     if (this.tick % TREE.growthInterval === 0) for (const g of this.grass) if (!grassRooted(land, g)) g.removed = true;
     if (this.plants.some((p) => p.removed)) this.plants = this.plants.filter((p) => !p.removed);
     if (this.grass.some((g) => g.removed)) this.grass = this.grass.filter((g) => !g.removed);
+  }
+
+  /**
+   * Seaweed wiggles in water and hangs limp out of it (Seaweed1.c4d
+   * CheckEnvironment, every 35 ticks). It's a light vehicle in the original:
+   * when the ground under it goes, it sinks down to the next.
+   */
+  private stepSeaweed(p: Plant, t: number): void {
+    const land = this.land;
+    if (t % TREE.growthInterval === 0) {
+      const c = p.shape;
+      p.wet = land.isLiquid(Math.round(p.x), Math.round(c.y + c.h / 2));
+    }
+    if (!plantRooted(land, p)) {
+      if (p.bottom >= land.height + 20) p.removed = true;
+      else p.bottom += 1;
+    }
+  }
+
+  /** A new cactus within 200 pixels, like the first ones were placed but small (Cactus.c4d Life: PlaceVegetation with growth 10). */
+  spreadCactus(p: Plant): Plant | null {
+    const half = TREE.reproductionArea / 2;
+    const spot = findPlantSpot(this.land, this.rng, p.def, { x: Math.round(p.x - half), y: Math.round(p.bottom - half), w: TREE.reproductionArea, h: TREE.reproductionArea });
+    if (!spot) return null;
+    return this.addPlant(p.def.id, spot.x, spot.bottom, TREE.seedlingCon, this.rng.bool() ? 1 : -1);
   }
 
   /** A new tree of the same kind nearby, if there aren't too many already (Tree.c4d Reproduction). */
@@ -1322,7 +1366,8 @@ export class World {
       if (p.removed || !directHit(x, y, p.bounds)) continue;
       // Ten damage sets a tree alight (BlastIncinerate).
       blastBurn(this, p, level, by);
-      if (p.state === 'standing' && p.damage > p.fellDamage) this.fell(p, x <= p.x ? 1 : -1);
+      // Only what can be chopped can be blasted down (cacti and seaweed have no Damage script).
+      if (p.def.chop && p.state === 'standing' && p.damage > p.fellDamage) this.fell(p, x <= p.x ? 1 : -1);
     }
     if (!grass) return;
     for (const g of this.grass) {

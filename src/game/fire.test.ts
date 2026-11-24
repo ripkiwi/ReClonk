@@ -96,7 +96,7 @@ describe('Trees on fire', () => {
     run(world, 35 * 10);
     expect(p.con).toBe(con);
     p.chopDown(1);
-    expect(p.wood).toBe(Math.trunc((PLANTS.tree1.burned.wood * p.con) / FULL_CON));
+    expect(p.wood).toBe(Math.trunc((PLANTS.tree1.burned!.wood * p.con) / FULL_CON));
   });
 
   it('a felled tree that burns has less and less wood in it', () => {
@@ -106,7 +106,7 @@ describe('Trees on fire', () => {
     run(world, 80);
     incinerate(world, p, null);
     run(world, 500);
-    expect(p.wood).toBeLessThanOrEqual(Math.trunc((PLANTS.tree1.burned.wood * p.con) / FULL_CON));
+    expect(p.wood).toBeLessThanOrEqual(Math.trunc((PLANTS.tree1.burned!.wood * p.con) / FULL_CON));
     expect(p.wood).toBeLessThan(PLANTS.tree1.wood);
   });
 
