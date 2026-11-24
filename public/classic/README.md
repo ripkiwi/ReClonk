@@ -42,6 +42,11 @@ This folder may only be used non-commercially. It is *not* covered by ReClonk's 
 | `vehicles/Balloon.png`, `vehicles/BalloonBurned.png` | `Objects.c4d/Vehicles.c4d/Balloon.c4d/Graphics.png`, `Burned.c4d/Graphics.png` |
 | `vehicles/Blimp.png`, `vehicles/BlimpBurned.png` | `Objects.c4d/Vehicles.c4d/Blimp.c4d/Graphics.png`, `Burned.c4d/Graphics.png` |
 | `vehicles/Lorry.png` | `Objects.c4d/Vehicles.c4d/Lorry.c4d/Graphics.png` |
+| `vehicles/Catapult.png`, `Cannon.png`, `Crossbow.png`, `SteamEngine.png`, `Wagon.png`, `Submarine.png` and their `*Burned.png` | `Objects.c4d/Vehicles.c4d/Catapult.c4d`, `Cannon.c4d`, `Crossbow.c4d`, `SteamEngine.c4d`, `Wagon.c4d`, `Sub.c4d`: `Graphics.png`, `Burned.c4d/Graphics.png` |
+| `vehicles/Chest.png`, `ChestBurned.png`, `Bridge.png`, `BridgeBurned.png` | `Objects.c4d/Items.c4d/Containers.c4d/Chest.c4d`, `Objects.c4d/Structures.c4d/Bridge.c4d`: `Graphics.png`, `Burned.c4d/Graphics.png` |
+| `vehicles/CombatCannon*.png`, `ArtilleryCannon*.png`, `AntiAirCannon*.png`, `structures/CannonTower.png`, `CannonTowerBurned.png`, `Basement42.png` | `Objects.c4d/Structures.c4d/CannonTower.c4d` (`Cannon1-3.c4d` and their `*Attached.c4d`, `Burned.c4d`), `Basement42.c4d` |
+| `items/Arrow*.png`, `FireArrow*.png`, `ExplosiveArrow*.png`, `Torpedo.png`, `FireBomb.png`, `*Barrel.png` | `Objects.c4d/Items.c4d/Weapons.c4d` (`ArrowPack.c4d`, `FireArrowPack.c4d`, `ExplosiveArrowPack.c4d` and their arrows, `Torpedo.c4d`, `FireBomb.c4d`), `Containers.c4d/*Barrel.c4d` |
+| `sound/Arrow.wav`, `ArrowHit.wav`, `Catapult.wav`, `CatapultSet.wav`, `Chuff.wav`, `Connect.wav`, `Error.wav`, `Grapple.wav`, `LineBreak.wav`, `Submarine.wav`, `Torpedo.wav`, `Airlock1-2.wav`, `ChestOpen.wav`, `ChestClose.wav`, `SteelGate2.wav`, `Splash1.wav`, `CannonRotation.wav`, `CannonStop.wav` | `Sound.c4g/` and the vehicles' own folders (lower-case `.wav`) |
 | `sound/Clonk.wav` | `Sound.c4g/Clonk.wav` (something going into the lorry) |
 | `sound/SailUp.wav`, `sound/SailDown.wav` | `Objects.c4d/Vehicles.c4d/Sailboat.c4d/SailUp.wav`, `SailDown.wav` |
 | `sound/Propel.wav` | `Sound.c4g/Propel.WAV` (**renamed to lower-case `.wav`**) |
