@@ -1,7 +1,7 @@
 // Object definitions. Values follow the original Clonk Rage DefCore.txt files.
 // These will move to content/objects/*/def.json once the mod loader exists.
 
-import type { ItemId } from '../landscape/materials';
+import { Mat, type ItemId } from '../landscape/materials';
 import type { Vertex } from './physics';
 import { CNAT } from './physics';
 import type { AnimalId } from './animal';
@@ -53,6 +53,17 @@ export interface ItemDef {
   decay?: { after: number; every: number; step: number; facet: Facet };
   /** An egg: a hard landing breaks it one time in two, a blast always, and now and then it hatches by itself (MonsterEgg.c4d). */
   egg?: AnimalId;
+  /**
+   * Breaks when it lands hard, into this many loose pixels of a material
+   * flying out at up to `level`/10 px per tick (Hit: CastPXS, like a chunk of earth).
+   */
+  breaksInto?: { mat: Mat; amount: number; level: number };
+  /** Loam and metal: using it builds a bridge or wall of this material (Loam.c4d BridgeMaterial). */
+  bridge?: Mat;
+  /** Melts when it's warmer than 0 degrees: shrinks and drips water (Ice.c4d CheckTemp). */
+  melts?: boolean;
+  /** Blows up with this radius when it takes any damage, unless a clonk holds it: then the fire goes out (Gunpowder.c4d Damage). */
+  explodeOnDamage?: number;
   /** A bird egg: it only hatches after brooding in a nest, and a young bird only comes out once it has lain there half that long (BirdEgg.c4d). */
   eggInNest?: boolean;
   /** A zap nest: when it hits the ground it breaks and lets out this many zaps (ZapNest.c4d Hit, BreakUp(28)). */
@@ -130,6 +141,88 @@ export const ITEMS: Record<ItemId, ItemDef> = {
     graphic: { file: 'items/Flag.png', facet: { x: 0, y: 0, w: 24, h: 12 }, overlay: 'items/FlagOverlay.png' },
     picture: { x: 144, y: 0, w: 64, h: 64 },
   },
+  // Loam.c4d: use it to build a bridge or a wall of earth.
+  loam: {
+    id: 'loam', name: 'Loam', value: 3, rebuy: true, mass: 8, vertices: itemVertex, usable: true, bridge: Mat.Earth,
+    graphic: { file: 'items/Loam.png', facet: itemFacet }, picture: picture6,
+  },
+  // Metal.c4d: needed for buildings; its bridges and walls are granite.
+  metal: {
+    id: 'metal', name: 'Metal', value: 8, rebuy: true, mass: 15, usable: true, bridge: Mat.Granite,
+    vertices: [
+      { x: -4, y: 3, cnat: CNAT.None, friction: 50 },
+      { x: 3, y: -3, cnat: CNAT.None, friction: 50 },
+    ],
+    graphic: { file: 'items/Metal.png', facet: { x: 0, y: 0, w: 8, h: 7 } }, picture: { x: 8, y: 0, w: 64, h: 64 },
+  },
+  // Coal.c4d: firing fuel.
+  coal: {
+    id: 'coal', name: 'Coal', value: 2, rebuy: true, mass: 9,
+    vertices: [
+      { x: -3, y: -4, cnat: CNAT.None, friction: 50 },
+      { x: 4, y: 3, cnat: CNAT.None, friction: 50 },
+      { x: -3, y: 5, cnat: CNAT.None, friction: 50 },
+    ],
+    graphic: { file: 'items/Coal.png', facet: { x: 0, y: 0, w: 10, h: 10 } }, picture: { x: 10, y: 0, w: 35, h: 35 },
+  },
+  // Ore.c4d: a foundry makes metal of it.
+  ore: {
+    id: 'ore', name: 'Ore', value: 3, rebuy: true, mass: 12,
+    vertices: [
+      { x: -4, y: 4, cnat: CNAT.None, friction: 50 },
+      { x: 0, y: -4, cnat: CNAT.None, friction: 50 },
+      { x: 4, y: 4, cnat: CNAT.None, friction: 50 },
+    ],
+    graphic: { file: 'items/Ore.png', facet: { x: 0, y: 0, w: 10, h: 10 } }, picture: { x: 10, y: 0, w: 35, h: 35 },
+  },
+  // Sulphur.c4d: base substance for explosives; a big enough blast sets it alight.
+  sulphur: {
+    id: 'sulphur', name: 'Sulphur', value: 3, rebuy: true, mass: 5, vertices: itemVertex, blastIncinerate: 50,
+    graphic: { file: 'items/Sulphur.png', facet: itemFacet }, picture: { x: 6, y: 0, w: 40, h: 40 },
+  },
+  // Concrete.c4d: breaks into rock where it lands, for level basements.
+  concrete: {
+    id: 'concrete', name: 'Concrete', value: 2, rebuy: true, mass: 10, vertices: itemVertex, breaksInto: { mat: Mat.Rock, amount: 100, level: 30 },
+    graphic: { file: 'items/Concrete.png', facet: itemFacet }, picture: { x: 6, y: 0, w: 35, h: 35 },
+  },
+  // LiquidGranite.c4d: like concrete, but granite.
+  liquidGranite: {
+    id: 'liquidGranite', name: 'Liquid granite', value: 5, rebuy: true, mass: 15, vertices: itemVertex, breaksInto: { mat: Mat.Granite, amount: 150, level: 30 },
+    graphic: { file: 'items/LiquidGranite.png', facet: itemFacet }, picture: { x: 6, y: 0, w: 35, h: 35 },
+  },
+  // Gunpowder.c4d: catches fire easily and blows up.
+  gunpowder: {
+    id: 'gunpowder', name: 'Gunpowder', value: 3, rebuy: true, mass: 5, vertices: itemVertex, contactIncinerate: 1, blastIncinerate: 1, explodeOnDamage: 30,
+    graphic: { file: 'items/Gunpowder.png', facet: itemFacet }, picture: picture6,
+  },
+  // Earth.c4d, Sand.c4d, Ashes.c4d: chunks dug out on request, which break where they land.
+  earth: {
+    id: 'earth', name: 'Earth', value: 0, mass: 8, vertices: itemVertex, breaksInto: { mat: Mat.Earth, amount: 100, level: 20 },
+    graphic: { file: 'items/Earth.png', facet: itemFacet }, picture: { x: 6, y: 0, w: 35, h: 35 },
+  },
+  sand: {
+    id: 'sand', name: 'Sand', value: 0, mass: 8, vertices: itemVertex, breaksInto: { mat: Mat.Sand, amount: 100, level: 20 },
+    graphic: { file: 'items/Sand.png', facet: itemFacet }, picture: { x: 6, y: 0, w: 35, h: 35 },
+  },
+  ashes: {
+    id: 'ashes', name: 'Ashes', value: 0, mass: 8, vertices: itemVertex, breaksInto: { mat: Mat.Ashes, amount: 100, level: 20 },
+    graphic: { file: 'items/Ashes.png', facet: itemFacet }, picture: { x: 6, y: 0, w: 35, h: 35 },
+  },
+  // Ice.c4d: floats, and melts into water when it's warm.
+  ice: {
+    id: 'ice', name: 'Ice', value: 0, mass: 8, float: true, melts: true,
+    vertices: [
+      { x: -3, y: -4, cnat: CNAT.None, friction: 50 },
+      { x: 4, y: 3, cnat: CNAT.None, friction: 50 },
+      { x: -3, y: 5, cnat: CNAT.None, friction: 50 },
+    ],
+    graphic: { file: 'items/Ice.png', facet: { x: 0, y: 0, w: 10, h: 10 } }, picture: { x: 10, y: 0, w: 35, h: 35 },
+  },
+  // Snowball.c4d: a light throwing weapon that bursts into snow (and melts like ice).
+  snowball: {
+    id: 'snowball', name: 'Snowball', value: 0, mass: 12, vertices: itemVertex, melts: true, breaksInto: { mat: Mat.Snow, amount: 100, level: 20 },
+    graphic: { file: 'items/Snowball.png', facet: itemFacet }, picture: { x: 6, y: 0, w: 32, h: 32 },
+  },
   // A wipf picked up alive (Wipf.c4d with the Collectible animals rule): 15 gold in a base.
   wipf: {
     id: 'wipf', name: 'Wipf', value: 15, mass: 20, vertices: [{ x: 0, y: 6, cnat: CNAT.Bottom, friction: 100 }], animal: 'wipf', contactIncinerate: 1,
@@ -189,7 +282,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   },
 };
 
-export type Procedure = 'walk' | 'flight' | 'scale' | 'hangle' | 'dig' | 'swim' | 'throw' | 'kneel' | 'fight' | 'push' | 'build' | 'chop' | 'dead';
+export type Procedure = 'walk' | 'flight' | 'scale' | 'hangle' | 'dig' | 'swim' | 'throw' | 'kneel' | 'fight' | 'push' | 'build' | 'chop' | 'bridge' | 'dead';
 
 export interface ActionDef {
   name: string;
@@ -235,6 +328,8 @@ const actions: ActionDef[] = [
   { name: 'Build', procedure: 'build', length: 8, delay: 2, facetX: 128, facetY: 220, next: 'Build', inLiquid: 'Swim' },
   // Chopping a tree down, or a felled one into wood (the Chopping StartCall swings the axe).
   { name: 'Chop', procedure: 'chop', length: 8, delay: 3, facetX: 128, facetY: 160, next: 'Chop', inLiquid: 'Swim' },
+  // Building a loam or metal bridge (DFA_BRIDGE): the digging animation, fast.
+  { name: 'Bridge', procedure: 'bridge', length: 16, delay: 1, facetX: 0, facetY: 60, next: 'Bridge', inLiquid: 'Swim' },
   { name: 'Dead', procedure: 'dead', length: 6, delay: 3, facetX: 0, facetY: 240, next: 'Hold', disabled: true },
 ];
 

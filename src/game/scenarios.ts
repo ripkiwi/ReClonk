@@ -68,7 +68,7 @@ export const NEST_IDS: NestId[] = ['monsterEgg', 'fireMonsterEgg', 'zapNest', 'b
  */
 export const DEFAULT_BASE: BaseSettings = {
   wealth: 50,
-  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, conkit: 5, lorry: 2, boat: 2, balloon: 1, blimp: 1, crystal: 5, clonk: 3, sorcerer: 1 },
+  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, loam: 6, metal: 5, sulphur: 3, conkit: 5, lorry: 2, boat: 2, balloon: 1, blimp: 1, crystal: 5, clonk: 3, sorcerer: 1 },
 };
 
 /** The trees of the original Gold Mine and Minor Melee (Vegetation=TRE1=1;TRE2=2;TRE3=1;TRE4=1, VegetationLevel=100). */
@@ -78,7 +78,7 @@ const TREES: Pick<LandscapeDef, 'vegetation' | 'vegetationLevel' | 'grass'> = {
   grass: true,
 };
 
-/** The material layers of the original Gold Mine and Minor Melee (without the ore, coal and sulphur we don't have yet). */
+/** The material layers of the original Gold Mine, Minor Melee and Shark Lake (Gold Mine adds ore, coal and sulphur). */
 const LAYERS = (gold: number, water: number): LandscapeDef['layers'] => [
   { name: 'Rock', count: 7 },
   { name: 'Rock-Ridge', count: 7 },
@@ -107,8 +107,8 @@ export const SCENARIOS: readonly ScenarioDef[] = [
       liquid: 'Water-Smooth',
       liquidLevel: sval(20, 30),
       mapPlayerExtend: true,
-      layers: LAYERS(8, 5),
-      inEarth: { rock: 1, gold: 1, flint: 1 },
+      layers: [...LAYERS(8, 5), { name: 'Ore', count: 3 }, { name: 'Coal-Swirl', count: 4 }, { name: 'Sulphur-Swirl', count: 5 }],
+      inEarth: { rock: 1, gold: 1, flint: 1, loam: 1 },
       inEarthLevel: sval(65),
       ...TREES,
     },
@@ -143,7 +143,7 @@ export const SCENARIOS: readonly ScenarioDef[] = [
       liquid: 'Water-Smooth',
       liquidLevel: sval(43),
       layers: LAYERS(7, 7),
-      inEarth: { rock: 1, flint: 1 },
+      inEarth: { rock: 1, flint: 1, loam: 1 },
       onSurface: { flint: 30 },
       ...TREES,
     },
@@ -155,7 +155,7 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     rules: [],
     startItems: ['flint'],
     homeBase: false,
-    base: { wealth: 0, stock: { flint: 5, clonk: 5 } },
+    base: { wealth: 0, stock: { loam: 5, metal: 1, flint: 5, clonk: 5 } },
     opponents: 1,
     goals: { melee: 1 },
     // Minor Melee's Scenario.txt: always late spring, gusty winds.
@@ -182,8 +182,8 @@ export const SCENARIOS: readonly ScenarioDef[] = [
       liquidLevel: sval(55),
       mapPlayerExtend: true,
       layers: LAYERS(7, 5),
-      // InEarth=ROCK=4;GOLD=4;FLNT=4 (its loam, bones and skulls aren't in the game yet).
-      inEarth: { rock: 4, gold: 4, flint: 4 },
+      // InEarth=ROCK=4;GOLD=4;FLNT=4;LOAM=4 (its bones and skulls aren't in the game yet).
+      inEarth: { rock: 4, gold: 4, flint: 4, loam: 4 },
       inEarthLevel: sval(65),
       // Vegetation=TRE1=2;TRE2=2;TRE3=2 (its shells and seaweed aren't in the game yet), and grass.
       vegetation: { tree1: 2, tree2: 2, tree3: 2 },
@@ -199,8 +199,8 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     rules: [],
     startItems: [],
     homeBase: true,
-    // Wealth=100; HomeBaseMaterial without its loam, metal and catapult.
-    base: { wealth: 100, stock: { conkit: 3, wood: 5, flint: 5, tflint: 5, lorry: 1, clonk: 5, boat: 2, balloon: 1 } },
+    // Wealth=100; HomeBaseMaterial without its catapult.
+    base: { wealth: 100, stock: { conkit: 3, loam: 5, wood: 5, metal: 1, flint: 5, tflint: 5, lorry: 1, clonk: 5, boat: 2, balloon: 1 } },
     opponents: 1,
     goals: { melee: 1 },
     // Shark Lake's Scenario.txt: always summer, the odd shower, thunderstorm and meteorite, gusty winds.
@@ -237,19 +237,21 @@ export const SCENARIOS: readonly ScenarioDef[] = [
       topOpen: false,
       liquid: 'Water-Smooth',
       liquidLevel: sval(52),
-      // Its ore and coal layers aren't in the game yet (the map script draws the map anyway).
+      // The map script draws the map; these only count if it's switched off.
       layers: [
         { name: 'Rock', count: 7 },
         { name: 'Rock-Ridge', count: 7 },
         { name: 'Gold', count: 7 },
         { name: 'Granite', count: 4 },
+        { name: 'Ore', count: 3 },
+        { name: 'Coal-Swirl', count: 4 },
         { name: 'Water-Smooth', count: 5 },
         { name: 'Oil-Smooth', count: 5 },
         { name: 'Earth-Rough', count: 50 },
         { name: 'Earth-Smooth2', count: 50 },
       ],
-      // InEarth=ROCK=4;GOLD=1;FLNT=8 (its loam isn't in the game yet).
-      inEarth: { rock: 4, gold: 1, flint: 8 },
+      // InEarth=ROCK=4;GOLD=1;FLNT=8;LOAM=10.
+      inEarth: { rock: 4, gold: 1, flint: 8, loam: 10 },
       inEarthLevel: sval(28, 5),
       // Its bones, skulls and burnt trees aren't in the game yet.
       vegetation: {},
@@ -266,10 +268,10 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     rules: ['flagRemoveable'],
     startItems: ['flint'],
     homeBase: true,
-    // Wealth=30; HomeBaseMaterial without its line kits, loam, metal, concrete, liquid granite, gunpowder and barrels.
+    // Wealth=30; HomeBaseMaterial without its line kits, barrels and explosive flint.
     base: {
       wealth: 30,
-      stock: { conkit: 5, wood: 10, flint: 10, tflint: 14, supertflint: 6, superflint: 3, teraflint: 1, flag: 3, lorry: 1, clonk: 5 },
+      stock: { conkit: 5, loam: 10, wood: 10, metal: 5, concrete: 10, liquidGranite: 10, gunpowder: 10, flint: 10, tflint: 14, supertflint: 6, superflint: 3, teraflint: 1, flag: 3, lorry: 1, clonk: 5 },
     },
     opponents: 0,
     // Lava Caves' Scenario.txt: Goals=MNTK=1;VALG=16.
@@ -342,9 +344,15 @@ export const LIMITS = {
 };
 
 /** Objects a scenario can hand out, bury or scatter, in the settings' order. */
-export const ITEM_IDS: ItemId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'gold', 'wood', 'crystal'];
+export const ITEM_IDS: ItemId[] = [
+  'flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'gunpowder', 'rock', 'gold', 'wood', 'crystal',
+  'loam', 'metal', 'coal', 'ore', 'sulphur', 'concrete', 'liquidGranite',
+];
 /** What a home base can sell, in the settings' and the shop's order. */
-export const SHOP_IDS: ShopId[] = ['flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'rock', 'wood', 'conkit', 'lorry', 'boat', 'balloon', 'blimp', 'flag', 'crystal', 'clonk', 'sorcerer'];
+export const SHOP_IDS: ShopId[] = [
+  'flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'gunpowder', 'rock', 'wood', 'loam', 'metal', 'coal', 'ore', 'sulphur', 'concrete', 'liquidGranite',
+  'conkit', 'lorry', 'boat', 'balloon', 'blimp', 'flag', 'crystal', 'clonk', 'sorcerer',
+];
 
 function clamp(v: unknown, lim: { min: number; max: number }, fallback: number): number {
   const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback;

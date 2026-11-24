@@ -12,7 +12,7 @@ import type { Rng } from '../core/rng';
 import { placeAnimal } from './animals';
 import type { World } from './world';
 
-export type GoalId = 'melee' | 'goldmine' | 'wealth' | 'value' | 'wipfhunt' | 'monsterkill' | 'race' | 'engineering';
+export type GoalId = 'melee' | 'goldmine' | 'oremine' | 'wealth' | 'value' | 'wipfhunt' | 'monsterkill' | 'race' | 'engineering';
 
 /** How many of each goal a scenario has (Scenario.txt Goals=GLDM=1;VALG=16). More of some goals means more to do. */
 export type Goals = Partial<Record<GoalId, number>>;
@@ -44,6 +44,13 @@ export const GOALS: Record<GoalId, GoalDef> = {
     name: 'Goldmine',
     description: 'All gold needs to be mined and sold.',
     icon: 'goals/Goldmine.png',
+    max: 1,
+  },
+  oremine: {
+    id: 'oremine',
+    name: 'Ore Mining',
+    description: 'All ore needs to be mined and sold.',
+    icon: 'goals/Oremine.png',
     max: 1,
   },
   wealth: {
@@ -97,7 +104,6 @@ export const GOAL_IDS = Object.keys(GOALS) as GoalId[];
 
 /** The original's other goals, shown greyed in the scenario settings with what they wait for. */
 export const LATER_GOALS: readonly { name: string; icon: string; needs: string }[] = [
-  { name: 'Ore Mining', icon: 'goals/Oremine.png', needs: 'ore' },
   { name: 'Oil Production', icon: 'goals/Oilproduction.png', needs: 'pumps and oil barrels' },
 ];
 
@@ -126,6 +132,8 @@ export class GoalState {
   raceWinner: number | null = null;
   /** Solid gold pixels in the landscape, counted at the last check. */
   goldLeft = -1;
+  /** Solid ore left in the landscape, or -1 before it's first counted (Oremine.c4d GetMaterialCount). */
+  oreLeft = -1;
   started = false;
 }
 
@@ -198,18 +206,20 @@ function raceRunner(world: World, player: number): Clonk | null {
 }
 
 /** Solid gold in the landscape, in pixels (GetMaterialCount). */
-function countGold(world: World): number {
+function countMat(world: World, mat: Mat): number {
   const cells = world.land.cells;
   let n = 0;
-  for (let i = 0; i < cells.length; i++) if (cells[i] === Mat.Gold) n++;
+  for (let i = 0; i < cells.length; i++) if (cells[i] === mat) n++;
   return n;
 }
 
-function goldItems(world: World): { total: number; outside: number } {
+const countGold = (world: World): number => countMat(world, Mat.Gold);
+
+function goldItems(world: World, id: 'gold' | 'ore' = 'gold'): { total: number; outside: number } {
   let total = 0;
   let outside = 0;
   for (const it of world.items) {
-    if (it.removed || it.def.id !== 'gold') continue;
+    if (it.removed || it.def.id !== id) continue;
     total++;
     if (!it.container) outside++;
   }
@@ -249,6 +259,8 @@ export function goalFulfilled(world: World, id: GoalId, player?: number): boolea
     }
     case 'goldmine':
       return st.goldLeft >= 0 && st.goldLeft < GOLD_LEFT && goldItems(world).total === 0;
+    case 'oremine':
+      return st.oreLeft >= 0 && st.oreLeft < GOLD_LEFT && goldItems(world, 'ore').total === 0;
     case 'wealth': {
       const ok = (p: number): boolean => (world.players.get(p)?.wealth ?? 0) >= n * 100;
       return player === undefined ? humans().every(ok) : ok(player);
@@ -286,6 +298,13 @@ export function goalStatus(world: World, id: GoalId, player: number): string {
       const g = goldItems(world);
       const solid = Math.max(0, Math.floor((st.goldLeft - 50) / 100));
       return `You still have to mine ${solid} units of solid gold and collect ${g.total} gold chunks, ${g.outside} of which are outside.`;
+    }
+    case 'oremine': {
+      if (done) return 'All ore has been mined.';
+      const g = goldItems(world, 'ore');
+      if (st.oreLeft < 0) return `You still have to mine an unknown amount of solid ore and collect ${g.total} ore chunks, ${g.outside} of which are outside.`;
+      const solid = Math.max(0, Math.floor((st.oreLeft - 50) / 100));
+      return `You still have to mine ${solid} units of solid ore and collect ${g.total} ore chunks, ${g.outside} of which are outside.`;
     }
     case 'wealth': {
       const w = world.players.get(player)?.wealth ?? 0;
@@ -333,6 +352,8 @@ export function goalProgress(world: World, id: GoalId, player: number): string {
       return `${racePercent(world, player)}%`;
     case 'goldmine':
       return world.goalState.goldLeft < 0 ? '' : `${Math.max(0, Math.floor((world.goalState.goldLeft - 50) / 100)) + goldItems(world).total}`;
+    case 'oremine':
+      return world.goalState.oreLeft < 0 ? '' : `${Math.max(0, Math.floor((world.goalState.oreLeft - 50) / 100)) + goldItems(world, 'ore').total}`;
     case 'wipfhunt':
       return String(wipfsLeft(world));
     case 'monsterkill': {
@@ -369,6 +390,7 @@ export function stepGoals(world: World): void {
   }
   if (world.tick % INTERVAL) return;
   if (world.goals.goldmine) st.goldLeft = countGold(world);
+  if (world.goals.oremine) st.oreLeft = countMat(world, Mat.Ore);
   if (world.goals.wipfhunt) {
     for (const it of world.items) {
       if (it.removed || it.def.id !== 'deadWipf' || st.countedWipfs.has(it)) continue;

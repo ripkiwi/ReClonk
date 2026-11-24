@@ -36,6 +36,11 @@ const TREE_DOWN = ['TreeDown1', 'TreeDown2', 'TreeDown3'] as const;
 const ROCK_HITS = ['RockHit1', 'RockHit2', 'RockHit3'] as const;
 const WOOD_HITS = ['WoodHit1', 'WoodHit2', 'WoodHit3'] as const;
 const CRYSTAL_HITS = ['Crystal1', 'Crystal2', 'Crystal3'] as const;
+const METAL_HITS = ['MetalHit1', 'MetalHit2', 'MetalHit3'] as const;
+const DIGS = ['Dig1', 'Dig2', 'Dig3', 'Dig4', 'Dig5'] as const;
+/** What each kind of item sounds like when it lands (its Hit: RockHit, WoodHit, MetalHit). */
+const ROCK_SOUND = new Set(['rock', 'gold', 'coal', 'ore', 'ice', 'loam']);
+const WOOD_SOUND = new Set(['wood', 'sulphur', 'gunpowder']);
 /** The original's DeathAnnounce messages. */
 const DEATH_MESSAGES = ['%s is dead.', '%s has\ndeceased.', '%s\nrests in peace.'];
 /** How long the round goes on after it's decided before the results show: 3.5 seconds. */
@@ -201,6 +206,8 @@ export class GameScreen {
       else if (e.type === 'thunder') this.env.sounds.play(pick(THUNDER), near ? Math.max(0.3, 1 - Math.abs(e.x - near.x) / 800) : 1);
       else if (e.type === 'fuse') this.env.sounds.play('Fuse', volumeAt(e.x, e.y));
       else if (e.type === 'chop') this.env.sounds.play(pick(CHOPS), volumeAt(e.clonk.x, e.clonk.y));
+      // Building a bridge sounds like digging (the Bridge action's StartCall Digging).
+      else if (e.type === 'bridge') this.env.sounds.play(pick(DIGS), volumeAt(e.clonk.x, e.clonk.y));
       // Only big trees crash down audibly (Tree.c4d ChopDown: con over 50).
       else if (e.type === 'treeDown' && e.plant.scale > 0.5) this.env.sounds.play(pick(TREE_DOWN), volumeAt(e.plant.x, e.plant.bottom));
       // Big things catch fire with a whoosh (FnFxFireStart: shape over 500), and water hisses as it puts a fire out.
@@ -231,7 +238,7 @@ export class GameScreen {
         this.env.sounds.play(id, volumeAt(e.x, e.y) * 0.8);
       } else if (e.type === 'itemHit') {
         const id = e.item.def.id;
-        const set = id === 'crystal' ? CRYSTAL_HITS : id === 'wood' ? WOOD_HITS : id === 'rock' || id === 'gold' || e.item.def.fuse ? ROCK_HITS : null;
+        const set = id === 'crystal' ? CRYSTAL_HITS : id === 'metal' ? METAL_HITS : WOOD_SOUND.has(id) ? WOOD_HITS : ROCK_SOUND.has(id) || e.item.def.fuse ? ROCK_HITS : null;
         if (set) this.env.sounds.play(pick(set), volumeAt(e.item.x, e.item.y) * 0.5);
       }
     }
