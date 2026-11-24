@@ -13,6 +13,7 @@ import { GRASS, type Grass, type Plant } from '../objects/vegetation';
 import { Animal, DEAD_DELAY } from '../objects/animal';
 import { NEST, type TreeNest } from '../objects/nest';
 import { BALLOON_FLAG, BLIMP, SAIL, isSailing, type Vehicle } from '../objects/vehicle';
+import { chestFrame, SIEGE } from '../game/siege';
 import { colorByOwner, frame, type GameAssets } from './assets';
 import { EnvironmentView, nightRamp, sunRamp } from './environmentView';
 import { FireView } from './fireView';
@@ -37,6 +38,8 @@ interface VehicleSprites {
   flag: Sprite | null;
   front: Sprite;
   sail: Sprite | null;
+  /** The wagon's door. */
+  door: Sprite | null;
 }
 
 /** The railing over a way down from a roof or platform (Castle3.c4d/Entrance.c4d). */
@@ -609,9 +612,18 @@ export class WorldView {
         this.itemSprites.set(item, s);
       }
       s.position.set(item.x, item.y);
-      s.angle = item.r;
+      // An arrow in flight points where it flies (its graphic points up at r 0).
+      s.angle = item.shot ? (Math.atan2(item.ydir, item.xdir) * 180) / Math.PI + 90 : item.r;
+      // A barrel turns into a full one and back; a launched torpedo's propeller turns (Swim, 5 frames).
+      if (item.def.barrel || item.def.swim) {
+        const g = item.def.graphic;
+        const f = item.swimDir ? Math.floor(this.world.tick) % 5 : 0;
+        s.texture = frame(this.assets.items[g.file], g.facet.x + f * g.facet.w, g.facet.y, g.facet.w, g.facet.h);
+      }
       // Burning wood gets smaller, and stays charred (Wood.c4d Incineration: RGB 48, 32, 32).
       s.scale.set(item.con / 100000);
+      // Torpedoes face left in their graphic.
+      if (item.def.swim && item.swimDir > 0) s.scale.x *= -1;
       s.tint = item.burned ? 0x302020 : 0xffffff;
       const decay = item.def.decay;
       if (decay) {
@@ -744,8 +756,8 @@ export class WorldView {
   private updateVehicles(): void {
     const seen = new Set<Vehicle>();
     for (const v of this.world.vehicles) {
-      // Pushed into a building, it's out of sight.
-      if (v.removed || v.contained) continue;
+      // Pushed into a building, it's out of sight; mounted on a cannon tower, it's on the roof.
+      if (v.removed || (v.contained && !v.mountedOn)) continue;
       seen.add(v);
       let s = this.vehicleSprites.get(v);
       if (!s) {
@@ -754,7 +766,9 @@ export class WorldView {
           flag: v.def.id === 'balloon' ? new Sprite() : null,
           front: new Sprite(),
           sail: v.def.id === 'boat' ? new Sprite() : null,
+          door: v.def.id === 'wagon' ? new Sprite() : null,
         };
+        if (s.door) this.vehicleLayer.addChild(s.door);
         s.body.anchor.set(0.5);
         s.front.visible = false;
         this.vehicleLayer.addChild(s.body);
@@ -769,8 +783,24 @@ export class WorldView {
       const sheet = this.assets.items[file];
       const bodySheet = !v.burned && def.id === 'balloon' && v.owner >= 0 ? colorByOwner(sheet).body : sheet;
       const facet = def.graphic.facet;
+      let flip = true;
+      if (v.mountedOn && def.mount) {
+        // On the tower's roof (the Attached gun): turned r degrees from straight up.
+        const m = def.mount;
+        s.body.texture = frame(this.assets.items[m.file], 0, 0, m.size, m.size);
+        s.body.position.set(v.x, v.y);
+        s.body.scale.x = 1;
+        s.body.angle = v.r;
+        s.front.visible = false;
+        continue;
+      }
+      s.body.angle = 0;
+      const cell = !v.burned ? siegeCell(v) : null;
       if (v.burned) {
         s.body.texture = frame(sheet, 0, 0, def.width, def.height);
+      } else if (cell) {
+        s.body.texture = frame(bodySheet, cell.x, cell.y, def.width, def.height);
+        flip = cell.flip;
       } else if (def.id === 'blimp' && v.action === 'Turn') {
         const index = Math.min(BLIMP.turnFrames - 1, Math.floor(v.actTime / BLIMP.turnDelay));
         s.body.texture = frame(bodySheet, index * def.width, def.height, def.width, def.height);
@@ -781,7 +811,21 @@ export class WorldView {
         s.body.texture = frame(bodySheet, facet.x, facet.y, facet.w, facet.h);
       }
       s.body.position.set(v.x, v.y);
-      s.body.scale.x = -v.dir;
+      s.body.scale.x = flip ? -v.dir : 1;
+      if (s.door) {
+        // OpenDoor and CloseDoor: 10 frames from 0,28; DoorOpen the last one (135,28).
+        const d = SIEGE.wagonDoor;
+        const f = v.action === 'OpenDoor' ? Math.min(9, Math.floor((v.actTime * 10) / d.open)) : v.action === 'CloseDoor' ? Math.max(0, 9 - Math.floor((v.actTime * 10) / d.close)) : v.action === 'DoorOpen' ? 9 : -1;
+        s.door.visible = f >= 0 && !v.burned;
+        if (s.door.visible) {
+          s.door.texture = frame(sheet, f * 15, 28, 15, 14);
+          s.door.scale.x = -v.dir;
+          s.door.anchor.set(0.5);
+          // At 12,7 from its top-left corner, mirrored with it.
+          const cx = v.left + 12 + 7.5 - v.x;
+          s.door.position.set(v.x + cx * -v.dir, v.top + 7 + 7);
+        }
+      }
       if (s.flag) {
         const flag = BALLOON_FLAG;
         const flagSheet = v.owner >= 0 ? colorByOwner(sheet).overlay : sheet;
@@ -818,6 +862,7 @@ export class WorldView {
       s.flag?.destroy();
       s.front.destroy();
       s.sail?.destroy();
+      s.door?.destroy();
       this.vehicleSprites.delete(v);
     }
   }
@@ -1075,6 +1120,11 @@ export class WorldView {
         continue;
       }
       // Lava hissing on water makes white steam, acid grey fumes (Smoke in C4Material.cpp's reactions), volcanoes thick smoke.
+      // A cannon's blast and the steam engine's chuffs (Smoke).
+      if (e.type === 'siege' && e.smoke > 0) {
+        for (let n = 0; n < e.smoke; n++) this.fire.puff(e.x + (Math.random() - 0.5) * 6, e.y - n * 2, 4 + Math.random() * 4, 0xa0a0a0);
+        continue;
+      }
       if (e.type === 'poof') {
         if (Math.random() < 1 / 3) this.fire.puff(e.x, e.y - 2, 3, 0xd8d8d8);
         continue;
@@ -1119,3 +1169,33 @@ export class WorldView {
     }
   }
 }
+
+/**
+ * Where the new vehicles' frame is in their sheet (their ActMaps): the aiming
+ * strips of the catapult, cannon and crossbow, the steam engine's wheels, the
+ * submarine's swimming, grappling and turning, the chest's lid, the locked
+ * bridge. `flip`: mirrored for facing right (FlipDir), all but the sub's turn.
+ */
+function siegeCell(v: Vehicle): { x: number; y: number; flip: boolean } | null {
+  const w = v.def.width;
+  const h = v.def.height;
+  switch (v.def.id) {
+    case 'catapult':
+    case 'cannon':
+    case 'crossbow':
+      return { x: v.phase * w, y: 0, flip: true };
+    case 'engine':
+      return { x: Math.floor(v.phase) * w, y: 0, flip: true };
+    case 'sub':
+      if (v.action === 'Swim') return { x: w + (Math.floor(v.actTime / 2) % 5) * w, y: 0, flip: true };
+      if (v.action === 'Grapple') return { x: Math.min(11, v.actTime) * w, y: h, flip: true };
+      if (v.action === 'Turn') return { x: Math.min(23, v.actTime) * w, y: v.dir > 0 ? 3 * h : 2 * h, flip: false };
+      return { x: 0, y: 0, flip: true };
+    case 'chest':
+      return { x: chestFrame(v) * w, y: 0, flip: true };
+    case 'bridge':
+      return { x: v.locked ? w : 0, y: 0, flip: false };
+  }
+  return null;
+}
+

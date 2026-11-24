@@ -101,6 +101,26 @@ export const SOUND_FILES = [
   'Snake2',
   'Bsss',
   'Sting',
+  // Siege weapons and the later vehicles.
+  'Arrow',
+  'ArrowHit',
+  'Catapult',
+  'CatapultSet',
+  'Chuff',
+  'Connect',
+  'Error',
+  'Grapple',
+  'LineBreak',
+  'Submarine',
+  'Torpedo',
+  'Airlock1',
+  'Airlock2',
+  'ChestOpen',
+  'ChestClose',
+  'SteelGate2',
+  'Splash1',
+  'CannonRotation',
+  'CannonStop',
 ] as const;
 export type SoundId = (typeof SOUND_FILES)[number];
 
