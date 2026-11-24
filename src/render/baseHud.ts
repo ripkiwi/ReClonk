@@ -7,6 +7,7 @@ import { keyName } from '../input/bindings';
 import { LAYOUTS, type KeyLayout } from '../input/keyboard';
 import { BUILD_PLANS, CLONK, CLONK_KINDS, ITEMS, MAGIC_UNIT, STRUCTURES } from '../objects/defs';
 import { DESCRIPTIONS } from '../objects/descriptions';
+import { BRIDGE_MENU, BRIDGE_MENU_GRAPHICS } from '../game/materialItems';
 import type { Structure } from '../objects/structure';
 import { VEHICLES, type Vehicle } from '../objects/vehicle';
 import { frame, type GameAssets } from './assets';
@@ -99,6 +100,7 @@ export class BaseHud {
     if (c.contained) return c.menu !== null ? this.buildingMenu(c, c.contained) : this.buildingContents(c, c.contained);
     if (c.spellMenu !== null) return this.spellMenu(c);
     if (c.buildMenu !== null) return this.buildMenu(c);
+    if (c.bridgeMenu !== null) return this.bridgeMenu(c);
     const lorry = c.action.procedure === 'push' && c.vehicle?.def.collection ? c.vehicle : null;
     if (lorry) return this.lorryMenu(c, lorry);
     return null;
@@ -247,6 +249,23 @@ export class BaseHud {
       selected: c.buildMenu,
       keys: this.okCancel,
       key: `build:${c.buildMenu}`,
+    };
+  }
+
+  /** The loam (or metal) menu: bridges and walls in five directions, with the original's arrows (Loam.c4d Activate). */
+  private bridgeMenu(c: Clonk): MenuView {
+    const arrows = this.assets.items[BRIDGE_MENU_GRAPHICS.arrows];
+    const metal = c.carrying?.def.id === 'metal';
+    return {
+      symbol: () => sheetPicture(this.assets.items[BRIDGE_MENU_GRAPHICS.symbol], { x: 0, y: 0, w: 64, h: 64 }, SYMBOL),
+      caption: metal ? 'Build metal bridge' : 'Build loam bridge',
+      items: BRIDGE_MENU.map((b) => ({
+        picture: () => sheetPicture(arrows, { x: b.frame * 64, y: 0, w: 64, h: 64 }, SYMBOL),
+        caption: b.caption,
+      })),
+      selected: c.bridgeMenu,
+      keys: this.okCancel,
+      key: `bridge:${c.bridgeMenu}:${metal}`,
     };
   }
 

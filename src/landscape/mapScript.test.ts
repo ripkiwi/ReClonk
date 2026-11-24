@@ -60,9 +60,9 @@ describe('Map scripts', () => {
   });
 
   it('leaves out materials the game does not have, keeping what is beneath', () => {
-    const m = run('map T { mat=Earth; tex=Smooth; overlay { mat=Coal; tex=Swirl; overlay { mat=Rock; tex=Rough; }; }; };');
+    const m = run('map T { mat=Earth; tex=Smooth; overlay { mat=Uranium; tex=Swirl; overlay { mat=Rock; tex=Rough; }; }; };');
     expect(m.pix.every((p) => p === earth)).toBe(true);
-    expect(missingMaterials('map T { mat=Coal; overlay { mat=Earth; }; overlay { mat=Tunnel; }; };')).toEqual(['Coal']);
+    expect(missingMaterials('map T { mat=Uranium; overlay { mat=Earth; }; overlay { mat=Coal; }; overlay { mat=Tunnel; }; };')).toEqual(['Uranium']);
   });
 
   it('reports mistakes', () => {

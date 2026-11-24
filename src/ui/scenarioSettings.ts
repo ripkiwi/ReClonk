@@ -67,6 +67,19 @@ const ITEM_SHEETS: Record<ItemId, [number, number]> = {
   deadFish: [144, 64],
   deadBird: [92, 64],
   monsterEgg: [92, 40],
+  loam: [64, 70],
+  metal: [72, 64],
+  coal: [45, 35],
+  ore: [45, 35],
+  sulphur: [46, 40],
+  concrete: [41, 35],
+  liquidGranite: [41, 35],
+  gunpowder: [64, 70],
+  earth: [44, 35],
+  sand: [41, 35],
+  ashes: [44, 35],
+  ice: [45, 35],
+  snowball: [38, 32],
 };
 const itemPicture = (id: ItemId): Picture => ({ file: ITEMS[id].graphic.file, sheet: ITEM_SHEETS[id], ...ITEMS[id].picture });
 const vehiclePicture = (id: VehicleId): Picture => ({

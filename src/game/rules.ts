@@ -7,7 +7,7 @@ import type { Item } from '../objects/item';
 import { dropFlag } from './fire';
 import type { World } from './world';
 
-export type RuleId = 'flagRemoveable' | 'captureTheFlag' | 'lossOfBase' | 'killTheCaptain' | 'constructionMaterial' | 'collectibleAnimals';
+export type RuleId = 'flagRemoveable' | 'captureTheFlag' | 'lossOfBase' | 'killTheCaptain' | 'constructionMaterial' | 'collectibleAnimals' | 'snowballs' | 'noMetalTrick';
 
 export interface RuleDef {
   id: RuleId;
@@ -49,6 +49,18 @@ export const RULES: Record<RuleId, RuleDef> = {
     description: 'Wipfs and fishes can be collected by Clonks.',
     icon: 'rules/CollectibleAnimals.png',
   },
+  snowballs: {
+    id: 'snowballs',
+    name: 'Snowballs',
+    description: "Snow balls can be dug out of snow by pressing 'dig' again while digging.",
+    icon: 'rules/SnowBalls.png',
+  },
+  noMetalTrick: {
+    id: 'noMetalTrick',
+    name: 'No metal in front of buildings',
+    description: "Metal bridges can't be built in front of enemy buildings.",
+    icon: 'rules/NoMetalTrick.png',
+  },
   killTheCaptain: {
     id: 'killTheCaptain',
     name: 'Kill The Captain',
@@ -62,13 +74,11 @@ export const RULE_IDS = Object.keys(RULES) as RuleId[];
 /** The original's other rules, shown greyed in the scenario settings with what they wait for. */
 export const LATER_RULES: readonly { name: string; icon: string; needs: string }[] = [
   { name: 'Power usage', icon: 'rules/Energy.png', needs: 'windmills and power lines' },
-  { name: 'Snow balls', icon: 'rules/SnowBalls.png', needs: 'snowballs' },
   { name: 'Buildings can snow in', icon: 'rules/ConstructionSnowIn.png', needs: 'buildings that clear their doorstep' },
   { name: 'Rivalry', icon: 'rules/Rivalry.png', needs: 'goals other than the melee' },
   { name: 'Team account', icon: 'rules/TeamAccount.png', needs: 'allied players' },
   { name: 'Team home base material', icon: 'rules/TeamHomebase.png', needs: 'allied players' },
   { name: 'Team knowledge', icon: 'rules/TeamKnowledge.png', needs: 'allied players' },
-  { name: 'No metal in front of buildings', icon: 'rules/NoMetalTrick.png', needs: 'metal bridges' },
   { name: 'Research at Wizardtower', icon: 'rules/WizardTowerResearch.png', needs: 'the wizard tower' },
 ];
 

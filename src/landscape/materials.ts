@@ -33,6 +33,18 @@ export const enum Mat {
   DuroLava = 13,
   /** What lava hardens into: diggable, like earth. */
   Ashes = 14,
+  /** Diggable veins: digging or blasting them gives coal. */
+  Coal = 15,
+  /** Hard veins like gold: only blasting gets ore out. */
+  Ore = 16,
+  /** Diggable yellow veins that give sulphur. */
+  Sulphur = 17,
+  /** Hard veins of crystal: blasting them gives crystals. */
+  Crystal = 18,
+  /** Sand that the wind blows about and that slides down (Instable). */
+  FlySand = 19,
+  /** Ashes that the wind blows about and that slide down. */
+  FlyAshes = 20,
 }
 
 /** Density at or above which a material blocks movement (C4M_Solid in the original). */
@@ -41,6 +53,8 @@ export const SOLID = 50;
 export const LIQUID = 25;
 
 export type ItemId = 'rock' | 'gold' | 'flint' | 'tflint' | 'superflint' | 'supertflint' | 'teraflint' | 'wood' | 'conkit' | 'meteor' | 'crystal' | 'flag'
+  // Materials (Items.c4d/Materials.c4d) and gunpowder.
+  | 'loam' | 'metal' | 'coal' | 'ore' | 'sulphur' | 'concrete' | 'liquidGranite' | 'gunpowder' | 'earth' | 'sand' | 'ashes' | 'ice' | 'snowball'
   // Animals a clonk carries: alive (wipf, fish), dead, and the monster's egg.
   | 'wipf' | 'fish' | 'deadWipf' | 'deadFish' | 'deadBird' | 'monsterEgg';
 
@@ -55,6 +69,14 @@ export interface Material {
   blast2Object?: ItemId;
   /** ...one per this many blasted pixels. */
   blast2ObjectRatio?: number;
+  /**
+   * Digging it drops this object at the clonk's feet, one per this many dug
+   * pixels (Dig2Object, Dig2ObjectRatio). With `dig2ObjectRequest` only while
+   * the clonk is asked to make chunks (Dig2ObjectRequest: earth, sand, snow).
+   */
+  dig2Object?: ItemId;
+  dig2ObjectRatio?: number;
+  dig2ObjectRequest?: boolean;
   /** Blasting turns some of it into this material instead (granite cracks into rock). */
   blastShiftTo?: Mat;
   /** Dark, base and light colour (0xRRGGBB), blended by the texture. */
@@ -102,11 +124,11 @@ export const TEMP_CONV_STRENGTH = 3;
 export const MATERIALS: readonly Material[] = [
   { name: 'Sky', density: 0, digFree: false, blastFree: false, colors: [0, 0, 0], texture: 'SMOOTH', shape: 0 },
   {
-    name: 'Earth', density: SOLID, digFree: true, blastFree: true, corrode: 75,
+    name: 'Earth', density: SOLID, digFree: true, blastFree: true, corrode: 75, dig2Object: 'earth', dig2ObjectRatio: 200, dig2ObjectRequest: true,
     colors: [0x7f5f3f, 0x936f4b, 0xab7f5b], texture: 'SMOOTH', shape: 2,
   },
   {
-    name: 'Sand', density: SOLID, digFree: true, blastFree: true, corrode: 30,
+    name: 'Sand', density: SOLID, digFree: true, blastFree: true, corrode: 30, dig2Object: 'sand', dig2ObjectRatio: 200, dig2ObjectRequest: true,
     colors: [0xe0c88c, 0xe0d488, 0xece894], texture: 'SMOOTH2', shape: 2,
   },
   {
@@ -132,6 +154,7 @@ export const MATERIALS: readonly Material[] = [
   },
   {
     name: 'Ice', density: SOLID, digFree: true, blastFree: true, maxSlide: 1, corrode: 60,
+    dig2Object: 'ice', dig2ObjectRatio: 400, dig2ObjectRequest: true, blast2Object: 'ice', blast2ObjectRatio: 120,
     colors: [0x006ebe, 0x007cfc, 0x0096fa], texture: 'Sponge', shape: 1,
     aboveTemp: { temp: 10, to: Mat.Water, dir: 1 },
   },
@@ -139,6 +162,8 @@ export const MATERIALS: readonly Material[] = [
     name: 'Snow', density: SOLID, digFree: true, blastFree: true, instable: true, maxSlide: 1, windDrift: 70,
     colors: [0xe6e6e6, 0xf0f0f0, 0xfafafa], texture: 'Spots', shape: 2,
     aboveTemp: { temp: 5, to: Mat.Water, dir: 0 }, inMatConvert: { mat: Mat.Water, to: Mat.Water },
+    // Snowballs only with the snowball rule (Snowball.c4d removes dug-out ones otherwise).
+    dig2Object: 'snowball', dig2ObjectRatio: 400, dig2ObjectRequest: true,
     corrode: 60, incindiaryConvert: Mat.Water,
   },
   {
@@ -165,7 +190,38 @@ export const MATERIALS: readonly Material[] = [
   },
   {
     name: 'Ashes', density: SOLID, digFree: true, blastFree: true, maxSlide: 1, windDrift: 60, corrode: 75,
+    dig2Object: 'ashes', dig2ObjectRatio: 200, dig2ObjectRequest: true,
     colors: [0x5a4e28, 0x52504e, 0x64605a], texture: 'SMOOTH3', shape: 2,
+  },
+  {
+    name: 'Coal', density: SOLID, digFree: true, blastFree: true, maxSlide: 1,
+    dig2Object: 'coal', dig2ObjectRatio: 300, blast2Object: 'coal', blast2ObjectRatio: 300,
+    colors: [0x37312a, 0x46423a, 0x5f574d], texture: 'SWIRL', shape: 3,
+  },
+  {
+    // The original's ColorX (a second set of colours for its texture overlay) isn't used.
+    name: 'Ore', density: SOLID, digFree: false, blastFree: true, maxSlide: 1, blast2Object: 'ore', blast2ObjectRatio: 100,
+    colors: [0x645048, 0x7c605c, 0x84706c], texture: 'Structure', shape: 3,
+  },
+  {
+    name: 'Sulphur', density: SOLID, digFree: true, blastFree: true, maxSlide: 1, corrode: 90,
+    dig2Object: 'sulphur', dig2ObjectRatio: 200, blast2Object: 'sulphur', blast2ObjectRatio: 80,
+    colors: [0x703400, 0xcc8800, 0xfcdc18], texture: 'SWIRL', shape: 3,
+  },
+  {
+    // The original draws its dark half see-through (Alpha); here it's solid.
+    name: 'Crystal', density: SOLID, digFree: false, blastFree: true, maxSlide: 1, blast2Object: 'crystal', blast2ObjectRatio: 100,
+    colors: [0x909ce4, 0xc8d4fc, 0xe8e8e8], texture: 'Structure', shape: 3,
+  },
+  {
+    name: 'FlySand', density: SOLID, digFree: true, blastFree: true, instable: true, maxSlide: 1, windDrift: 100, corrode: 30,
+    dig2Object: 'sand', dig2ObjectRatio: 200, dig2ObjectRequest: true,
+    colors: [0xe0c88c, 0xe0d488, 0xece894], texture: 'SMOOTH2', shape: 2,
+  },
+  {
+    name: 'FlyAshes', density: SOLID, digFree: true, blastFree: true, instable: true, maxSlide: 1, windDrift: 60, corrode: 75,
+    dig2Object: 'ashes', dig2ObjectRatio: 200, dig2ObjectRequest: true,
+    colors: [0x554e3c, 0x52504e, 0x64605a], texture: 'Spots', shape: 2,
   },
 ];
 
@@ -234,6 +290,9 @@ export const TEXMAP: readonly TexEntry[] = [
   entry('Ashes-Smooth3', Mat.Ashes, 'SMOOTH3'),
   entry('Ashes-Rough', Mat.Ashes, 'ROUGH'),
   entry('Ashes-Ridge', Mat.Ashes, 'RIDGE'),
+  entry('Ore-Rough', Mat.Ore, 'ROUGH'),
+  entry('Ore-Rock', Mat.Ore, 'Rock'),
+  entry('Ore-Ridge', Mat.Ore, 'RIDGE'),
   entry('Granite-Rough', Mat.Granite, 'ROUGH'),
   entry('Granite-Ridge', Mat.Granite, 'RIDGE'),
   entry('Granite-Rock', Mat.Granite, 'Rock'),
@@ -241,13 +300,25 @@ export const TEXMAP: readonly TexEntry[] = [
   entry('Rock-Rough', Mat.Rock, 'ROUGH'),
   entry('Rock-Ridge', Mat.Rock, 'RIDGE'),
   entry('Rock-Rock', Mat.Rock, 'Rock'),
+  entry('Sulphur-Swirl', Mat.Sulphur, 'SWIRL'),
+  entry('Coal-Swirl', Mat.Coal, 'SWIRL'),
   entry('Sand-Smooth', Mat.Sand, 'SMOOTH'),
   entry('Sand-Smooth2', Mat.Sand, 'SMOOTH2'),
   entry('Sand-Smooth3', Mat.Sand, 'SMOOTH3'),
+  entry('FlySand-Smooth', Mat.FlySand, 'SMOOTH'),
+  entry('FlyAshes-Smooth', Mat.FlyAshes, 'SMOOTH'),
+  entry('Crystal-Flare', Mat.Crystal, 'FLARE'),
+  entry('Crystal-Structure', Mat.Crystal, 'Structure'),
+  entry('Crystal-Structure2', Mat.Crystal, 'Structure2'),
   entry('Ice-Sponge', Mat.Ice, 'Sponge'),
   entry('Ice-Structure', Mat.Ice, 'Structure'),
   entry('Snow-Spots', Mat.Snow, 'Spots'),
   entry('Snow-Smooth', Mat.Snow, 'SMOOTH'),
+  entry('FlySand-Smooth2', Mat.FlySand, 'SMOOTH2'),
+  entry('FlySand-Smooth3', Mat.FlySand, 'SMOOTH3'),
+  // Not in the original's TEXMAP.TXT: the engine adds each material's own texture (TextureOverlay) when it's missing.
+  entry('Ore-Structure', Mat.Ore, 'Structure'),
+  entry('FlyAshes-Spots', Mat.FlyAshes, 'Spots'),
   entry('Basement', Mat.Basement, 'Rock'),
 ];
 
