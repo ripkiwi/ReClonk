@@ -490,7 +490,9 @@ export class WorldView {
         this.layer.addChild(this.marks);
         this.clonkSprites.set(c, s);
       }
-      s.body.visible = s.shirt.visible = !c.contained;
+      s.body.visible = s.shirt.visible = !c.contained && !c.released;
+      // A released clonk fades away.
+      s.body.alpha = s.shirt.alpha = 1 - Math.min(255, c.releasing) / 255;
       const a = c.action;
       const fx = a.facetX + c.phase * CLONK.width;
       const sheets = this.assets.clonks[c.kind];
