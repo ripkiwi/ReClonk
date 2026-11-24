@@ -3,6 +3,7 @@ import { Rng } from '../core/rng';
 import { Landscape } from '../landscape/landscape';
 import { Mat } from '../landscape/materials';
 import { NO_CONTROL, type ControlState } from '../objects/clonk';
+import { BUILD_PLANS } from '../objects/defs';
 import { completeStructure, construct } from './buildings';
 import { allowedWipfDeaths, GOAL_IDS, GOALS, goalStatus, initGoals, playerValue, racePercent, unbuilt, valueGain, type Goals } from './goals';
 import { createProfile, hireClonk } from './profiles';
@@ -185,8 +186,11 @@ describe('Goals', () => {
 
   it('Engineer: everything a construction kit can build has to stand', () => {
     const world = flatWorld({ engineering: 1 });
+    expect(unbuilt(world)).toEqual(BUILD_PLANS);
+    // The scenario's construction plans (Knowledge) are what has to be built.
+    world.knowledge = ['tower', 'elevator', 'hut'];
     world.addClonk(100, GROUND - 10, 0);
-    expect(unbuilt(world)).toEqual(['hut', 'elevator', 'tower']);
+    expect(unbuilt(world)).toEqual(['hut', 'tower', 'elevator']);
     let x = 150;
     for (const id of ['hut', 'elevator']) {
       completeStructure(world, construct(world, id, x, GROUND, 0));

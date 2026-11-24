@@ -39,6 +39,9 @@ interface VehicleSprites {
   sail: Sprite | null;
 }
 
+/** The railing over a way down from a roof or platform (Castle3.c4d/Entrance.c4d). */
+export const HATCH_FILE = 'structures/CastleEntrance.png';
+
 interface StructureSprites {
   /** The whole building, faint, while it's a construction site. */
   site: Sprite;
@@ -51,6 +54,10 @@ interface StructureSprites {
   rope: Graphics;
   liftCase: Sprite | null;
   gates: Sprite[];
+  /** A windmill's turning wing. */
+  wing: Sprite | null;
+  /** The railings over the ways down from a roof or platform (CSTE). */
+  hatches: Sprite[];
   /** Con the body was last drawn for, and whether as the burned ruin. */
   con: number;
   burned: boolean;
@@ -891,6 +898,8 @@ export class WorldView {
           rope: new Graphics(),
           liftCase: null,
           gates: [],
+          wing: null,
+          hatches: [],
           con: -1,
           burned: false,
         };
@@ -920,12 +929,12 @@ export class WorldView {
       }
       // Burned away: only the basement is left.
       if (st.gone) {
-        for (const sp of [s.site, s.body, s.door, s.pole, s.cloth, s.liftCase, ...s.gates]) if (sp) sp.visible = false;
+        for (const sp of [s.site, s.body, s.door, s.pole, s.cloth, s.liftCase, s.wing, ...s.gates, ...s.hatches]) if (sp) sp.visible = false;
         s.rope.clear();
         continue;
       }
       // Burned: the black ruin (its Burned.c4d graphics), which burns down from the top.
-      const file = st.burned ? st.def.burned.file : g.file;
+      const file = st.burned && st.def.burned ? st.def.burned.file : g.file;
       if (st.burned !== s.burned) {
         s.burned = st.burned;
         s.con = -1;
@@ -976,6 +985,30 @@ export class WorldView {
         const ry = st.top + c.rope.y;
         s.rope.clear().rect(rx, ry, c.rope.facet.w, Math.max(0, k.boxTop - ry)).fill(0x5a3a1a);
       }
+      // A windmill's wing, turning on the windmill's first vertex (Wing.c4d, Rotate=1).
+      const wg = st.def.wing;
+      if (wg && st.complete && !s.wing) {
+        s.wing = new Sprite(frame(tex[wg.file], 0, 0, wg.size, wg.size));
+        s.wing.anchor.set(0.5);
+        s.wing.position.set(st.x + wg.at.x, st.y + wg.at.y);
+        this.structureLayer.addChild(s.wing);
+      }
+      if (s.wing) {
+        s.wing.visible = !!wg && (st.complete || st.burned);
+        if (wg) s.wing.texture = frame(tex[st.burned ? wg.burnedFile : wg.file], 0, 0, wg.size, wg.size);
+        s.wing.angle = st.wingR;
+      }
+      // The railings over the ways down (CSTE graphics, 27x23, centred 10,11 into its entrance).
+      const hs = st.complete ? (st.def.hatches ?? []) : [];
+      for (const sp of s.hatches.splice(hs.length)) sp.destroy();
+      hs.forEach((h, i) => {
+        if (!s.hatches[i]) {
+          const sp = new Sprite(frame(tex[HATCH_FILE], 0, 0, 27, 23));
+          sp.position.set(st.x + h.x - 3, st.y + h.y - 1);
+          this.structureLayer.addChild(sp);
+          s.hatches[i] = sp;
+        }
+      });
       // Guard tower gates.
       st.gates.forEach((gate, i) => {
         let sp = s.gates[i];

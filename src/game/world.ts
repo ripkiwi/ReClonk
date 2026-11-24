@@ -13,7 +13,7 @@ import { findPlantSpot, FULL_CON, grassRooted, Plant, plantRooted, PLANTS, TREE,
 import { FIRE } from '../objects/fire';
 import { blastBurn, stepFire } from './fire';
 import { blastIgnite, igniteOil, stepLiquids, type OilFlame } from './liquids';
-import { buildStep, construct, grabOrBuild, grabTarget, pushControl, siteProblem, stepElevator, stepGate } from './buildings';
+import { buildStep, checkBreak, construct, grabOrBuild, grabTarget, pushControl, siteProblem, stepBuildings, stepElevator, stepGate } from './buildings';
 import { Vehicle, VEHICLES, type VehicleId } from '../objects/vehicle';
 import { grabVehicle, stepVehicle, takeOut, vehicleAt, vehicleBottom, vehicleControl } from './vehicles';
 import { MagicState, openSpellMenu, spellList, startSpell, stepMagic, stepSorcerer, type SpellId } from './magic';
@@ -234,6 +234,13 @@ export class World {
   readonly magic = new MagicState();
   /** The spells sorcerers can cast (Scenario.txt Magic). None named means all of them. */
   spells: SpellId[] = [];
+  /** The buildings construction kits can put up (Scenario.txt Knowledge). None named means all of them. */
+  knowledge: string[] = [];
+
+  /** The construction plans of this round, in menu order. */
+  plans(): readonly string[] {
+    return this.knowledge.length ? BUILD_PLANS.filter((id) => this.knowledge.includes(id)) : BUILD_PLANS;
+  }
   /** The scenario's rules (Scenario.txt Rules). */
   readonly rules = new Set<RuleId>();
   /** Each player's captain, for the Kill The Captain rule. */
@@ -550,6 +557,7 @@ export class World {
       if (s.liftCase) stepElevator(this, s);
       for (const g of s.gates) stepGate(this, g);
     }
+    stepBuildings(this);
     // The guard tower's door has shut behind them: out onto the roof (DoorClosed).
     for (const c of this.clonks) {
       const s = c.contained;
@@ -939,7 +947,9 @@ export class World {
       if (directHit(x, y, { x: item.x - Math.floor(f.w / 2), y: item.y - Math.floor(f.h / 2), w: f.w, h: f.h })) blastBurn(this, item, level, by);
     }
     for (const s of this.structures) {
-      if (!s.gone && directHit(x, y, { x: s.left, y: s.top, w: s.def.width, h: s.def.height })) blastBurn(this, s, level, by);
+      if (s.gone || !directHit(x, y, { x: s.left, y: s.top, w: s.def.width, h: s.def.height })) continue;
+      blastBurn(this, s, level, by);
+      checkBreak(this, s);
     }
     for (const v of this.vehicles) {
       if (!v.removed && !v.contained && directHit(x, y, { x: v.left, y: v.top, w: v.def.width, h: v.def.height })) blastBurn(this, v, level, by);
@@ -1055,12 +1065,30 @@ export class World {
     return !!c.contained && c.contained.base === c.owner;
   }
 
-  /** Up in a doorway goes in (ObjectComUp: enter beats jumping). */
+  /**
+   * Up in a doorway goes in (ObjectComUp: enter beats jumping). On a guard
+   * tower's roof or a dark castle's platform, up goes in through the hatch
+   * (the CSTE entrance): the guard tower's lets the clonk straight out of
+   * the door at the bottom, the castle's into the castle. Not into an enemy's castle.
+   */
   private tryEnter(c: Clonk): boolean {
     const s = this.structureAt(c);
-    if (!s) return false;
-    this.enter(c, s);
-    return true;
+    if (s) {
+      this.enter(c, s);
+      return true;
+    }
+    for (const t of this.structures) {
+      const h = t.hatchAt(c.x, c.y);
+      if (!h) continue;
+      if (!h.through && t.def.canBeBase && this.hostile(t.owner, c.owner)) {
+        this.say(c.owner, 'Enemy castle: the way down is shut');
+        return true;
+      }
+      if (!this.enter(c, t)) return true;
+      if (h.through) this.exit(c);
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -1428,11 +1456,12 @@ export class World {
 
   /** The build menu (C4Menu::Control): the arrow keys choose, throw builds here, dig closes it. */
   private buildMenuControl(c: Clonk, ctl: ControlState): void {
-    const i = menuMove(c.buildMenu ?? 0, BUILD_PLANS.length, ctl);
+    const plans = this.plans();
+    const i = menuMove(c.buildMenu ?? 0, plans.length, ctl);
     c.buildMenu = i;
     if (ctl.pressedThrow) {
       c.buildMenu = null;
-      this.placeSite(c, BUILD_PLANS[i]);
+      this.placeSite(c, plans[i]);
     } else if (ctl.pressedDig) c.buildMenu = null;
   }
 
@@ -1468,8 +1497,14 @@ export class World {
     if (c.menu !== null) return this.buildingMenuControl(c, ctl);
     const s = c.contained!;
     const own = this.inOwnBase(c);
+    const pf = s.def.platforms;
     if (ctl.pressedDown) this.exit(c);
-    else if (ctl.pressedUp) {
+    else if (pf && s.complete && (ctl.pressedLeft || ctl.pressedRight)) {
+      // Up onto a platform (Castle3 ContainedLeft / ContainedRight), not in an enemy's castle.
+      if (this.hostile(s.owner, c.owner)) return this.say(c.owner, 'Enemy castle: the stairs are shut');
+      const p = ctl.pressedLeft ? pf.left : pf.right;
+      this.exitTo(c, s.x + p.x, s.y + p.y);
+    } else if (ctl.pressedUp) {
       if (own) this.openMenu(c, 'buy');
       else this.say(c.owner, s.hasFlag ? 'Not your base: nothing to buy' : 'No flag here: nothing to buy');
     } else if (ctl.pressedDig) this.openMenu(c, own ? 'sell' : 'get');

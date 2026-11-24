@@ -5,7 +5,7 @@
 // themselves instead: the first to fulfil every goal wins, and the others lose.
 
 import type { Clonk } from '../objects/clonk';
-import { BUILD_PLANS, CLONK_KINDS, CONSTRUCTION, STRUCTURES } from '../objects/defs';
+import { CLONK_KINDS, CONSTRUCTION, STRUCTURES } from '../objects/defs';
 import type { AnimalId } from '../objects/animal';
 import { Mat } from '../landscape/materials';
 import type { Rng } from '../core/rng';
@@ -240,7 +240,7 @@ function monstersLeft(world: World): { monsters: number; eggs: number } {
 
 /** The plans that aren't built yet: by anyone, or with `player` by that player (Engineering.c4d). */
 export function unbuilt(world: World, player?: number): string[] {
-  return BUILD_PLANS.filter((id) => !world.structures.some((s) => s.def.id === id && s.complete && !s.gone && (player === undefined || s.owner === player)));
+  return world.plans().filter((id) => !world.structures.some((s) => s.def.id === id && s.complete && !s.gone && (player === undefined || s.owner === player)));
 }
 
 /**

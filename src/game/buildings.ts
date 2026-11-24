@@ -14,7 +14,7 @@ import { ElevatorCase, Gate, type Structure } from '../objects/structure';
 import { contactCheck, round, sign } from '../objects/physics';
 import type { Vehicle } from '../objects/vehicle';
 import { layBasement } from './homeBase';
-import { rebuilt } from './fire';
+import { dropFlag, rebuilt } from './fire';
 import { vehicleBottom } from './vehicles';
 import type { World } from './world';
 
@@ -175,7 +175,16 @@ export function completeStructure(world: World, s: Structure): void {
   s.con = CONSTRUCTION.fullCon;
   if (def.solidMask) {
     s.mask = new SolidMask(maskFromArt(def.solidMask));
-    s.mask.place(land, s.left, s.top);
+    s.mask.place(land, s.left + (def.maskAt?.x ?? 0), s.top + (def.maskAt?.y ?? 0));
+  }
+  // The castle's small tower goes up with it, its bottom level with the castle's.
+  if (def.annex && !world.structures.some((o) => o.annexOf === s && !o.gone)) {
+    const a = STRUCTURES[def.annex.id];
+    const bottom = s.top + def.height;
+    const t = world.addStructure(a.id, s.x + def.annex.x, bottom - (a.offset.y + a.height));
+    t.owner = s.owner;
+    t.annexOf = s;
+    completeStructure(world, t);
   }
   for (const gd of def.gates ?? []) {
     const g = new Gate(gd, s.x + gd.x, s.y + gd.y);
@@ -510,4 +519,63 @@ export function stepGate(world: World, g: Gate): void {
     g.mask.move(land, 0, step);
     g.y += step;
   }
+}
+
+// ------------------------------------------------------- the other buildings
+
+/** How often an igloo checks the temperature (Igloo.c4d Timer=50), and how much it melts (DoCon(-2), CastPXS("Water",8)). */
+export const IGLOO = { interval: 50, warmerThan: 10, melt: 2000, water: 8 };
+
+/**
+ * Things buildings do by themselves each tick: an igloo melts when it's
+ * warmer than 10 degrees (it can be built back up), a windmill's wing turns
+ * with the wind (Wing.c4d Wind2Turn: SetRDir(GetWind()/4), in tenths of a degree).
+ */
+export function stepBuildings(world: World): void {
+  const temp = world.weather?.temperature ?? 0;
+  for (const s of world.structures) {
+    if (s.gone) continue;
+    const def = s.def;
+    if (def.wing && s.complete) {
+      const wind = world.weather ? world.weather.windAt(world, s.x + def.wing.at.x, s.y + def.wing.at.y) : 0;
+      s.wingR = (s.wingR + wind / 40 + 360) % 360;
+    }
+    if (def.melts && temp > IGLOO.warmerThan && world.tick % IGLOO.interval === 0 && s.con > 0) {
+      // A melting igloo is no home: whoever's inside comes out.
+      for (const c of world.clonks) if (c.contained === s) world.exit(c);
+      s.con = Math.max(0, s.con - IGLOO.melt);
+      for (let i = 0; i < IGLOO.water; i++) world.land.pxs.create(Mat.Water, s.x, s.y, 0, 0);
+      if (s.con === 0) breakApart(world, s, false);
+    }
+  }
+}
+
+/**
+ * A statue or an igloo that took too much damage falls apart (their Damage
+ * scripts: CastObjects of what it's made of, then RemoveObject). With `cast`
+ * false (melted away) nothing is left.
+ */
+export function breakApart(world: World, s: Structure, cast = true): void {
+  if (s.gone) return;
+  for (const c of world.clonks) {
+    if (c.contained === s) world.exit(c);
+    if (c.workOn === s) c.letGo();
+  }
+  world.ejectContents(s);
+  if (s.base >= 0) dropFlag(world, s);
+  s.mask?.remove(world.land);
+  s.mask = null;
+  s.gone = true;
+  if (!cast) return;
+  for (const [id, n] of Object.entries(s.def.breaksAt?.into ?? {}) as [ItemId, number][]) {
+    for (let i = 0; i < n; i++) {
+      world.spawnItem(id, s.x, s.y, (world.rng.int(71) - 35) / 10, -(world.rng.int(36) + 10) / 10, world.rng.int(3) + 1);
+    }
+  }
+}
+
+/** Damage enough to break it apart? (Igloo MaxDamage 50, statues 90.) */
+export function checkBreak(world: World, s: Structure): void {
+  const b = s.def.breaksAt;
+  if (b && !s.gone && s.damage > b.damage) breakApart(world, s);
 }

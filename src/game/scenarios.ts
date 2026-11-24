@@ -1,6 +1,7 @@
 import { texIndex, type ItemId } from '../landscape/materials';
 import { DEFAULT_LANDSCAPE, MAX_MAP_PLAYER_EXTEND, sval, type LandscapeDef, type SVal } from '../landscape/mapCreator';
 import { VEGETATION_IDS } from '../objects/vegetation';
+import { BUILD_PLANS } from '../objects/defs';
 import { SPELL_IDS, type SpellId } from './magic';
 import { RULE_IDS, type RuleId } from './rules';
 import { LAVA_CAVES_MAP } from './maps/lavaCaves';
@@ -39,6 +40,8 @@ export interface ScenarioDef {
   magic: SpellId[];
   /** The rules of the round (Scenario.txt Rules). */
   rules: RuleId[];
+  /** The buildings a construction kit can put up (Scenario.txt Knowledge). Like magic, none named means all of them. */
+  knowledge: string[];
   /** What each clonk carries at the start. */
   startItems: ItemId[];
   /** Start next to your own hut with your flag (gold, healing, buying and selling). */
@@ -120,6 +123,7 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     crewSize: 1,
     sorcerers: 0,
     magic: [],
+    knowledge: [],
     rules: [],
     startItems: ['flint'],
     homeBase: true,
@@ -157,6 +161,7 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     crewSize: 3,
     sorcerers: 0,
     magic: [],
+    knowledge: [],
     rules: [],
     startItems: ['flint'],
     homeBase: false,
@@ -203,6 +208,7 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     crewSize: 5,
     sorcerers: 0,
     magic: [],
+    knowledge: [],
     rules: [],
     startItems: [],
     homeBase: true,
@@ -273,6 +279,7 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     crewSize: 1,
     sorcerers: 0,
     magic: [],
+    knowledge: [],
     // Rules=FGRV=1 (its power usage rule isn't in the game yet).
     rules: ['flagRemoveable'],
     startItems: ['flint'],
@@ -511,6 +518,7 @@ export function normalizeScenario(raw: Partial<ScenarioDef>, fallback: ScenarioD
     sorcerers: Math.round(clamp(raw.sorcerers, LIMITS.sorcerers, raw.landscape ? 0 : f.sorcerers)),
     magic: Array.isArray(raw.magic) ? SPELL_IDS.filter((id) => raw.magic!.includes(id)) : [],
     rules: Array.isArray(raw.rules) ? RULE_IDS.filter((id) => raw.rules!.includes(id)) : [],
+    knowledge: Array.isArray(raw.knowledge) ? BUILD_PLANS.filter((id) => raw.knowledge!.includes(id)) : [],
     startItems: items,
     homeBase: typeof raw.homeBase === 'boolean' ? raw.homeBase : f.homeBase,
     base: {

@@ -101,6 +101,7 @@ export function startRound(
   world.recruit = (player, kind) => (player === LOCAL_PLAYER ? recruit(kind) : null);
   world.goals = { ...scenario.goals };
   world.spells = [...scenario.magic];
+  world.knowledge = [...scenario.knowledge];
   for (const r of scenario.rules) world.rules.add(r);
 
   const colors = PLAYER_COLORS.map((_, i) => i).filter((i) => i !== profile.color % PLAYER_COLORS.length);

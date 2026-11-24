@@ -5,7 +5,9 @@ import { GOAL_IDS, GOALS, LATER_GOALS, type GoalId } from '../game/goals';
 import { shopEntry, type ShopId } from '../game/world';
 import { MAX_MAP_PLAYER_EXTEND, type SVal } from '../landscape/mapCreator';
 import { MATERIALS, Mat, TEXMAP, texIndex, TUNNEL, type ItemId, type TexEntry } from '../landscape/materials';
-import { ITEMS, STRUCTURES } from '../objects/defs';
+import { BUILD_PLANS, ITEMS, STRUCTURES } from '../objects/defs';
+import { STRUCTURE_SHEETS } from '../objects/buildingDefs';
+import { DESCRIPTIONS } from '../objects/descriptions';
 import { BURNED_TREES, PLANTS, VEGETATION_IDS, VEGETATION_ITEMS, type BurnedTreeId, type PlantId, type VegetationId, type VegetationItemId } from '../objects/vegetation';
 import { ENV_IDS, ENVIRONMENT } from '../game/environment';
 import { VEHICLES, type VehicleId } from '../objects/vehicle';
@@ -127,6 +129,12 @@ const PICTURES: Record<ItemId | VehicleId | 'clonk' | 'sorcerer' | 'hut' | 'elev
   // The flag's front-end picture (PictureFE): its cloth is already coloured in.
   flag: { ...itemPicture('flag'), y: 64 },
 };
+
+/** A building's picture (DefCore Picture) in its sprite sheet. */
+function structurePicture(id: string): Picture {
+  const g = STRUCTURES[id].graphic;
+  return { file: g.file, sheet: STRUCTURE_SHEETS[g.file], ...g.picture };
+}
 
 const animalPicture = (id: keyof typeof ANIMALS): Picture => ({ file: ANIMALS[id].file, sheet: ANIMALS[id].sheet, ...ANIMALS[id].picture });
 
@@ -642,7 +650,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
                     : 'Fulfil every goal to win.';
   };
   showGoal();
-  const ruleNote = h('div', { class: 'pp-hint', style: at(199, 124, 186, 76) });
+  const ruleNote = h('div', { class: 'pp-hint', style: { ...at(199, 80, 186, 54), overflowY: 'auto' } });
   function showRules(): void {
     const on = RULE_IDS.filter((id) => d.rules.includes(id));
     const needsBase = on.some((id) => id === 'captureTheFlag' || id === 'lossOfBase') && !d.homeBase;
@@ -652,6 +660,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     );
   }
   showRules();
+  const plan = (id: string): boolean => !d.knowledge.length || d.knowledge.includes(id);
   const gamePage = h(
     'div',
     { class: 'pp-page' },
@@ -703,7 +712,21 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
           later: true,
         })),
       ],
-      { x: 199, y: 19, w: 171, hgt: 102, label: 'Rules:', format: (n) => (n ? 'on' : 'off'), onChange: () => { showRules(); showGoal(); } },
+      { x: 199, y: 19, w: 171, hgt: 58, label: 'Rules:', format: (n) => (n ? 'on' : 'off'), onChange: () => { showRules(); showGoal(); } },
+    ),
+    // The original's Knowledge: the buildings construction kits can put up. At least one stays on.
+    ...idList(
+      BUILD_PLANS.map((id) => ({
+        name: `${STRUCTURES[id].name}: ${DESCRIPTIONS[id] ?? ''}`,
+        icon: () => picture(structurePicture(id), 22),
+        get: () => (plan(id) ? 1 : 0),
+        set: (v: number) => {
+          const next = BUILD_PLANS.filter((b) => (b === id ? v > 0 : plan(b)));
+          if (next.length) d.knowledge = next.length === BUILD_PLANS.length ? [] : next;
+        },
+        max: 1,
+      })),
+      { x: 199, y: 138, w: 171, hgt: 62, label: 'Construction plans:', title: 'The buildings a construction kit can put up', format: (n) => (n ? 'on' : 'off'), onChange: () => {} },
     ),
     ruleNote,
     h('div', { class: 'pp-label', style: at(6, 86, 120) }, 'Computer crews:'),
@@ -776,9 +799,9 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         max: 1,
       },
       // Built in the round, but a scenario can't start with them yet: greyed in the Add menu.
-      ...(['elevator', 'tower'] as const).map((id) => ({
+      ...BUILD_PLANS.filter((id) => id !== 'hut').map((id) => ({
         name: `${STRUCTURES[id].name}: comes later, a crew can build one but can't start with one yet`,
-        icon: () => picture(PICTURES[id], 30),
+        icon: () => picture(structurePicture(id), 30),
         get: () => 0,
         set: () => {},
         max: 0,
