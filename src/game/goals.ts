@@ -114,7 +114,7 @@ const GOLD_LEFT = 150;
 /** Race: the goal line is this far from the right edge (Race.c4d GetEndOffset), the start this far from the left. */
 export const RACE_OFFSET = 50;
 /** The monsters Monsterkill hunts, and the eggs they hatch from (MONS, FMNS; MEGG, FMEG). */
-export const MONSTERS: readonly AnimalId[] = ['monster'];
+export const MONSTERS: readonly AnimalId[] = ['monster', 'fireMonster'];
 
 /** Wipf rescue: one goal lets no wipf die, two let two die, three three and so on (Wipfhunt.c4d Initialize). */
 export function allowedWipfDeaths(count: number): number {

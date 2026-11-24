@@ -56,7 +56,8 @@ export type ItemId = 'rock' | 'gold' | 'flint' | 'tflint' | 'superflint' | 'supe
   // Materials (Items.c4d/Materials.c4d) and gunpowder.
   | 'loam' | 'metal' | 'coal' | 'ore' | 'sulphur' | 'concrete' | 'liquidGranite' | 'gunpowder' | 'earth' | 'sand' | 'ashes' | 'ice' | 'snowball'
   // Animals a clonk carries: alive (wipf, fish), dead, and the monster's egg.
-  | 'wipf' | 'fish' | 'deadWipf' | 'deadFish' | 'deadBird' | 'monsterEgg';
+  | 'wipf' | 'fish' | 'deadWipf' | 'deadFish' | 'deadBird' | 'monsterEgg'
+  | 'snake' | 'deadSnake' | 'fireMonsterEgg' | 'birdEgg' | 'zapNest';
 
 export interface Material {
   name: string;

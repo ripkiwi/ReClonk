@@ -22,7 +22,8 @@ import { activeGoals, GoalState, stepGoals, type Goals } from './goals';
 import { menuMove } from './menus';
 import type { Weather } from './weather';
 import { Animal, ANIMALS, type AnimalId } from '../objects/animal';
-import { animalHurt, breakEgg, collectAnimal, eggHit, stepAnimals, type AnimalSound } from './animals';
+import { animalHurt, breakEgg, collectAnimal, collected, dropNest, itemLanded, stepAnimals, type AnimalSound } from './animals';
+import type { TreeNest } from '../objects/nest';
 
 export type WorldEvent =
   | { type: 'explosion'; x: number; y: number; radius: number; tick: number }
@@ -199,6 +200,8 @@ export class World {
   flames: OilFlame[] = [];
   /** Wipfs, birds, fish, sharks and monsters, alive or dead. */
   animals: Animal[] = [];
+  /** Birds' nests in the trees. */
+  treeNests: TreeNest[] = [];
   readonly players = new Map<number, PlayerState>();
   private readonly cursors = new Map<number, CrewCursor>();
   readonly messages: PlayerMessage[] = [];
@@ -503,6 +506,7 @@ export class World {
       stepSorcerer(this, c);
       const got = c.tryCollect(this.items, this.land) ?? takeFlag(this, c) ?? collectAnimal(this, c);
       if (got) {
+        collected(got);
         this.events.push({ type: 'collect', clonk: c, item: got, tick: this.tick });
         if (got.def.id === 'gold' && !got.found) {
           got.found = true;
@@ -558,8 +562,8 @@ export class World {
       if (hit && !item.def.explodeOnHit) this.events.push({ type: 'itemHit', item, tick: this.tick });
       // A T-flint lights on impact (TFlint.c4d Hit).
       if (hit && item.light()) this.events.push({ type: 'fuse', x: item.x, y: item.y, tick: this.tick });
-      // A monster egg may break when it lands (MonsterEgg.c4d Hit).
-      if (hit && item.def.egg) eggHit(this, item);
+      // An egg may break when it lands, a zap nest bursts (their Hit).
+      if (hit) itemLanded(this, item);
       // Earth, sand, snow and concrete burst where they land (Hit: CastPXS).
       if (hit && item.def.breaksInto) breakApart(this, item);
       if (hit && item.def.explodeOnHit) {
@@ -884,6 +888,8 @@ export class World {
       const at = item.container ?? item;
       if (directHit(x, y, { x: at.x - 3, y: at.y - 3, w: 6, h: 6 })) breakEgg(this, item);
     }
+    // A blast sets birds' nests alight (BlastIncinerate 10): they fall out of their trees.
+    for (const n of this.treeNests) if (radius >= 10 && Math.abs(n.x - x) <= radius && Math.abs(n.y - y) <= radius) dropNest(this, n);
     this.blastHits(x, y, radius, by);
     shockwaveHits(this, x, y, radius, by);
     this.shoveVehicles(x, y, radius);

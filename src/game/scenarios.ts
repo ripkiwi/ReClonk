@@ -5,7 +5,7 @@ import { SPELL_IDS, type SpellId } from './magic';
 import { RULE_IDS, type RuleId } from './rules';
 import { LAVA_CAVES_MAP } from './maps/lavaCaves';
 import { DEFAULT_WEATHER, type WeatherDef } from './weather';
-import { ANIMAL_IDS, type AnimalId } from '../objects/animal';
+import { SCENARIO_ANIMAL_IDS, type AnimalId } from '../objects/animal';
 import type { ShopId } from './world';
 import { GOAL_IDS, GOALS, type Goals } from './goals';
 
@@ -52,15 +52,15 @@ export interface ScenarioDef {
   weather: WeatherDef;
   /** Animals running, swimming and flying about at the start, how many of each (Scenario.txt [Animals] Animal). */
   animals: Partial<Record<AnimalId, number>>;
-  /** Nests buried in the earth: monster eggs (Scenario.txt [Animals] Nest). */
+  /** Nests buried in the earth: eggs and zap nests (Scenario.txt [Animals] Nest). */
   nests: Partial<Record<NestId, number>>;
   /** Set on a player's own scenario: the original it was copied from. */
   basedOn?: string;
 }
 
 /** What can be buried as a nest. */
-export type NestId = 'monsterEgg';
-export const NEST_IDS: NestId[] = ['monsterEgg'];
+export type NestId = 'monsterEgg' | 'fireMonsterEgg' | 'zapNest' | 'birdEgg';
+export const NEST_IDS: NestId[] = ['monsterEgg', 'fireMonsterEgg', 'zapNest', 'birdEgg'];
 
 /**
  * The home base starts with the original Gold Mine stock, plus vehicles and
@@ -160,9 +160,9 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     goals: { melee: 1 },
     // Minor Melee's Scenario.txt: always late spring, gusty winds.
     weather: { ...DEFAULT_WEATHER, climate: sval(19), startSeason: sval(23), yearSpeed: sval(0), wind: sval(1, 100, -100, 100) },
-    // Its two zap nests (Nest=ZAPN=2) wait for zaps.
+    // Its two zap nests (Nest=ZAPN=2).
     animals: {},
-    nests: {},
+    nests: { zapNest: 2 },
   },
   {
     // Melees.c4f/SharkLake.c4s, with its five sharks (Animal=SHRK=5).
@@ -218,7 +218,7 @@ export const SCENARIOS: readonly ScenarioDef[] = [
     nests: {},
   },
   {
-    // Worlds.c4f/Lavacaves.c4s, with its monsters and monster eggs (its snake, fire monster, fire monster eggs and zap nests come later).
+    // Worlds.c4f/Lavacaves.c4s, with its monsters, snake, fire monster, eggs and zap nests.
     id: 'lava-caves',
     title: 'Lava Caves',
     description:
@@ -285,9 +285,9 @@ export const SCENARIOS: readonly ScenarioDef[] = [
       volcano: sval(3),
       earthquake: sval(5),
     },
-    // Animal=SNKE=1;FMNS=1;MONS=3 and Nest=FMEG=4;MEGG=4;ZAPN=3: the monsters and their eggs.
-    animals: { monster: 3 },
-    nests: { monsterEgg: 4 },
+    // Animal=SNKE=1;FMNS=1;MONS=3 and Nest=FMEG=4;MEGG=4;ZAPN=3.
+    animals: { snake: 1, fireMonster: 1, monster: 3 },
+    nests: { fireMonsterEgg: 4, monsterEgg: 4, zapNest: 3 },
   },
 ];
 
@@ -504,7 +504,7 @@ export function normalizeScenario(raw: Partial<ScenarioDef>, fallback: ScenarioD
     goals: goalsIn(raw, f.goals),
     weather: weatherIn(raw.weather, f.weather),
     // Scenarios saved before animals existed take the original's.
-    animals: raw.animals ? counts(ANIMAL_IDS, raw.animals, LIMITS.animals) : { ...f.animals },
+    animals: raw.animals ? counts(SCENARIO_ANIMAL_IDS, raw.animals, LIMITS.animals) : { ...f.animals },
     nests: raw.nests ? counts(NEST_IDS, raw.nests, LIMITS.animals) : { ...f.nests },
     ...(raw.basedOn ? { basedOn: String(raw.basedOn) } : {}),
   };
