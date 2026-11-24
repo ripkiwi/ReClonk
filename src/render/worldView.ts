@@ -11,6 +11,7 @@ import type { Item } from '../objects/item';
 import type { Structure } from '../objects/structure';
 import { GRASS, type Grass, type Plant } from '../objects/vegetation';
 import { Animal, DEAD_DELAY } from '../objects/animal';
+import { NEST, type TreeNest } from '../objects/nest';
 import { BALLOON_FLAG, BLIMP, SAIL, isSailing, type Vehicle } from '../objects/vehicle';
 import { colorByOwner, frame, type GameAssets } from './assets';
 import { FireView } from './fireView';
@@ -139,6 +140,9 @@ export class WorldView {
   /** Animals, in front of vehicles and behind clonks. */
   private readonly animalLayer = new Container();
   private readonly animalSprites = new Map<Animal, Sprite>();
+  /** Birds' nests, in front of the trees they hang in. */
+  private readonly nestLayer = new Container();
+  private readonly nestSprites = new Map<TreeNest, Sprite>();
   /** Trees and bushes: a holder at the root that tilts when it falls, and the picture in it. */
   private readonly plantSprites = new Map<Plant, { holder: Container; body: Sprite; burned: boolean | null }>();
   private readonly grassSprites = new Map<Grass, Sprite>();
@@ -177,7 +181,7 @@ export class WorldView {
     this.root.addChild(this.sky, this.layer);
     this.landscape = new LandscapeView(world.land, assets.materials);
     this.fire = new FireView(world, assets.items);
-    this.layer.addChild(this.landscape.sprite, this.grassLayer, this.fire.back, this.plantLayer, this.structureLayer, this.vehicleLayer, this.animalLayer, this.pxs);
+    this.layer.addChild(this.landscape.sprite, this.grassLayer, this.fire.back, this.plantLayer, this.nestLayer, this.structureLayer, this.vehicleLayer, this.animalLayer, this.pxs);
   }
 
   /**
@@ -243,6 +247,7 @@ export class WorldView {
     this.updateItems();
     this.updateVehicles();
     this.updateAnimals();
+    this.updateNests();
     this.updateClonks();
     this.layer.addChild(this.vehicleFront);
     this.updateBridges();
@@ -603,7 +608,8 @@ export class WorldView {
   private updateAnimals(): void {
     const seen = new Set<Animal>();
     for (const a of this.world.animals) {
-      if (a.removed) continue;
+      // A bird sitting in its nest is drawn with the nest.
+      if (a.removed || a.inNest) continue;
       seen.add(a);
       let s = this.animalSprites.get(a);
       if (!s) {
@@ -629,6 +635,40 @@ export class WorldView {
       if (seen.has(a)) continue;
       s.destroy();
       this.animalSprites.delete(a);
+    }
+  }
+
+  /** Birds' nests: built up to their con (StretchGrowth), with the bird in it while it broods (the Bird action's frame). */
+  private updateNests(): void {
+    const seen = new Set<TreeNest>();
+    for (const n of this.world.treeNests) {
+      if (n.removed) continue;
+      seen.add(n);
+      let s = this.nestSprites.get(n);
+      if (!s) {
+        s = new Sprite();
+        s.anchor.set(0.5);
+        this.nestLayer.addChild(s);
+        this.nestSprites.set(n, s);
+      }
+      const k = n.con / 100;
+      const tex = this.assets.items[NEST.file];
+      if (n.state === 'bird') {
+        const f = NEST.birdFacet;
+        s.texture = frame(tex, f.x, f.y, f.w, f.h);
+        // The Bird frame is 30x16, its top-left 4 px left of and 5 px above the nest's.
+        s.position.set(n.x + (f.dx + f.w / 2 - NEST.width / 2) * k, n.y + (f.dy + f.h / 2 - NEST.height / 2) * k);
+      } else {
+        const f = NEST.facet;
+        s.texture = frame(tex, f.x, f.y, f.w, f.h);
+        s.position.set(n.x, n.y);
+      }
+      s.scale.set(k);
+    }
+    for (const [n, s] of this.nestSprites) {
+      if (seen.has(n)) continue;
+      s.destroy();
+      this.nestSprites.delete(n);
     }
   }
 

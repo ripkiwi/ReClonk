@@ -2,6 +2,7 @@ import type { Landscape } from '../landscape/landscape';
 import type { ItemDef } from './defs';
 import type { FireState } from './fire';
 import { GameObject } from './gameObject';
+import type { TreeNest } from './nest';
 import { FLOAT_ACCEL, HIT_SPEED_1 } from './physics';
 
 /** A loose object: rock, gold nugget, flint, wood, meteor. */
@@ -31,6 +32,14 @@ export class Item extends GameObject {
   age = 0;
   /** A live animal in a clonk's hands keeps its energy and size (in 1/1000 points and percent). */
   life: { energy: number; con: number } | null = null;
+  /** A bird egg lying in a nest: it stays there, brooding (its Nest action). */
+  onNest: TreeNest | null = null;
+  /** How long a bird egg has brooded, in 35-tick steps (iBreedTime). */
+  breed = 0;
+  /** Laid by a bird: there's a young bird in it (it counts towards how many birds are about). */
+  laid = false;
+  /** Ticks before a carried snake can bite again. */
+  biteDelay = 0;
 
   constructor(
     readonly def: ItemDef,
@@ -74,6 +83,11 @@ export class Item extends GameObject {
   tick(land: Landscape): boolean {
     if (this.noCollect > 0) this.noCollect--;
     this.rot();
+    // An egg in a nest stays put (FLOAT, attached to the nest).
+    if (this.onNest) {
+      this.xdir = this.ydir = 0;
+      return false;
+    }
     const g = land.gravity;
     if (this.inLiquid(land)) {
       // Sink slowly through liquids; light things like flags bob up instead (Float).

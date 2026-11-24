@@ -8,7 +8,7 @@ import { MATERIALS, Mat, TEXMAP, texIndex, TUNNEL, type ItemId, type TexEntry } 
 import { ITEMS, STRUCTURES } from '../objects/defs';
 import { PLANT_IDS, PLANTS, type PlantId } from '../objects/vegetation';
 import { VEHICLES, type VehicleId } from '../objects/vehicle';
-import { ANIMALS, ANIMAL_IDS } from '../objects/animal';
+import { ANIMALS, SCENARIO_ANIMAL_IDS } from '../objects/animal';
 import { CONTENT_BASE } from '../render/assets';
 import { bigButton, h } from './dom';
 import { mapPreview } from './preview';
@@ -68,6 +68,11 @@ const ITEM_SHEETS: Record<ItemId, [number, number]> = {
   deadFish: [144, 64],
   deadBird: [92, 64],
   monsterEgg: [92, 40],
+  snake: [624, 64],
+  deadSnake: [624, 64],
+  fireMonsterEgg: [92, 40],
+  birdEgg: [92, 40],
+  zapNest: [70, 64],
 };
 const itemPicture = (id: ItemId): Picture => ({ file: ITEMS[id].graphic.file, sheet: ITEM_SHEETS[id], ...ITEMS[id].picture });
 const vehiclePicture = (id: VehicleId): Picture => ({
@@ -943,7 +948,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
     ),
     ...vegetationLevel,
     ...idList(
-      ANIMAL_IDS.map((id) => ({
+      SCENARIO_ANIMAL_IDS.map((id) => ({
         name: `${ANIMALS[id].name}: how many at the start`,
         icon: () => picture(animalPicture(id), 22),
         get: () => d.animals[id] ?? 0,
@@ -960,7 +965,7 @@ export function scenarioSettings(o: SettingsOptions): HTMLElement[] {
         set: (v: number) => (d.nests[id] = v),
         max: LIMITS.animals.max,
       })),
-      { x: 100, y: 164, w: 60, hgt: 30, label: 'Nests:', title: 'Buried in the earth: a monster hatches from an egg that breaks', format: String, onChange: changed },
+      { x: 100, y: 164, w: 60, hgt: 30, label: 'Nests:', title: 'Buried in the earth: a monster hatches from an egg that breaks, a zap nest bursts into zaps', format: String, onChange: changed },
     ),
   );
 

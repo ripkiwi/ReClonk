@@ -74,6 +74,10 @@ export const SOUND_FILES = [
   'Snuff2',
   'WipfDead',
   'WipfHurt',
+  'Snake1',
+  'Snake2',
+  'Bsss',
+  'Sting',
 ] as const;
 export type SoundId = (typeof SOUND_FILES)[number];
 

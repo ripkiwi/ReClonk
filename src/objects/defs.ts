@@ -53,6 +53,10 @@ export interface ItemDef {
   decay?: { after: number; every: number; step: number; facet: Facet };
   /** An egg: a hard landing breaks it one time in two, a blast always, and now and then it hatches by itself (MonsterEgg.c4d). */
   egg?: AnimalId;
+  /** A bird egg: it only hatches after brooding in a nest, and a young bird only comes out once it has lain there half that long (BirdEgg.c4d). */
+  eggInNest?: boolean;
+  /** A zap nest: when it hits the ground it breaks and lets out this many zaps (ZapNest.c4d Hit, BreakUp(28)). */
+  swarm?: number;
 }
 
 const itemVertex: Vertex[] = [{ x: 0, y: 0, cnat: CNAT.None, friction: 50 }];
@@ -157,6 +161,31 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   monsterEgg: {
     id: 'monsterEgg', name: 'Monster egg', value: 10, mass: 10, vertices: itemVertex, egg: 'monster',
     graphic: { file: 'animals/MonsterEgg.png', facet: { x: 0, y: 0, w: 6, h: 6 } }, picture: { x: 6, y: 0, w: 40, h: 40 },
+  },
+  // A snake picked up alive (Snake.c4d is Collectible, with the Collectible animals rule). It bites whoever holds it.
+  snake: {
+    id: 'snake', name: 'Snake', value: 7, mass: 5, vertices: [{ x: 0, y: 4, cnat: CNAT.Bottom, friction: 100 }], animal: 'snake', float: true,
+    graphic: { file: 'animals/Snake.png', facet: { x: 0, y: 0, w: 28, h: 10 } }, picture: { x: 560, y: 0, w: 64, h: 64 },
+  },
+  // A dead snake: Snake.c4d has no Dead.c4d, so it's the snake in its Dead action, and it doesn't rot.
+  deadSnake: {
+    id: 'deadSnake', name: 'Dead snake', value: 7, mass: 5, vertices: [{ x: 0, y: 4, cnat: CNAT.Bottom, friction: 100 }], float: true,
+    graphic: { file: 'animals/Snake.png', facet: { x: 0, y: 40, w: 28, h: 10 } }, picture: { x: 560, y: 0, w: 64, h: 64 },
+  },
+  // FireMonsterEgg.c4d (FMEG): like the monster egg, with a fire monster in it.
+  fireMonsterEgg: {
+    id: 'fireMonsterEgg', name: 'Fire monster egg', value: 20, mass: 10, vertices: itemVertex, egg: 'fireMonster',
+    graphic: { file: 'animals/FireMonsterEgg.png', facet: { x: 0, y: 0, w: 6, h: 6 } }, picture: { x: 6, y: 0, w: 40, h: 40 },
+  },
+  // BirdEgg.c4d (BEGG): laid in a nest, it hatches after 50 times 35 ticks there; broken before half that, there's no bird in it yet.
+  birdEgg: {
+    id: 'birdEgg', name: 'Bird egg', value: 10, mass: 10, vertices: itemVertex, egg: 'bird', eggInNest: true,
+    graphic: { file: 'animals/BirdEgg.png', facet: { x: 0, y: 0, w: 6, h: 6 } }, picture: { x: 6, y: 0, w: 40, h: 40 },
+  },
+  // ZapNest.c4d (ZAPN): thrown or dropped, it bursts on the ground into 28 zaps.
+  zapNest: {
+    id: 'zapNest', name: 'Zap nest', value: 5, rebuy: true, mass: 3, vertices: [{ x: 0, y: 1, cnat: CNAT.None, friction: 100 }], swarm: 28,
+    graphic: { file: 'animals/ZapNest.png', facet: { x: 0, y: 0, w: 6, h: 6 } }, picture: { x: 6, y: 0, w: 64, h: 64 },
   },
 };
 

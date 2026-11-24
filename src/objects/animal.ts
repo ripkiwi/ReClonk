@@ -1,5 +1,6 @@
 // Animals from the original Clonk Rage content (Objects.c4d/Animals.c4d): the
-// wipf, the bird, the fish, the shark and the monster. Values follow their
+// wipf, the bird, the fish, the shark, the monster, the snake, the fire
+// monster and the zap. Values follow their
 // DefCore.txt and ActMap.txt; their movement is the engine's (C4Object::
 // ExecMovement for the WALK, FLIGHT, SWIM, FLOAT, DIG and NONE procedures,
 // ContactAction and NoAttachAction). Their behaviour (the scripts' Activity
@@ -11,9 +12,11 @@ import type { Landscape } from '../landscape/landscape';
 import type { Facet } from './defs';
 import type { FireState } from './fire';
 import { GameObject } from './gameObject';
+import type { TreeNest } from './nest';
+import type { Plant } from './vegetation';
 import { CNAT, FLOAT_ACCEL, SWIM_ACCEL, WALK_ACCEL, attach, physical, type Vertex } from './physics';
 
-export type AnimalId = 'wipf' | 'bird' | 'fish' | 'shark' | 'monster';
+export type AnimalId = 'wipf' | 'bird' | 'fish' | 'shark' | 'monster' | 'snake' | 'fireMonster' | 'zap';
 
 /** The engine procedures animals use. */
 export type AnimalProcedure = 'walk' | 'flight' | 'swim' | 'float' | 'dig' | 'none' | 'dead';
@@ -61,7 +64,7 @@ export interface AnimalDef {
   vertices: Vertex[];
   /** Full energy in points (Physical Energy / 1000). */
   energy: number;
-  /** Breath in points (Physical Breath / 1000); it suffocates without air (or water, for those that breathe water). */
+  /** Breath in points (Physical Breath / 1000); it suffocates without air (or water, for those that breathe water). 0: it doesn't breathe. */
   breath: number;
   breatheWater: boolean;
   /** Physicals, like the original's (0..100000). */
@@ -90,8 +93,8 @@ export interface AnimalDef {
   picture: Facet;
   /** The kind of item it is when a clonk carries it alive. */
   carried?: ItemId;
-  /** What it turns into when it dies (ChangeDef to its Dead.c4d): an item to pick up, or a body that rots. */
-  dead: { item: ItemId } | { file: string; sheet: [number, number]; facet: Facet; decay: Facet; float: number; decayDelay: number; decayStep: number };
+  /** What it turns into when it dies (ChangeDef to its Dead.c4d): an item to pick up, a body that rots, or nothing (zaps vanish). */
+  dead: { gone: true } | { item: ItemId } | { file: string; sheet: [number, number]; facet: Facet; decay: Facet; float: number; decayDelay: number; decayStep: number };
   actions: Record<string, AnimalAction>;
   /** Its first action (after Birth). */
   start: string;
@@ -178,6 +181,8 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
       { name: 'Turn', procedure: 'float', length: 20, delay: 1, facet: f(0, 24, 28, 24), next: 'Fly' },
       { name: 'Attack', procedure: 'float', length: 20, delay: 1, facet: f(0, 48, 28, 24), next: 'Fly' },
       { name: 'Tumble', procedure: 'none', length: 20, delay: 1, facet: f(0, 72, 28, 24), next: 'Fly', disabled: true, inLiquid: 'Fly' },
+      // Building a nest in a tree: Build every 40 ticks.
+      { name: 'BuildNest', procedure: 'float', length: 20, delay: 2, facet: f(0, 48, 28, 24), next: 'BuildNest' },
     ]),
   },
   // Fish.c4d (FISH): swims about and flees from what moves in the water. Out of it, it flops about and suffocates.
@@ -290,9 +295,123 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
       { name: 'LookAway', procedure: 'none', length: 12, delay: 1, facet: f(0, 102, 48, 34), next: 'Walk', inLiquid: 'Swim', reverse: true },
     ]),
   },
+  // Snake.c4d (SNKE): slithers about, jumps, and bites what it can reach. It bites the clonk carrying it, too.
+  snake: {
+    id: 'snake',
+    name: 'Snake',
+    value: 7,
+    mass: 5,
+    width: 28,
+    height: 10,
+    vertices: vtx([-4, 0, 4], [-3, 4, -3], [1, 8, 2]),
+    energy: 30,
+    breath: 100,
+    breatheWater: false,
+    physical: { walk: 50000, jump: 25000, swim: 100000, dig: 40000, float: 0 },
+    float: 1,
+    growth: 1.5,
+    placement: 'surface',
+    prey: false,
+    collectible: true,
+    contactIncinerate: 0,
+    borderTop: false,
+    corrosionResist: true,
+    maxCount: 10,
+    reproductionRate: 10000,
+    file: 'animals/Snake.png',
+    sheet: [624, 64],
+    picture: f(560, 0, 64, 64),
+    carried: 'snake',
+    // No Dead.c4d: it lies in its Dead action, and can be picked up.
+    dead: { item: 'deadSnake' },
+    start: 'Walk',
+    actions: act([
+      { name: 'Walk', procedure: 'walk', length: 20, delay: 1, facet: f(0, 0, 28, 10), next: 'Walk', turn: 'Turn', inLiquid: 'Swim' },
+      { name: 'Turn', procedure: 'none', length: 20, delay: 1, facet: f(0, 10, 28, 10), next: 'Walk' },
+      { name: 'Swim', procedure: 'swim', length: 20, delay: 1, facet: f(0, 20, 28, 10), next: 'Swim', turn: 'Turn' },
+      { name: 'Jump', procedure: 'flight', length: 3, delay: 1, facet: f(0, 30, 28, 10), next: 'Tumble', inLiquid: 'Swim' },
+      { name: 'Tumble', procedure: 'flight', length: 17, delay: 1, facet: f(84, 30, 28, 10), next: 'Tumble', inLiquid: 'Swim' },
+    ]),
+  },
+  // FireMonster.c4d (FMNS): a monster that spits fire, lays eggs and doesn't burn, even in lava.
+  fireMonster: {
+    id: 'fireMonster',
+    name: 'Fire monster',
+    value: 45,
+    mass: 100,
+    width: 48,
+    height: 34,
+    vertices: vtx([-1, 1, 0, -6, -2, 7, 2], [-7, -7, 12, -3, 6, -3, 6], [5, 6, 8, 1, 1, 2, 2]),
+    energy: 250,
+    breath: 50,
+    breatheWater: false,
+    physical: { walk: 80000, jump: 60000, swim: 30000, dig: 40000, float: 0 },
+    float: 1,
+    growth: 1.5,
+    placement: 'surface',
+    prey: false,
+    collectible: false,
+    contactIncinerate: 0,
+    borderTop: false,
+    corrosionResist: false,
+    maxCount: 4,
+    reproductionRate: 2000,
+    file: 'animals/FireMonster.png',
+    sheet: [816, 136],
+    picture: f(576, 68, 64, 64),
+    dead: { file: 'animals/FireMonsterDead.png', sheet: [96, 34], facet: f(0, 0, 48, 34), decay: f(48, 0, 48, 34), float: 8, decayDelay: 180, decayStep: 2 },
+    start: 'Walk',
+    actions: act([
+      { name: 'Walk', procedure: 'walk', length: 16, delay: 5, facet: f(0, 0, 48, 34), next: 'Walk', turn: 'Turn', inLiquid: 'Swim' },
+      { name: 'Turn', procedure: 'none', length: 7, delay: 2, facet: f(0, 68, 48, 34), next: 'Walk' },
+      { name: 'Jump', procedure: 'flight', length: 17, delay: 1, facet: f(0, 34, 48, 34), next: 'Hold', inLiquid: 'Swim' },
+      { name: 'Swim', procedure: 'swim', length: 16, delay: 5, facet: f(0, 0, 48, 34), next: 'Swim', turn: 'Turn' },
+      { name: 'LookUp', procedure: 'none', length: 12, delay: 1, facet: f(0, 102, 48, 34), next: 'Look', inLiquid: 'Swim' },
+      { name: 'Look', procedure: 'none', length: 1, delay: 15, facet: f(528, 102, 48, 34), next: 'LookAway', inLiquid: 'Swim' },
+      { name: 'LookAway', procedure: 'none', length: 12, delay: 1, facet: f(0, 102, 48, 34), next: 'Walk', inLiquid: 'Swim', reverse: true },
+      // Spitting fire: Flaming every 2 ticks, for a bit more than 10 ticks.
+      { name: 'Flame', procedure: 'none', length: 1, delay: 2, facet: f(768, 0, 48, 34), next: 'Flame', inLiquid: 'Swim' },
+    ]),
+  },
+  // ZapNest.c4d/Zap.c4d (ZAP1): one of the angry swarm out of a broken zap nest. It chases clonks and wipfs and stings them.
+  zap: {
+    id: 'zap',
+    name: 'Zap',
+    value: 1,
+    mass: 1,
+    width: 2,
+    height: 2,
+    vertices: [{ x: 0, y: 0, cnat: 0, friction: 100 }],
+    // It has no energy to speak of: any blow, blast or fire is the end of it (CatchBlow, Damage).
+    energy: 1,
+    breath: 0,
+    breatheWater: false,
+    physical: { walk: 0, jump: 0, swim: 0, dig: 0, float: 1000 },
+    float: 0,
+    growth: 0,
+    placement: 'air',
+    prey: false,
+    collectible: false,
+    contactIncinerate: 1,
+    borderTop: false,
+    corrosionResist: false,
+    maxCount: 0,
+    reproductionRate: 0,
+    file: 'animals/Zap.png',
+    sheet: [78, 64],
+    picture: f(12, 0, 64, 64),
+    dead: { gone: true },
+    start: 'Fly',
+    actions: act([
+      // Flying every 3 ticks (PhaseCall), Check every 18 (EndCall).
+      { name: 'Fly', procedure: 'float', length: 6, delay: 3, facet: f(0, 0, 2, 2), next: 'Fly' },
+    ]),
+  },
 };
 
 export const ANIMAL_IDS = Object.keys(ANIMALS) as AnimalId[];
+/** Animals a scenario can start with (C4D_SelectAnimal): zaps only come out of zap nests. */
+export const SCENARIO_ANIMAL_IDS = ANIMAL_IDS.filter((id) => id !== 'zap');
 
 /** A dead body that isn't an item (the shark's and the monster's): its Dead action lasts this long before it starts to rot. */
 export const DEAD_DELAY = 3000;
@@ -322,8 +441,19 @@ export class Animal extends GameObject {
   target: { x: number; y: number } | null = null;
   /** Ticks before it gives up on the target. */
   targetTicks = 0;
-  /** Ticks before a shark can bite again (IntAttackDelay). */
+  /** Ticks before a shark or a snake can bite again, or a fire monster spit fire again (IntAttackDelay, IntNoAttack). */
   attackDelay = 0;
+  /** Ticks since the action started; starting the same action over doesn't reset it (GetActTime). */
+  actionTime = 0;
+  /** What a zap is after. */
+  chase: GameObject | null = null;
+  /** A bird's nest, the tree it's flying to for one, and what it does when it gets there (its Call command). */
+  nest: TreeNest | null = null;
+  then: { call: 'buildNest'; tree: Plant } | { call: 'breed' } | null = null;
+  /** A bird with a young one on the way (Bird.c4d's CreateContents(BIRD)): it goes on until it lays the egg. */
+  expecting = false;
+  /** Sitting in its nest, out of the world, brooding (Nest.c4d's Bird action). */
+  inNest: TreeNest | null = null;
   /** Its death has been dealt with: it's a body now. */
   corpse = false;
   /** Ticks since it died, for rotting. */
@@ -400,6 +530,7 @@ export class Animal extends GameObject {
   setAction(name: string, xdir?: number, ydir?: number): boolean {
     const a = this.def.actions[name];
     if (!a) return false;
+    if (a !== this.action) this.actionTime = 0;
     this.action = a;
     this.phase = a.reverse ? a.length - 1 : 0;
     this.phaseDelay = 0;
@@ -466,6 +597,7 @@ export class Animal extends GameObject {
     this.actionEnded = null;
     this.phaseStarted = false;
     if (this.attackDelay > 0) this.attackDelay--;
+    this.actionTime++;
     if (!this.alive) return this.tickDead(land);
     if (this.action.inLiquid && this.inLiquid(land)) this.setAction(this.action.inLiquid);
 
@@ -661,6 +793,7 @@ export class Animal extends GameObject {
 
   /** Does it get air (or water) to breathe here (C4Object::ExecLife)? */
   breathes(land: Landscape): boolean {
+    if (!this.def.breath) return true;
     if (this.def.breatheWater) return land.get(this.x, this.y) === Mat.Water;
     // Its head: half way up from the centre to the top of its shape (y + Shape.y / 2).
     const y = this.y - Math.trunc(this.height / 4);
