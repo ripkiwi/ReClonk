@@ -5,7 +5,8 @@ import { Mat } from '../landscape/materials';
 import { NO_CONTROL, type Clonk, type ControlState } from '../objects/clonk';
 import { ANIMALS, type Animal, type AnimalId } from '../objects/animal';
 import { contactCheck } from '../objects/physics';
-import { breakEgg, initAnimals } from './animals';
+import { breakEgg, burstZapNest, initAnimals } from './animals';
+import { FULL_CON } from '../objects/vegetation';
 import { createProfile } from './profiles';
 import { LOCAL_PLAYER, startRound } from './round';
 import { normalizeScenario, scenarioById, SCENARIOS } from './scenarios';
@@ -228,8 +229,172 @@ describe('Bird', () => {
   });
 });
 
+describe('Snake', () => {
+  it('slithers about and bites a clonk in front of it (Punch 8, every 70 ticks at most)', () => {
+    const world = lakeWorld();
+    const c = clonkAt(world, 100);
+    const s = onGround(world, 'snake', 112);
+    s.dir = -1;
+    s.comd = 0;
+    const start = c.energy;
+    for (let t = 0; t < 35 * 6; t++) {
+      s.setPosition(112, s.y);
+      s.dir = -1;
+      run(world, 1);
+    }
+    expect(c.energy).toBeLessThanOrEqual(start - 8000);
+    expect(start - c.energy).toBeLessThanOrEqual(8000 * 3);
+  });
+
+  it('gets around without getting stuck, and dies into a dead snake', () => {
+    const world = lakeWorld();
+    // No lake: like the original's, a snake in deep water doesn't come up for air.
+    for (let y = GROUND; y < LAKE.bottom; y++) for (let x = LAKE.x0; x < LAKE.x1; x++) world.land.set(x, y, Mat.Earth);
+    const s = onGround(world, 'snake', 100);
+    const xs: number[] = [];
+    for (let t = 0; t < 36 * 60; t++) {
+      run(world, 1);
+      xs.push(s.x);
+    }
+    expect(s.alive).toBe(true);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(30);
+    world.explode(s.x, s.y, 40);
+    run(world, 2);
+    expect(world.items.some((i) => i.def.id === 'deadSnake')).toBe(true);
+  });
+
+  it('picked up alive with the Collectible animals rule, it bites the clonk holding it', () => {
+    const world = lakeWorld();
+    world.rules.add('collectibleAnimals');
+    const c = clonkAt(world, 60);
+    const s = onGround(world, 'snake', 100);
+    s.comd = 0;
+    s.setPosition(c.x, s.y);
+    run(world, 2);
+    expect(c.carrying?.def.id).toBe('snake');
+    const start = c.energy;
+    run(world, 35 * 20);
+    expect(c.energy).toBeLessThan(start);
+  });
+});
+
+describe('Fire monster', () => {
+  it('spits fire that sets a tree alight, and does not burn itself', () => {
+    const world = lakeWorld();
+    const tree = world.addPlant('tree1', 60, GROUND + 8);
+    const m = onGround(world, 'fireMonster', 100);
+    m.dir = -1;
+    m.comd = 0;
+    let spat = 0;
+    for (let t = 0; t < 35 * 60 && !tree.fire; t++) {
+      if (m.action.name === 'Walk' && m.attackDelay === 0) {
+        m.dir = -1;
+        m.setPosition(100, m.y);
+        m.timer = 34;
+        world.rng.int(1);
+      }
+      run(world, 1);
+      spat = Math.max(spat, world.flames.filter((f) => f.dura).length);
+    }
+    expect(spat).toBeGreaterThan(3);
+    expect(tree.fire).not.toBeNull();
+    expect(m.fire).toBeNull();
+  });
+
+  it('does not catch fire in lava', () => {
+    const world = lakeWorld();
+    for (let y = LAKE.top; y < LAKE.bottom; y++) for (let x = LAKE.x0; x < LAKE.x1; x++) world.land.set(x, y, Mat.Lava);
+    const m = world.addAnimal('fireMonster', 430, 150);
+    run(world, 300);
+    expect(m.fire).toBeNull();
+  });
+
+  it('a fire monster egg hatches a young fire monster', () => {
+    const world = lakeWorld();
+    const egg = world.spawnItem('fireMonsterEgg', 50, GROUND - 3);
+    breakEgg(world, egg);
+    expect(world.animals.find((a) => a.def.id === 'fireMonster')?.con).toBe(40);
+  });
+});
+
+describe('Zap nest', () => {
+  it('bursts into 28 zaps when it lands, and they go for a clonk and sting it', () => {
+    const world = lakeWorld();
+    const c = clonkAt(world, 100);
+    const nest = world.spawnItem('zapNest', 140, GROUND - 60);
+    run(world, 40);
+    expect(nest.removed).toBe(true);
+    const zaps = world.animals.filter((a) => a.def.id === 'zap');
+    expect(zaps.length).toBeGreaterThan(20);
+    const start = c.energy;
+    for (let t = 0; t < 36 * 20; t++) {
+      c.setPosition(100, c.y);
+      run(world, 1);
+    }
+    expect(c.energy).toBeLessThan(start);
+  });
+
+  it('zaps die of old age, and in blasts', () => {
+    const world = lakeWorld();
+    const nest = world.spawnItem('zapNest', 140, GROUND - 30);
+    burstZapNest(world, nest);
+    const n = world.animals.length;
+    world.explode(140, GROUND - 30, 20);
+    run(world, 1);
+    expect(world.animals.length).toBeLessThan(n);
+    run(world, 18 * 160 * 4);
+    expect(world.animals.filter((a) => a.def.id === 'zap').length).toBe(0);
+  });
+});
+
+describe('Bird nests', () => {
+  it('a bird builds a nest in a tree, lays an egg in it, and a young bird hatches', () => {
+    const world = lakeWorld();
+    const tree = world.addPlant('tree1', 150, GROUND + 8, FULL_CON);
+    const bird = world.addAnimal('bird', 200, 30);
+    // A young one on the way (Reproduction found room for one more).
+    bird.expecting = true;
+    let built = false;
+    let laid = false;
+    let hatched = false;
+    for (let t = 0; t < 35 * 200 && !hatched; t++) {
+      run(world, 1);
+      const nest = world.treeNests[0];
+      if (nest && nest.con === 100) built = true;
+      if (world.items.some((i) => i.def.id === 'birdEgg' && i.onNest)) laid = true;
+      if (world.animals.some((a) => a.def.id === 'bird' && a !== bird)) hatched = true;
+    }
+    expect(built).toBe(true);
+    expect(world.treeNests[0].tree).toBe(tree);
+    expect(laid).toBe(true);
+    expect(hatched).toBe(true);
+    expect(bird.expecting).toBe(false);
+  });
+
+  it('the nest falls when its tree is felled, with the egg in it', () => {
+    const world = lakeWorld();
+    const tree = world.addPlant('tree1', 150, GROUND + 8, FULL_CON);
+    const bird = world.addAnimal('bird', 200, 30);
+    bird.expecting = true;
+    for (let t = 0; t < 35 * 100 && !world.items.some((i) => i.onNest); t++) run(world, 1);
+    const egg = world.items.find((i) => i.onNest)!;
+    expect(egg).toBeDefined();
+    world.fell(tree, 1);
+    run(world, 20);
+    expect(world.treeNests[0]?.state ?? 'decay').toBe('decay');
+    expect(egg.onNest).toBeNull();
+  });
+
+  it('an egg broken before it has brooded long enough has no bird in it', () => {
+    const world = lakeWorld();
+    const egg = world.spawnItem('birdEgg', 50, GROUND - 3);
+    breakEgg(world, egg);
+    expect(world.animals.length).toBe(0);
+  });
+});
+
 describe('Scenarios', () => {
-  it('Shark Lake has its five sharks in the lake, Lava Caves its monsters and eggs', () => {
+  it('Shark Lake has its five sharks in the lake, Lava Caves its monsters, snake, eggs and zap nests', () => {
     const p = createProfile({ profiles: [], activeId: null }, 'Kevin');
     const shark = startRound(scenarioById('shark-lake')!, p, ['Alfons'], 7);
     const sharks = shark.world.animals.filter((a) => a.def.id === 'shark');
@@ -240,6 +405,12 @@ describe('Scenarios', () => {
     // Not right next to the crew.
     for (const m of lava.world.animals) for (const c of lava.world.crewOf(LOCAL_PLAYER)) expect(Math.abs(m.x - c.x) >= 200 || Math.abs(m.y - c.y) >= 200).toBe(true);
     expect(lava.world.items.filter((i) => i.def.id === 'monsterEgg').length).toBe(4);
+    // Animal=SNKE=1;FMNS=1;MONS=3, Nest=FMEG=4;MEGG=4;ZAPN=3.
+    expect(lava.world.items.filter((i) => i.def.id === 'fireMonsterEgg').length).toBe(4);
+    expect(lava.world.items.filter((i) => i.def.id === 'zapNest').length).toBe(3);
+    expect(lava.world.animals.some((a) => a.def.id === 'snake' || a.def.id === 'fireMonster')).toBe(true);
+    const melee = startRound(scenarioById('minor-melee')!, p, ['Alfons'], 7);
+    expect(melee.world.items.filter((i) => i.def.id === 'zapNest').length).toBe(2);
   });
 
   it('a scenario saved before animals gets the original’s; animals are kept within limits', () => {

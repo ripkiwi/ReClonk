@@ -42,7 +42,8 @@ export const LIQUID = 25;
 
 export type ItemId = 'rock' | 'gold' | 'flint' | 'tflint' | 'superflint' | 'supertflint' | 'teraflint' | 'wood' | 'conkit' | 'meteor' | 'crystal' | 'flag'
   // Animals a clonk carries: alive (wipf, fish), dead, and the monster's egg.
-  | 'wipf' | 'fish' | 'deadWipf' | 'deadFish' | 'deadBird' | 'monsterEgg';
+  | 'wipf' | 'fish' | 'deadWipf' | 'deadFish' | 'deadBird' | 'monsterEgg'
+  | 'snake' | 'deadSnake' | 'fireMonsterEgg' | 'birdEgg' | 'zapNest';
 
 export interface Material {
   name: string;

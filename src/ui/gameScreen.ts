@@ -222,7 +222,12 @@ export class GameScreen {
         this.env.sounds.play('Corrode', volumeAt(e.x, e.y) * 0.6);
       } else if (e.type === 'volcano') this.env.sounds.play(Math.random() < 0.5 ? 'VolcanoCast' : pick(LAVA), volumeAt(e.x, e.y));
       else if (e.type === 'animal') {
-        const id = e.sound === 'Snuff' ? pick(['Snuff1', 'Snuff2'] as const) : e.sound === 'Growl' ? pick(['Growl1', 'Growl2', 'Growl3'] as const) : e.sound === 'Raven' ? 'Raven1' : e.sound;
+        const id =
+          e.sound === 'Snuff' ? pick(['Snuff1', 'Snuff2'] as const)
+          : e.sound === 'Growl' ? pick(['Growl1', 'Growl2', 'Growl3'] as const)
+          : e.sound === 'Snake' ? pick(['Snake1', 'Snake2'] as const)
+          : e.sound === 'Raven' ? 'Raven1'
+          : e.sound;
         this.env.sounds.play(id, volumeAt(e.x, e.y) * 0.8);
       } else if (e.type === 'itemHit') {
         const id = e.item.def.id;

@@ -15,6 +15,7 @@ import { SPELLS } from './game/magic';
 import { ELEVATOR_CASE, FLAG, ITEMS, STRUCTURES } from './objects/defs';
 import { SAIL, VEHICLES } from './objects/vehicle';
 import { ANIMALS } from './objects/animal';
+import { NEST } from './objects/nest';
 import { GRASS, PLANTS } from './objects/vegetation';
 import { CONTENT_BASE, loadAssets } from './render/assets';
 import { FIRE_PARTICLES } from './render/fireView';
@@ -95,6 +96,7 @@ async function start(): Promise<void> {
         ]),
         ...Object.values(VEHICLES).flatMap((v) => [v.graphic.file, v.burned.file]),
         ...Object.values(ANIMALS).flatMap((a) => [a.file, ...('file' in a.dead ? [a.dead.file] : [])]),
+        NEST.file,
         SAIL.file,
         FLAG.graphic.file,
         FLAG.graphic.overlay,

@@ -32,9 +32,18 @@ export const OIL_FIRE = {
 
 let nextFlameId = 1;
 
-/** A flame on burning oil (the original's FLAM): it floats on the oil, eats it, and spreads. */
+/** DuraFlame.c4d (DFLM), what a fire monster spits: it burns by itself, BurnProcess every 20 ticks, for 100 ticks or a little more. */
+export const DURA_FLAME = { interval: 20, life: 100 };
+
+/**
+ * A flame on burning oil (the original's FLAM): it floats on the oil, eats
+ * it, and spreads. Or a DuraFlame, spat by a fire monster: it flies, lands
+ * and burns where it lies for a while, setting fire to what it touches.
+ */
 export class OilFlame {
   readonly id = nextFlameId++;
+  /** A DuraFlame: it needs no oil. */
+  dura = false;
   xdir = 0;
   ydir = 0;
   /** Size in percent (Con): grows to 100 while it eats, dies away at 0. */
@@ -89,7 +98,7 @@ function addFlame(world: World, x: number, y: number): OilFlame {
 /** Is there a flame (not `self`) whose centre is in this box? (FindObject with a rectangle) */
 function flameIn(world: World, x: number, y: number, w: number, h: number, self: OilFlame | null): boolean {
   for (const f of world.flames) {
-    if (f === self || f.removed) continue;
+    if (f === self || f.removed || f.dura) continue;
     if (f.x >= x && f.x < x + w && f.y >= y && f.y < y + h) return true;
   }
   return false;
@@ -97,7 +106,7 @@ function flameIn(world: World, x: number, y: number, w: number, h: number, self:
 
 /** Is there a flame (not `self`) at this point? (FindObject with only an offset) */
 function flameAt(world: World, x: number, y: number, self: OilFlame): boolean {
-  return world.flames.some((f) => f !== self && !f.removed && f.contains(x, y));
+  return world.flames.some((f) => f !== self && !f.removed && !f.dura && f.contains(x, y));
 }
 
 /** Burn one pixel of oil away at x, y, from the top of its pool (FlameConsumeMaterial). */
@@ -118,7 +127,11 @@ export function stepFlames(world: World): void {
     if (f.removed) continue;
     move(world, f);
     if (f.removed) continue;
-    if ((world.tick - f.born) % OIL_FIRE.interval === OIL_FIRE.interval - 1) burnProcess(world, f);
+    if (f.dura) {
+      if ((world.tick - f.born) % DURA_FLAME.interval === DURA_FLAME.interval - 1) duraBurnProcess(world, f);
+      // Burning, it lights oil it lies in (ExecFire).
+      if (!f.removed && world.tick % 5 === 0 && !world.rng.int(3)) world.land.incinerate(Math.round(f.x), Math.round(f.y));
+    } else if ((world.tick - f.born) % OIL_FIRE.interval === OIL_FIRE.interval - 1) burnProcess(world, f);
     // Water puts it out (ExecFire, every 5 ticks); then it's gone.
     if (!f.removed && world.tick % 5 === 0 && MATERIALS[land.get(Math.round(f.x), Math.round(f.y))].extinguisher) {
       f.removed = true;
@@ -164,6 +177,8 @@ function move(world: World, f: OilFlame): void {
     cy = ny;
   }
   f.y = f.ydir === 0 ? cy : ty;
+  // A DuraFlame on the ground slides to a stop (vertex friction).
+  if (f.dura && f.ydir === 0 && land.isSolid(Math.round(f.x), Math.round(f.y) + vy + 1)) f.xdir = Math.abs(f.xdir) < 0.2 ? 0 : f.xdir - Math.sign(f.xdir) * 0.2;
   if (f.x < 0 || f.x >= land.width || f.y >= land.height + 20) f.removed = true;
 }
 
@@ -171,6 +186,21 @@ function shrink(f: OilFlame): void {
   f.y -= 1;
   f.con -= OIL_FIRE.grow;
   if (f.con <= 0) f.removed = true;
+}
+
+/** A fire monster spits a DuraFlame (CreateObject(DFLM), Exit with a speed): it's alight from the start (Completion: Incinerate). */
+export function spitFlame(world: World, x: number, y: number, xdir: number, ydir: number): OilFlame {
+  const f = new OilFlame(x, y, world.tick);
+  f.dura = true;
+  f.xdir = xdir;
+  f.ydir = ydir;
+  world.flames.push(f);
+  return f;
+}
+
+/** DuraFlame.c4d BurnProcess: past 100 ticks it goes out, three times in four each time. */
+function duraBurnProcess(world: World, f: OilFlame): void {
+  if (world.rng.int(4) && world.tick - f.born > DURA_FLAME.life) f.removed = true;
 }
 
 /**
