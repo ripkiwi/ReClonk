@@ -2,6 +2,7 @@
 // so use Pixi's eval-free code paths instead.
 import { BRIDGE_MENU_GRAPHICS } from './game/materialItems';
 import { MENU_GRAPHICS } from './render/classicMenu';
+import { POWER_GRAPHICS } from './render/powerView';
 import 'pixi.js/unsafe-eval';
 import './ui/menu.css';
 import { Application } from 'pixi.js';
@@ -114,6 +115,7 @@ async function start(): Promise<void> {
         ...Object.values(BRIDGE_MENU_GRAPHICS),
         ...Object.values(SPELLS).map((s) => s.icon),
         ...Object.values(MENU_GRAPHICS),
+        ...Object.values(POWER_GRAPHICS),
       ],
     ),
     loadNames(),

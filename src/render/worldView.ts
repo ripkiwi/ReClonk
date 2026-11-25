@@ -16,6 +16,7 @@ import { BALLOON_FLAG, BLIMP, SAIL, isSailing, type Vehicle } from '../objects/v
 import { chestFrame, SIEGE } from '../game/siege';
 import { colorByOwner, frame, type GameAssets } from './assets';
 import { EnvironmentView, nightRamp, sunRamp } from './environmentView';
+import { PowerView } from './powerView';
 import { FireView } from './fireView';
 import { LandscapeView } from './landscapeView';
 
@@ -186,6 +187,8 @@ export class WorldView {
   private readonly particles: Particle[] = [];
   /** Flames and smoke. */
   private readonly fire: FireView;
+  /** Power lines, pipes, working buildings and the tower guns' shots. */
+  private readonly power: PowerView;
   /** Season colours and lightning flashes. */
   private readonly tint = new ColorMatrixFilter();
   private lastTick = -1;
@@ -205,7 +208,8 @@ export class WorldView {
     this.root.addChild(this.skyBack, this.sky, this.envView.back, this.layer);
     this.landscape = new LandscapeView(world.land, assets.materials);
     this.fire = new FireView(world, assets.items);
-    this.layer.addChild(this.envView.behind, this.landscape.sprite, this.grassLayer, this.fire.back, this.plantLayer, this.nestLayer, this.structureLayer, this.envView.middle, this.vehicleLayer, this.animalLayer, this.pxs);
+    this.power = new PowerView(world, assets.items);
+    this.layer.addChild(this.envView.behind, this.landscape.sprite, this.grassLayer, this.fire.back, this.plantLayer, this.nestLayer, this.structureLayer, this.power.overlays, this.power.lines, this.envView.middle, this.vehicleLayer, this.animalLayer, this.pxs);
   }
 
   /**
@@ -275,6 +279,7 @@ export class WorldView {
     this.landscape.update();
     this.updatePlants();
     this.updateStructures();
+    this.power.update();
     this.updateItems();
     this.updateVehicles();
     this.updateAnimals();
@@ -286,6 +291,7 @@ export class WorldView {
     this.updatePxs(viewW, viewH);
     this.fire.update();
     this.layer.addChild(this.fire.front);
+    this.layer.addChild(this.power.shots);
     this.layer.addChild(this.envView.front);
     this.updateSparks();
     this.updateTint();
@@ -788,6 +794,8 @@ export class WorldView {
         // On the tower's roof (the Attached gun): turned r degrees from straight up.
         const m = def.mount;
         s.body.texture = frame(this.assets.items[m.file], 0, 0, m.size, m.size);
+        // The liquid cannon hangs from a point below its middle.
+        s.body.anchor.set(0.5, 0.5 + (m.hang ?? 0) / m.size);
         s.body.position.set(v.x, v.y);
         s.body.scale.x = 1;
         s.body.angle = v.r;
@@ -795,6 +803,7 @@ export class WorldView {
         continue;
       }
       s.body.angle = 0;
+      s.body.anchor.set(0.5);
       const cell = !v.burned ? siegeCell(v) : null;
       if (v.burned) {
         s.body.texture = frame(sheet, 0, 0, def.width, def.height);
@@ -1123,6 +1132,32 @@ export class WorldView {
       // A cannon's blast and the steam engine's chuffs (Smoke).
       if (e.type === 'siege' && e.smoke > 0) {
         for (let n = 0; n < e.smoke; n++) this.fire.puff(e.x + (Math.random() - 0.5) * 6, e.y - n * 2, 4 + Math.random() * 4, 0xa0a0a0);
+        continue;
+      }
+      // Production: smoke from chimneys, sparks off the anvil, bubbles from pumps, sawdust.
+      if (e.type === 'smoke') {
+        this.fire.puff(e.x, e.y, e.size, 0x909090);
+        continue;
+      }
+      if (e.type === 'sparks') {
+        for (let n = 4 + Math.floor(Math.random() * 6); n > 0; n--) {
+          const a = Math.random() * Math.PI * 2;
+          const sp = 0.4 + Math.random() * 1.4;
+          this.particles.push({
+            x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.6, size: 0.6 + Math.random() * 0.4,
+            color: Math.random() < 0.5 ? 0xffe070 : 0xffa030, alpha: 1, life: 10 + Math.floor(Math.random() * 10), age: 0, gravity: 0.08,
+          });
+        }
+        continue;
+      }
+      if (e.type === 'bubble') {
+        this.particles.push({ x: e.x, y: e.y, vx: (Math.random() - 0.5) * 0.2, vy: -0.4, size: 0.8, color: 0xc8e0ff, alpha: 0.8, life: 20, age: 0 });
+        continue;
+      }
+      if (e.type === 'dust') {
+        for (let n = 2; n > 0; n--) {
+          this.particles.push({ x: e.x, y: e.y, vx: (Math.random() - 0.5) * 0.8, vy: -Math.random() * 0.6, size: 0.7, color: 0xc8a060, alpha: 0.8, life: 18, age: 0, gravity: 0.03 });
+        }
         continue;
       }
       if (e.type === 'poof') {

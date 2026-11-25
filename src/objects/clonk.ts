@@ -64,7 +64,7 @@ export type CrewCommand =
 
 /** The menus of a building a clonk is in. */
 /** The menus inside a building; 'fire' is a cannon tower's (what its gun can shoot). */
-export type BuildingMenu = 'buy' | 'sell' | 'get' | 'fire';
+export type BuildingMenu = 'buy' | 'sell' | 'get' | 'fire' | 'produce';
 
 export const NO_CONTROL: ControlState = {
   left: false, right: false, up: false, down: false,
@@ -188,6 +188,14 @@ export class Clonk extends GameObject {
   vehicle: Vehicle | null = null;
   /** The tree it's chopping (Chop). */
   chopping: Plant | null = null;
+  /** A felled tree it drags along (the Push action on a tree): to a sawmill. */
+  dragging: Plant | null = null;
+  /** Where the dragged tree is from the clonk (its centre and bottom). */
+  dragFrom: { x: number; y: number } | null = null;
+  /** What it makes inside a workshop or chemical plant (the Build command on the product), or null. */
+  producing: string | null = null;
+  /** Selected line of the menu of what an anvil it holds on to can forge, or null when it's closed. */
+  forgeMenu: number | null = null;
   /** Standing at a tree: a dig may be the first press of a double dig that chops it. */
   atTree = false;
   controlStyle: ControlStyle = 'jumpAndRun';
@@ -358,6 +366,9 @@ export class Clonk extends GameObject {
       if (a.procedure !== 'push') {
         this.vehicle = null;
         this.loadMenu = null;
+        this.dragging = null;
+        this.dragFrom = null;
+        this.forgeMenu = null;
       }
       if (a.procedure !== 'chop') this.chopping = null;
       if (a.procedure !== 'bridge') this.bridge = null;
@@ -539,8 +550,8 @@ export class Clonk extends GameObject {
     this.goTo = null;
   }
 
-  /** Hold on to an elevator case or a guard tower (ObjectActionPush). */
-  startPush(s: Structure): void {
+  /** Hold on to an elevator case, a guard tower or another building, or (with null) a felled tree (ObjectActionPush). */
+  startPush(s: Structure | null): void {
     this.setAction('Push', 0, 0);
     this.workOn = s;
     this.vehicle = null;
@@ -845,6 +856,15 @@ export class Clonk extends GameObject {
         break;
       case 'push': {
         const v = this.vehicle;
+        if (this.dragging) {
+          // Dragging a felled tree along: walk with it, slowly.
+          const want = cd.x * WALK_SPEED * 0.5;
+          this.xdir = towards(this.xdir, want, WALK_ACCEL);
+          this.ydir = 0;
+          if (cd.x) this.setDir(cd.x as -1 | 1);
+          advance = Math.floor(Math.abs(this.xdir) * 10);
+          break;
+        }
         if (!v) {
           // Holding still; the case it holds on to carries it along. Standing
           // at the case's edge, it walks in towards the middle first (Case.c4d

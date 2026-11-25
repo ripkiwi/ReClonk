@@ -121,6 +121,20 @@ export const SOUND_FILES = [
   'Splash1',
   'CannonRotation',
   'CannonStop',
+  // Power and production.
+  'Sawmill',
+  'PowerPlant',
+  'GateOpen',
+  'GateClose',
+  'Gear',
+  'Splash2',
+  'FlameThrower',
+  'LightningCannon',
+  'LightningLoad',
+  'SignalClick',
+  'AnvilWork1',
+  'AnvilWork2',
+  'AnvilWork3',
 ] as const;
 export type SoundId = (typeof SOUND_FILES)[number];
 

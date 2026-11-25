@@ -12,7 +12,7 @@ import type { Rng } from '../core/rng';
 import { placeAnimal } from './animals';
 import type { World } from './world';
 
-export type GoalId = 'melee' | 'goldmine' | 'oremine' | 'wealth' | 'value' | 'wipfhunt' | 'monsterkill' | 'race' | 'engineering';
+export type GoalId = 'melee' | 'goldmine' | 'oremine' | 'wealth' | 'value' | 'wipfhunt' | 'monsterkill' | 'race' | 'engineering' | 'oilProduction';
 
 /** How many of each goal a scenario has (Scenario.txt Goals=GLDM=1;VALG=16). More of some goals means more to do. */
 export type Goals = Partial<Record<GoalId, number>>;
@@ -98,14 +98,19 @@ export const GOALS: Record<GoalId, GoalDef> = {
     icon: 'goals/Engineering.png',
     max: 1,
   },
+  oilProduction: {
+    id: 'oilProduction',
+    name: 'Oil Production',
+    description: 'All oil needs to be extracted and all oil barrels must be sold.',
+    icon: 'goals/Oilproduction.png',
+    max: 1,
+  },
 };
 
 export const GOAL_IDS = Object.keys(GOALS) as GoalId[];
 
 /** The original's other goals, shown greyed in the scenario settings with what they wait for. */
-export const LATER_GOALS: readonly { name: string; icon: string; needs: string }[] = [
-  { name: 'Oil Production', icon: 'goals/Oilproduction.png', needs: 'pumps and oil barrels' },
-];
+export const LATER_GOALS: readonly { name: string; icon: string; needs: string }[] = [];
 
 /** The Goal control checks every 35 ticks (the original's timer is 250, which feels slow on a small map). */
 const INTERVAL = 35;
@@ -134,6 +139,8 @@ export class GoalState {
   goldLeft = -1;
   /** Solid ore left in the landscape, or -1 before it's first counted (Oremine.c4d GetMaterialCount). */
   oreLeft = -1;
+  /** Oil left in the landscape (Oilproduction.c4d GetMaterialCount), or -1 before it's first counted. */
+  oilLeft = -1;
   started = false;
 }
 
@@ -226,6 +233,11 @@ function goldItems(world: World, id: 'gold' | 'ore' = 'gold'): { total: number; 
   return { total, outside };
 }
 
+/** Oil barrels anywhere (ObjectCount(OBRL)): lying about, carried or kept. */
+function oilBarrels(world: World): number {
+  return world.items.filter((i) => !i.removed && i.def.id === 'oilBarrel').length;
+}
+
 /** Live wipfs anywhere: running about, or carried (FindObject(WIPF)). */
 function wipfsLeft(world: World): number {
   return world.animals.filter((a) => a.def.id === 'wipf' && a.alive && !a.removed).length + world.items.filter((i) => !i.removed && i.def.id === 'wipf').length;
@@ -259,6 +271,9 @@ export function goalFulfilled(world: World, id: GoalId, player?: number): boolea
     }
     case 'goldmine':
       return st.goldLeft >= 0 && st.goldLeft < GOLD_LEFT && goldItems(world).total === 0;
+    case 'oilProduction':
+      // Oilproduction.c4d IsFulfilled: less than 100 pixels of oil left, and no oil barrel anywhere.
+      return st.oilLeft >= 0 && st.oilLeft < 100 && oilBarrels(world) === 0;
     case 'oremine':
       return st.oreLeft >= 0 && st.oreLeft < GOLD_LEFT && goldItems(world, 'ore').total === 0;
     case 'wealth': {
@@ -298,6 +313,12 @@ export function goalStatus(world: World, id: GoalId, player: number): string {
       const g = goldItems(world);
       const solid = Math.max(0, Math.floor((st.goldLeft - 50) / 100));
       return `You still have to mine ${solid} units of solid gold and collect ${g.total} gold chunks, ${g.outside} of which are outside.`;
+    }
+    case 'oilProduction': {
+      if (done) return 'All oil has been extracted and sold!';
+      const b = oilBarrels(world);
+      if (st.oilLeft < 0) return `You still have to extract an unknown amount of oil. ${b} barrels are currently filled and have to be sold.`;
+      return `You still have to extract ${Math.trunc((st.oilLeft + 100) / 200)} barrels of oil. ${b} barrels are currently filled and have to be sold.`;
     }
     case 'oremine': {
       if (done) return 'All ore has been mined.';
@@ -352,6 +373,8 @@ export function goalProgress(world: World, id: GoalId, player: number): string {
       return `${racePercent(world, player)}%`;
     case 'goldmine':
       return world.goalState.goldLeft < 0 ? '' : `${Math.max(0, Math.floor((world.goalState.goldLeft - 50) / 100)) + goldItems(world).total}`;
+    case 'oilProduction':
+      return world.goalState.oilLeft < 0 ? '' : `${Math.trunc((world.goalState.oilLeft + 100) / 200) + oilBarrels(world)}`;
     case 'oremine':
       return world.goalState.oreLeft < 0 ? '' : `${Math.max(0, Math.floor((world.goalState.oreLeft - 50) / 100)) + goldItems(world, 'ore').total}`;
     case 'wipfhunt':
@@ -391,6 +414,7 @@ export function stepGoals(world: World): void {
   if (world.tick % INTERVAL) return;
   if (world.goals.goldmine) st.goldLeft = countGold(world);
   if (world.goals.oremine) st.oreLeft = countMat(world, Mat.Ore);
+  if (world.goals.oilProduction) st.oilLeft = countMat(world, Mat.Oil);
   if (world.goals.wipfhunt) {
     for (const it of world.items) {
       if (it.removed || it.def.id !== 'deadWipf' || st.countedWipfs.has(it)) continue;

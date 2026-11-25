@@ -1,6 +1,7 @@
 import { Container, Sprite, Text, type TextStyleOptions } from 'pixi.js';
 import { TICKS_PER_SECOND } from '../core/loop';
 import { SPELLS, spellList } from '../game/magic';
+import { componentText, isFactory, productName, productsOf } from '../game/production';
 import { groupItems, isCrewId, isVehicleId, shopEntry, type ShopId, type World } from '../game/world';
 import type { Clonk, ControlStyle } from '../objects/clonk';
 import { keyName } from '../input/bindings';
@@ -102,6 +103,7 @@ export class BaseHud {
     if (c.spellMenu !== null) return this.spellMenu(c);
     if (c.buildMenu !== null) return this.buildMenu(c);
     if (c.bridgeMenu !== null) return this.bridgeMenu(c);
+    if (c.action.procedure === 'push' && c.workOn?.def.id === 'anvil') return this.anvilMenu(c, c.workOn);
     const lorry = c.action.procedure === 'push' && c.vehicle?.def.hold ? c.vehicle : null;
     if (lorry) return this.lorryMenu(c, lorry);
     return null;
@@ -159,6 +161,7 @@ export class BaseHud {
     const own = this.world.inOwnBase(c);
     const list = groupItems(s.contents);
     const k = this.keys;
+    const factory = isFactory(s) && s.complete;
     const keys: MenuKey[] = own
       ? [
           { command: 'up', key: k.up, action: 'buy' },
@@ -172,10 +175,18 @@ export class BaseHud {
           { command: 'dig', key: k.dig, action: 'get' },
           { command: 'down', key: k.down, action: 'exit' },
         ];
+    if (factory) {
+      // Left or right: the menu of what it makes, in place of "get".
+      const i = keys.findIndex((x) => x.command === 'left');
+      const produce: MenuKey = { command: 'left', key: k.left, action: 'produce' };
+      if (i >= 0) keys[i] = produce;
+      else keys.splice(keys.length - 1, 0, produce);
+    }
     const name = s.def.name;
+    const making = c.producing ? ` - making ${productName(c.producing)}` : '';
     return {
       symbol: this.structurePicture(s),
-      caption: own ? `${name} (your base)` : s.contents.length ? name : `${name} is empty.`,
+      caption: (own ? `${name} (your base)` : s.contents.length ? name : `${name} is empty.`) + making,
       // A count only for more than one, as under the clonk's own things (DrawIDList).
       items: list.map((e) => ({ picture: () => this.picture(e.id), count: e.count > 1 ? e.count : undefined, caption: ITEMS[e.id].name })),
       selected: null,
@@ -206,8 +217,9 @@ export class BaseHud {
 
   /** The buy, sell or get menu of the building the clonk is in. */
   private buildingMenu(c: Clonk, s: Structure | Vehicle): MenuView {
+    if (c.menuKind === 'produce') return this.produceMenu(c, s as Structure);
     const list = this.world.menuList(c);
-    const kind = c.menuKind;
+    const kind = c.menuKind as 'buy' | 'sell' | 'get' | 'fire';
     const verb = kind === 'buy' ? 'Buy' : kind === 'sell' ? 'Sell' : kind === 'fire' ? 'Shoot' : 'Get';
     const items: MenuItemView[] = list.map((e) => ({
       picture: () => this.picture(e.id),
@@ -226,6 +238,63 @@ export class BaseHud {
       keys: this.okCancel,
       color: this.color,
       key: `${kind}:${c.menu}:${list.map((e) => `${e.id}=${e.count}`).join(',')}`,
+    };
+  }
+
+  /** What a workshop or chemical plant can make (Workshop.c4d SelectProduction: "Construction: Catapult"). */
+  private produceMenu(c: Clonk, s: Structure): MenuView {
+    const list = productsOf(this.world, s.def.id);
+    return {
+      symbol: this.structurePicture(s),
+      caption: list.length ? 'Production' : 'Nothing to make here.',
+      items: list.map((p) => {
+        const job = s.products.find((o) => o.id === p.id);
+        const done = job ? ` (${Math.floor(job.con / 1000)}% done)` : '';
+        return {
+          picture: () => this.picture(p.id as ShopId),
+          caption: `Construction: ${productName(p.id)}${done}`,
+          description: `Needs ${componentText(p.components)}. ${DESCRIPTIONS[p.id] ?? ''}`.trim(),
+        };
+      }),
+      selected: list.length ? Math.min(c.menu ?? 0, list.length - 1) : null,
+      keys: this.okCancel,
+      color: this.color,
+      key: `produce:${c.menu}:${s.products.map((o) => `${o.id}=${Math.floor(o.con / 1000)}`).join(',')}`,
+    };
+  }
+
+  /** Holding on to an anvil: what's on it, or the menu of what can be forged (Anvil.c4d ProductionMenu). */
+  private anvilMenu(c: Clonk, s: Structure): MenuView {
+    const k = this.keys;
+    if (c.forgeMenu === null) {
+      const list = groupItems(s.contents);
+      return {
+        symbol: this.structurePicture(s),
+        caption: s.contents.length ? 'Anvil' : 'The anvil is empty.',
+        items: list.map((e) => ({ picture: () => this.picture(e.id), count: e.count > 1 ? e.count : undefined, caption: ITEMS[e.id].name })),
+        selected: null,
+        keys: [
+          { command: 'throw', key: k.throw, action: 'put' },
+          { command: 'dig', key: k.dig, action: 'produce' },
+          { command: 'up', key: k.up, action: 'get' },
+        ],
+        color: this.color,
+        key: `anvil:${list.map((e) => `${e.id}=${e.count}`).join(',')}`,
+      };
+    }
+    const list = productsOf(this.world, 'anvil');
+    return {
+      symbol: this.structurePicture(s),
+      caption: 'Forge',
+      items: list.map((p) => ({
+        picture: () => this.picture(p.id as ShopId),
+        caption: `Forge ${productName(p.id)}`,
+        description: `Needs ${componentText(p.components)}. ${DESCRIPTIONS[p.id] ?? ''}`.trim(),
+      })),
+      selected: list.length ? Math.min(c.forgeMenu, list.length - 1) : null,
+      keys: this.okCancel,
+      color: this.color,
+      key: `forge:${c.forgeMenu}`,
     };
   }
 

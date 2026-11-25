@@ -288,8 +288,8 @@ export class Plant {
 
   constructor(
     readonly def: PlantDef,
-    /** Centre x. */
-    readonly x: number,
+    /** Centre x. A felled tree being dragged moves along. */
+    public x: number,
     /** Bottom edge of the shape: it stays put as the plant grows (StretchGrowth). Seaweed sinks down when its ground goes. */
     public bottom: number,
     con: number,

@@ -14,6 +14,7 @@ import type { Item } from '../objects/item';
 import { contactCheck, physical, SWIM_ACCEL, WALK_ACCEL } from '../objects/physics';
 import { STOP, Vehicle, type Dir } from '../objects/vehicle';
 import { contactIncinerate, incinerate } from './fire';
+import { checkSignal, engineSteered, signalDelay } from './signals';
 import type { World } from './world';
 
 /** Sounds the new vehicles make (Sound.c4g and their own folders). */
@@ -453,6 +454,7 @@ export function decouple(world: World, e: Vehicle): void {
 function setEngine(world: World, e: Vehicle, x: -1 | 0 | 1): void {
   if (e.comDir.x !== x) sound(world, 'Click', e.x, e.y);
   e.comDir = { x, y: 0 };
+  engineSteered(world, e, x);
 }
 
 /** Its walking speed (AdjustTrainSpeed): slower while a clonk holds the engine or its wagon. */
@@ -504,6 +506,9 @@ function engineScript(world: World, v: Vehicle): void {
   const before = Math.floor(v.phase);
   v.phase = (v.phase + Math.min(1, Math.abs(v.xdir) * 10 / 20)) % 10;
   if (v.pulling && Math.floor(v.phase) < before) sound(world, 'Chuff', v.x - 5 * -v.dir, v.y - 14, 1);
+  // Railway signals (PhaseCall=CheckSignal, TimerCall=SignalDelay).
+  if (Math.floor(v.phase) !== before && v.comDir.x) checkSignal(world, v);
+  signalDelay(world, v);
 }
 
 /** Wagon, from inside or holding on: steer the engine pulling it (ControlLeft, ControlRight...). */

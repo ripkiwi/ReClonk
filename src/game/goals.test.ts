@@ -46,7 +46,7 @@ const idle: Brain = { control: () => ({ ...NO_CONTROL }) };
 
 describe('Goals', () => {
   it('has the original goals, each with its picture', () => {
-    expect(GOAL_IDS).toEqual(['melee', 'goldmine', 'oremine', 'wealth', 'value', 'wipfhunt', 'monsterkill', 'race', 'engineering']);
+    expect(GOAL_IDS).toEqual(['melee', 'goldmine', 'oremine', 'wealth', 'value', 'wipfhunt', 'monsterkill', 'race', 'engineering', 'oilProduction']);
     for (const id of GOAL_IDS) expect(GOALS[id].icon).toMatch(/^goals\/\w+\.png$/);
   });
 
@@ -71,6 +71,20 @@ describe('Goals', () => {
     expect(e).toMatchObject({ winner: -1, fulfilled: true });
     expect(world.fulfilled).toBe(true);
     expect(goalStatus(world, 'goldmine', 0)).toBe('All gold has been mined.');
+  });
+
+  it('Oil Production: won once the oil is pumped out and every oil barrel is sold', () => {
+    const world = flatWorld({ oilProduction: 1 });
+    world.addClonk(100, GROUND - 10, 0);
+    // An underground pool of 400 pixels: two barrels' worth.
+    for (let x = 0; x < 40; x++) for (let y = 150; y < 160; y++) world.land.set(x, y, Mat.Oil);
+    world.spawnItem('oilBarrel', 200, GROUND - 5);
+    expect(decided(world, 80)).toBeNull();
+    expect(goalStatus(world, 'oilProduction', 0)).toBe('You still have to extract 2 barrels of oil. 1 barrels are currently filled and have to be sold.');
+    for (let x = 0; x < 40; x++) for (let y = 150; y < 160; y++) world.land.set(x, y, Mat.Earth);
+    expect(decided(world, 80)).toBeNull();
+    world.items[0].removed = true;
+    expect(decided(world, 80)).toMatchObject({ winner: -1, fulfilled: true });
   });
 
   it('Ore Mining: won once the ore veins are gone and every chunk of ore is sold', () => {
