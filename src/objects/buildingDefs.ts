@@ -417,6 +417,22 @@ export const MORE_STRUCTURES: Record<string, StructureDef> = {
     file: 'Anvil',
     picture: { x: 0, y: 22, w: 35, h: 35 },
   }),
+  // CannonTower.c4d (CTW0): push a combat, artillery or anti-air cannon in and it's mounted on top.
+  cannonTower: building('cannonTower', {
+    name: 'Cannon Tower',
+    size: [42, 44, -21, -22],
+    mass: 2000,
+    value: 100,
+    components: { wood: 4, metal: 5, rock: 3 },
+    entrance: [-10, 3, 20, 20],
+    vertex: [0, -19],
+    file: 'CannonTower',
+    picture: { x: 100, y: 0, w: 64, h: 64 },
+    door: door(44, 10, 13, [15, 31]),
+    basement: 42,
+    blastIncinerate: 100,
+    burned: { blastIncinerate: 10, contactIncinerate: 3 },
+  }),
   // Signal.c4d: a railway signal (for trains, later).
   signal: building('signal', {
     name: 'Signal',
@@ -456,11 +472,13 @@ export const BUILDING_DESCRIPTIONS: Record<string, string> = {
   derrick: 'Pumps liquids from underground reservoirs. (comes later)',
   anvil: 'The anvil produces weapons, construction kits, and numerous other items. (comes later)',
   signal: 'Controls trains. (comes later)',
+  cannonTower: 'Fortified tower with a mounted cannon. Push a combat, artillery or anti-air cannon in to mount it.',
 };
 
 /** Sizes of the building sprite sheets, for pictures cut out of them in the scenario settings. */
 export const STRUCTURE_SHEETS: Record<string, [number, number]> = {
   'structures/Anvil.png': [192, 57],
+  'structures/CannonTower.png': [164, 64],
   'structures/Castle1.png': [160, 60],
   'structures/Castle2.png': [200, 121],
   'structures/Castle3.png': [220, 166],

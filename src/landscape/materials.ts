@@ -59,7 +59,11 @@ export type ItemId = 'rock' | 'gold' | 'flint' | 'tflint' | 'superflint' | 'supe
   | 'wipf' | 'fish' | 'deadWipf' | 'deadFish' | 'deadBird' | 'monsterEgg'
   | 'snake' | 'deadSnake' | 'fireMonsterEgg' | 'birdEgg' | 'zapNest'
   // Vegetation that is an object: shells, bones and skulls.
-  | 'shell' | 'bone' | 'skull';
+  | 'shell' | 'bone' | 'skull'
+  // Ammunition (Items.c4d/Weapons.c4d): arrows and their packs, torpedoes, firebombs.
+  | 'arrow' | 'fireArrow' | 'explosiveArrow' | 'arrows' | 'fireArrows' | 'explosiveArrows' | 'torpedo' | 'firebomb'
+  // Barrels (Items.c4d/Containers.c4d), empty and full.
+  | 'barrel' | 'waterBarrel' | 'oilBarrel' | 'acidBarrel' | 'lavaBarrel';
 
 export interface Material {
   name: string;

@@ -4,6 +4,7 @@
 // Earth.c4d, Concrete.c4d, Ice.c4d, Snowball.c4d), Gunpowder.c4d and the
 // engine's C4Object::DigOutMaterialCast (Clonk Rage, see licenses/).
 
+import { oilBarrelBlown } from './barrels';
 import { MATERIALS, Mat } from '../landscape/materials';
 import { Clonk, type ControlState } from '../objects/clonk';
 import type { Item } from '../objects/item';
@@ -203,6 +204,8 @@ export function stepMaterialItems(world: World): void {
       }
       if (item.damage <= 0 || item.container) continue;
       removeItem(item);
+      // An oil barrel's empty barrel flies off (OilBarrel Damaged).
+      if (def.barrel) oilBarrelBlown(world, item);
       world.explode(item.x, item.y, def.explodeOnDamage, culprit(world, item));
     }
   }

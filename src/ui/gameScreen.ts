@@ -239,6 +239,8 @@ export class GameScreen {
           : e.sound === 'Raven' ? 'Raven1'
           : e.sound;
         this.env.sounds.play(id, volumeAt(e.x, e.y) * 0.8);
+      } else if (e.type === 'siege') {
+        this.env.sounds.play(e.sound, volumeAt(e.x, e.y));
       } else if (e.type === 'environment') {
         // Birds, cicadas and the owl are heard everywhere (global sounds); rocks where they are.
         if (e.sound === 'BirdSong') this.env.sounds.play(pick(BIRD_SONGS), 0.5);

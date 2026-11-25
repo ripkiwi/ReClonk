@@ -98,7 +98,7 @@ async function start(): Promise<void> {
           ...(s.gates ?? []).map((g) => g.file),
           ...(s.elevator ? [ELEVATOR_CASE.file] : []),
         ]),
-        ...Object.values(VEHICLES).flatMap((v) => [v.graphic.file, v.burned.file]),
+        ...Object.values(VEHICLES).flatMap((v) => [v.graphic.file, v.burned.file, ...(v.mount ? [v.mount.file] : [])]),
         ...Object.values(ANIMALS).flatMap((a) => [a.file, ...('file' in a.dead ? [a.dead.file] : [])]),
         NEST.file,
         SAIL.file,

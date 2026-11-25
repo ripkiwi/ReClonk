@@ -11,6 +11,7 @@ import { CLONK } from '../objects/defs';
 import { CNAT, contactCheck, FLOAT_ACCEL, physical, round } from '../objects/physics';
 import { BLIMP, STOP, type Dir, type Vehicle, type VehicleAction } from '../objects/vehicle';
 import { menuMove } from './menus';
+import { accepts, anchored, isSwimming, pushedByClonk, siegeControl, siegeScript, SIEGE, subSwim } from './siege';
 import type { World } from './world';
 
 /** Float friction on xdir in liquids (C4Movement FloatFriction). */
@@ -32,7 +33,8 @@ export function pushersOf(world: World, v: Vehicle): Clonk[] {
 
 /** The vehicle a clonk standing here could hold on to (ObjectComDownDouble finds it at the clonk's position). */
 export function vehicleAt(world: World, c: Clonk): Vehicle | null {
-  for (const v of world.vehicles) if (!v.removed && !v.burned && !v.contained && v.inside(c.x, c.y)) return v;
+  // Not in the original: low ones like the tower cannons, below the clonk's middle, can be grabbed at its legs too.
+  for (const v of world.vehicles) if (!v.removed && !v.burned && !v.contained && (v.inside(c.x, c.y) || v.inside(c.x, c.y + 6))) return v;
   return null;
 }
 
@@ -59,7 +61,7 @@ export function loadList(v: Vehicle): { id: ItemId; count: number }[] {
  * full (the Lorry script's RejectCollect); otherwise it goes in with a clonk.
  */
 export function putIn(world: World, v: Vehicle, it: Item): boolean {
-  if (v.full) return false;
+  if (!accepts(v, it)) return false;
   it.container = v;
   it.xdir = it.ydir = it.rdir = 0;
   it.setPosition(v.x, v.y);
@@ -82,7 +84,8 @@ export function takeOut(v: Vehicle, it: Item): void {
  */
 function collect(world: World, v: Vehicle): void {
   const box = v.def.collection;
-  if (!box || world.tick % 3 !== 0) return;
+  // The submarine only takes things in with its grapple (see siege.ts).
+  if (!box || v.def.id === 'sub' || world.tick % 3 !== 0) return;
   const x0 = v.x + box.x;
   const y0 = v.y + box.y;
   for (const it of world.items) {
@@ -214,10 +217,16 @@ export function stepVehicle(world: World, v: Vehicle): void {
   const y0 = v.y;
   v.mask?.remove(land);
 
-  if (!v.burned) script(world, v, pushers);
-  if (!v.burned && FLOATING.has(v.action)) doFloat(v);
+  if (!v.burned) {
+    script(world, v, pushers);
+    siegeScript(world, v, pushers);
+  }
+  const stuck = anchored(world, v);
+  if (stuck) v.xdir = v.ydir = 0;
+  else if (isSwimming(v)) subSwim(v);
+  else if (!v.burned && FLOATING.has(v.action)) doFloat(v);
   else doGravity(world, v);
-  if (v.grab === 1 && !v.burned) {
+  if (v.grab === 1 && !v.burned && !stuck && pushedByClonk(world, v)) {
     const p = pushers[0];
     if (p) push(v, p.comDir.x * PUSH_SPEED);
   }
@@ -229,7 +238,7 @@ export function stepVehicle(world: World, v: Vehicle): void {
     v.ydir = Math.abs(v.ydir) <= FLOAT_ACCEL ? 0 : v.ydir - Math.sign(v.ydir) * FLOAT_ACCEL;
     if (v.ydir === 0) v.clearY = false;
   }
-  v.doMovement(land);
+  if (!stuck) v.doMovement(land);
   v.actTime++;
 
   // Entering a liquid switches to the InLiquidAction.
@@ -280,6 +289,14 @@ function carryTo(world: World, o: Clonk | Item, x: number, y: number): void {
 // ------------------------------------------------------------------ scripts
 
 function script(world: World, v: Vehicle, pushers: Clonk[]): void {
+  if (v.action === 'DropOff') {
+    // Hit by an arrow: it falls, then floats again (the DropOff action's NextAction).
+    if (v.actTime >= (SIEGE.dropOff[v.def.id] ?? 50)) {
+      v.setAction(v.def.id === 'blimp' ? 'FloatIdle' : 'Float');
+      v.comDir = { x: 0, y: 1 };
+    }
+    return;
+  }
   switch (v.def.id) {
     case 'boat':
       return boatScript(world, v, pushers);
@@ -530,10 +547,11 @@ export function vehicleControl(world: World, c: Clonk, ctl: ControlState, throwI
     world.events.push({ type: 'grab', x: c.x, y: c.y, tick: world.tick });
     return c.letGo();
   }
+  if (siegeControl(world, c, v, ctl, () => putOrGet(world, c, v))) return;
   if (ctl.pressedThrow) {
     // The lorry (GrabPutGet): throw puts in what the clonk carries, or with
     // empty hands opens the menu of what's in it (ObjectComPutTake).
-    if (v.def.collection) return putOrGet(world, c, v);
+    if (v.def.hold) return putOrGet(world, c, v);
     c.letGo();
     return throwIt();
   }
@@ -548,6 +566,8 @@ export function vehicleControl(world: World, c: Clonk, ctl: ControlState, throwI
     } else c.comDir = { x: ctl.left ? -1 : ctl.right ? 1 : 0, y: 0 };
     return;
   }
+  // Falling with its gas gone: nothing to steer.
+  if (v.action === 'DropOff') return;
   const up = ctl.pressedUp;
   const doubleUp = up && world.tick - v.lastUp <= DOUBLE_TICKS;
   if (up) v.lastUp = world.tick;
@@ -617,7 +637,7 @@ function putOrGet(world: World, c: Clonk, v: Vehicle): void {
     else world.say(c.owner, `The ${v.def.name.toLowerCase()} is empty`);
     return;
   }
-  if (v.full) return world.say(c.owner, `${v.def.name} is full!`);
+  if (!accepts(v, item)) return world.say(c.owner, v.full ? `${v.def.name} is full!` : `The ${v.def.name.toLowerCase()} doesn't take that`);
   c.contents.splice(c.contents.indexOf(item), 1);
   putIn(world, v, item);
 }

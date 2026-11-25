@@ -74,7 +74,7 @@ export const NEST_IDS: NestId[] = ['monsterEgg', 'fireMonsterEgg', 'zapNest', 'b
  */
 export const DEFAULT_BASE: BaseSettings = {
   wealth: 50,
-  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, loam: 6, metal: 5, sulphur: 3, conkit: 5, lorry: 2, boat: 2, balloon: 1, blimp: 1, crystal: 5, clonk: 3, sorcerer: 1 },
+  stock: { flint: 5, tflint: 5, superflint: 1, wood: 4, loam: 6, metal: 5, sulphur: 3, conkit: 5, lorry: 2, catapult: 1, boat: 2, balloon: 1, blimp: 1, crystal: 5, clonk: 3, sorcerer: 1 },
 };
 
 /** The trees of the original Gold Mine and Minor Melee (Vegetation=TRE1=1;TRE2=2;TRE3=1;TRE4=1, VegetationLevel=100). */
@@ -364,11 +364,14 @@ export const LIMITS = {
 export const ITEM_IDS: ItemId[] = [
   'flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'gunpowder', 'rock', 'gold', 'wood', 'crystal',
   'loam', 'metal', 'coal', 'ore', 'sulphur', 'concrete', 'liquidGranite', 'shell', 'bone', 'skull',
+  'arrows', 'fireArrows', 'explosiveArrows', 'firebomb', 'torpedo', 'barrel', 'waterBarrel', 'oilBarrel', 'acidBarrel', 'lavaBarrel',
 ];
 /** What a home base can sell, in the settings' and the shop's order. */
 export const SHOP_IDS: ShopId[] = [
   'flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'gunpowder', 'rock', 'wood', 'loam', 'metal', 'coal', 'ore', 'sulphur', 'concrete', 'liquidGranite',
-  'conkit', 'lorry', 'boat', 'balloon', 'blimp', 'flag', 'crystal', 'clonk', 'sorcerer',
+  'arrows', 'fireArrows', 'explosiveArrows', 'firebomb', 'torpedo', 'barrel', 'waterBarrel', 'oilBarrel', 'acidBarrel', 'lavaBarrel',
+  'conkit', 'lorry', 'boat', 'balloon', 'blimp', 'catapult', 'cannon', 'crossbow', 'engine', 'wagon', 'sub', 'chest', 'bridge',
+  'towerCannon', 'artillery', 'antiAir', 'flag', 'crystal', 'clonk', 'sorcerer',
 ];
 
 function clamp(v: unknown, lim: { min: number; max: number }, fallback: number): number {

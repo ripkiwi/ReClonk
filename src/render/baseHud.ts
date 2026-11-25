@@ -9,7 +9,7 @@ import { CLONK, CLONK_KINDS, ITEMS, MAGIC_UNIT, STRUCTURES } from '../objects/de
 import { DESCRIPTIONS } from '../objects/descriptions';
 import { BRIDGE_MENU, BRIDGE_MENU_GRAPHICS } from '../game/materialItems';
 import type { Structure } from '../objects/structure';
-import { VEHICLES, type Vehicle } from '../objects/vehicle';
+import { Vehicle, VEHICLES } from '../objects/vehicle';
 import { frame, type GameAssets } from './assets';
 import { ClassicMenu, fitInto, menuGraphics, sheetPicture, SYMBOL, tradeSymbol, type MenuGraphics, type MenuItemView, type MenuKey, type MenuView } from './classicMenu';
 
@@ -97,11 +97,12 @@ export class BaseHud {
 
   /** What to show for the clonk right now, or null for nothing. */
   private view(c: Clonk): MenuView | null {
+    if (c.contained instanceof Vehicle) return c.menu !== null ? this.buildingMenu(c, c.contained) : this.ridingContents(c, c.contained);
     if (c.contained) return c.menu !== null ? this.buildingMenu(c, c.contained) : this.buildingContents(c, c.contained);
     if (c.spellMenu !== null) return this.spellMenu(c);
     if (c.buildMenu !== null) return this.buildMenu(c);
     if (c.bridgeMenu !== null) return this.bridgeMenu(c);
-    const lorry = c.action.procedure === 'push' && c.vehicle?.def.collection ? c.vehicle : null;
+    const lorry = c.action.procedure === 'push' && c.vehicle?.def.hold ? c.vehicle : null;
     if (lorry) return this.lorryMenu(c, lorry);
     return null;
   }
@@ -114,7 +115,8 @@ export class BaseHud {
   }
 
   /** A building's picture (DefCore Picture). */
-  private structurePicture(s: Structure): () => Container {
+  private structurePicture(s: Structure | Vehicle): () => Container {
+    if (s instanceof Vehicle) return () => sheetPicture(this.assets.items[s.def.graphic.file], s.def.picture, SYMBOL);
     const g = s.def.graphic;
     return () => sheetPicture(this.assets.items[g.file], g.picture, SYMBOL);
   }
@@ -183,24 +185,44 @@ export class BaseHud {
     };
   }
 
+  /** Inside a wagon or a submarine: what's in it, and the keys. */
+  private ridingContents(c: Clonk, v: Vehicle): MenuView {
+    const list = groupItems(v.contents);
+    const k = this.keys;
+    const keys: MenuKey[] = [{ command: 'throw', key: k.throw, action: c.carrying ? 'put' : 'get' }];
+    if (v.def.id === 'wagon') keys.push({ command: 'dig', key: k.dig, action: 'get' }, { command: 'down', key: k.down, action: 'exit' });
+    else keys.push({ command: 'up', key: `${k.up} ${k.up}`, action: 'exit' });
+    const name = v.def.name;
+    return {
+      symbol: this.structurePicture(v),
+      caption: v.contents.length ? name : `${name} is empty.`,
+      items: list.map((e) => ({ picture: () => this.picture(e.id), count: e.count > 1 ? e.count : undefined, caption: ITEMS[e.id].name })),
+      selected: null,
+      keys,
+      color: this.color,
+      key: `ride:${v.def.id}:${!!c.carrying}:${list.map((e) => `${e.id}=${e.count}`).join(',')}`,
+    };
+  }
+
   /** The buy, sell or get menu of the building the clonk is in. */
-  private buildingMenu(c: Clonk, s: Structure): MenuView {
+  private buildingMenu(c: Clonk, s: Structure | Vehicle): MenuView {
     const list = this.world.menuList(c);
     const kind = c.menuKind;
-    const verb = kind === 'buy' ? 'Buy' : kind === 'sell' ? 'Sell' : 'Get';
+    const verb = kind === 'buy' ? 'Buy' : kind === 'sell' ? 'Sell' : kind === 'fire' ? 'Shoot' : 'Get';
     const items: MenuItemView[] = list.map((e) => ({
       picture: () => this.picture(e.id),
       count: e.count,
-      caption: `${verb} ${shopEntry(e.id).name}`,
+      // A cannon tower's menu: how much gunpowder the shot takes.
+      caption: kind === 'fire' ? `${verb} ${shopEntry(e.id).name} (${e.value} gunpowder)` : `${verb} ${shopEntry(e.id).name}`,
       value: e.value,
       description: DESCRIPTIONS[e.id],
     }));
     return {
-      symbol: kind === 'get' ? this.structurePicture(s) : () => tradeSymbol(this.gfx, kind, this.color),
-      caption: kind === 'buy' ? 'There is nothing to buy.' : `${s.def.name} is empty.`,
+      symbol: kind === 'get' || kind === 'fire' ? this.structurePicture(s) : () => tradeSymbol(this.gfx, kind, this.color),
+      caption: kind === 'buy' ? 'There is nothing to buy.' : kind === 'fire' ? 'Nothing to shoot: put something in.' : `${s.def.name} is empty.`,
       items,
       selected: list.length ? Math.min(c.menu ?? 0, list.length - 1) : null,
-      extra: kind === 'get' ? undefined : 'value',
+      extra: kind === 'get' || kind === 'fire' ? undefined : 'value',
       keys: this.okCancel,
       color: this.color,
       key: `${kind}:${c.menu}:${list.map((e) => `${e.id}=${e.count}`).join(',')}`,
@@ -273,7 +295,7 @@ export class BaseHud {
   private lorryMenu(c: Clonk, v: Vehicle): MenuView {
     const list = groupItems(v.contents);
     const open = c.loadMenu !== null;
-    const limit = v.def.collection?.limit ?? 0;
+    const limit = v.def.hold ?? 0;
     const k = this.keys;
     const keys: MenuKey[] = open
       ? this.okCancel

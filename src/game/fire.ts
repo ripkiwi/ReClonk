@@ -135,7 +135,15 @@ function burnVehicle(world: World, v: Vehicle): void {
   v.mask = null;
   v.comDir = { x: 0, y: 0 };
   v.windX = v.windY = v.clearX = v.clearY = false;
-  for (const c of world.clonks) if (c.vehicle === v) c.letGo();
+  v.locked = false;
+  v.pulling = null;
+  for (const c of world.clonks) {
+    if (c.vehicle === v) c.letGo();
+    // Out of a burning wagon (its burned self has no door).
+    if (c.contained === v) world.exit(c);
+  }
+  // A burning vehicle can't be pulled.
+  for (const e of world.vehicles) if (e.pulling === v) e.pulling = null;
 }
 
 /**
