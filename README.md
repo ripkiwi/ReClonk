@@ -146,9 +146,18 @@ build huts, castles and elevators, buy more clonks. The classic loop, on modern 
   to read how far along it is): Melee, Goldmine (mine and sell all the gold), Money Points and Settlement points
   (100 per goal), Wipf rescue, Monsterkill, Race (left to right, nobody fights) and Engineer (build everything a
   construction kit can). Every goal fulfilled wins the round; computer crews don't have to help. Gold Mine and Lava
-  Caves have their original goals. Ore Mining and Oil Production wait for ore and oil barrels.
+  Caves have their original goals. Oil Production: pump out all the oil and sell every oil barrel. Ore Mining waits
+  for ore.
 - **Rivalry**: whoever fulfils every goal first wins, everyone else is out. **Release Clonk**: click its picture to let
   the clonk you control go for the round. **Buildings can snow in**: otherwise buildings clear snow out of themselves.
+- **Power and production**, like the original: windmills and power plants (coal, wood or oil) make power, line
+  construction kits lay power lines, source pipes and drain pipes between buildings. With the **Power usage** rule
+  the elevator, sawmill, workshop, chemical plant, pump and derrick need power, and show a blinking symbol when
+  they're out. Pumps move liquid through their pipes; the oil derrick drills down for oil. The foundry melts ore
+  into metal, the sawmill cuts felled trees (drag one to its door) into wood, the workshop builds vehicles and the
+  chemical plant explosives from their components (left inside opens the list), and the anvil forges arrows,
+  barrels and kits. Railway signals stop the steam engine, turn it and load or unload its wagon. The cannon tower
+  takes the flame thrower, the lightning cannon (charged from the tower's power or crystals) and the liquid cannon.
 - Higher ranks have more energy (50, plus 5 per rank up to rank 10).
 - Lakes have sloping banks, so a clonk can always swim out.
 - **Animals**, with the original scripts and values: wipfs run about, dig and can be sold dead (or alive, with the
@@ -256,20 +265,18 @@ The site's Content Security Policy forbids `eval`, so `main.ts` imports `pixi.js
    veins, material items, flags, vehicles, the lorry, the sorcerer, goals, rules, animals, vegetation, scenery,
    day and night, the original menus, every original home and building (castles, cabins, igloos, statues,
    production buildings) and the siege weapons and later vehicles (catapult, cannon, crossbow and arrows, cannon
-   tower, steam engine and wagon, submarine and torpedoes, chest, bridge segment, barrels, fire bomb) are in.
+   tower, steam engine and wagon, submarine and torpedoes, chest, bridge segment, barrels, fire bomb), power lines,
+   pipes, pumps, the derrick, production, railway signals and the tower's flame, lightning and liquid cannons are in.
 4. **Modding and content** (content well along, modding not started): a public modding API in TypeScript + JSON
    (the base game itself as a mod), more of the original's scenarios.
 5. **Multiplayer:** lockstep over WebSockets, then a desktop build.
 
 ### Still missing from the original
 
-In the order we plan to build them (checked 24 Nov 2026, after PR #33):
+In the order we plan to build them (checked 25 Nov 2026, after the power and production PR):
 
-1. **What the production buildings do, and power:** the sawmill, foundry, workshop, windmill, power plant, pump,
-   oil derrick, chemical plant, research lab, magic tower and anvil can be built, entered and used as storage, but
-   don't produce anything yet; power lines and pipes are missing. These unlock the Oil Production goal and the
-   Power usage and Research at Wizardtower rules. With them come the railway signals (the steam engine ignores
-   them for now) and the cannon tower's flame thrower, lightning cannon and liquid cannon.
+1. **Research:** the research lab and the magic tower's research, with the Research at Wizardtower rule (every
+   scenario so far knows every construction plan).
 2. **More original scenarios:** 4 of about 90 so far; next the Worlds, Melees and the ten tutorials.
 3. **Spells and crew:** force fields, air shield, wormhole, volcano, eternal flame, camouflage, warp to base,
    invisibility, revaluation; the Aqua Clonk.

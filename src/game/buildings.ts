@@ -17,6 +17,9 @@ import { layBasement } from './homeBase';
 import { dropFlag, rebuilt } from './fire';
 import { vehicleBottom } from './vehicles';
 import type { World } from './world';
+import { derrickControl, energyCheck, powerRule } from './power';
+import { anvilControl, buildingFinished, pushTreeIn } from './production';
+import { signalControl } from './signals';
 
 /** How many pixels in a rectangle are solid (C4Landscape::AreaSolidCount). */
 export function areaSolidCount(land: Landscape, x: number, y: number, w: number, h: number): number {
@@ -201,6 +204,7 @@ export function completeStructure(world: World, s: Structure): void {
     k.timer = c.waitInterval;
     s.liftCase = k;
   }
+  buildingFinished(world, s);
   world.events.push({ type: 'built', structure: s, tick: world.tick });
 }
 
@@ -220,9 +224,14 @@ export function grabTarget(world: World, c: Clonk): { structure: Structure; buil
     if (s.liftCase?.inside(c.x, c.y)) return { structure: s, build: false };
     // The guard tower's ground floor, between the gates.
     if (s.gates.length && s.inside(c.x, c.y) && c.y > s.y) return { structure: s, build: false };
+    // Things a clonk holds on to (Grab=1): the anvil, the derrick, a railway signal.
+    if (GRABBED.has(s.def.id) && s.inside(c.x, c.y)) return { structure: s, build: false };
   }
   return null;
 }
+
+/** Buildings that are grabbed rather than entered (DefCore Grab=1). */
+const GRABBED = new Set(['anvil', 'derrick', 'signal']);
 
 /** Start working on what's where the clonk stands. Returns false if there's nothing. */
 export function grabOrBuild(world: World, c: Clonk): boolean {
@@ -247,8 +256,15 @@ export function grabOrBuild(world: World, c: Clonk): boolean {
  * (Tower2.c4d): left and right open or shut that side's gate.
  */
 export function pushControl(world: World, c: Clonk, ctl: ControlState): void {
+  if (c.dragging) {
+    // Dragging a felled tree: up pushes it into the sawmill, the other keys let go.
+    if (ctl.pressedUp) pushTreeIn(world, c);
+    else if (ctl.pressedDown || ctl.pressedDig || ctl.pressedThrow) c.letGo();
+    return;
+  }
   const s = c.workOn;
   if (!s) return c.letGo();
+  if (derrickControl(world, c, s, ctl) || anvilControl(world, c, s, ctl) || signalControl(world, c, s, ctl)) return;
   const classic = c.controlStyle === 'classic';
   const k = s.liftCase;
   if (k) {
@@ -359,6 +375,7 @@ function haltCase(k: ElevatorCase): void {
  * controls stops when the key is let go.
  */
 function rideTo(world: World, k: ElevatorCase, y: number | null, manual: boolean, held: -1 | 1 | 0 = 0): void {
+  if (noEnergy(world, k)) return;
   const target = y === null ? null : Math.max(y, k.top);
   const dir = target === null ? 1 : sign(target - k.y);
   if (dir === 0) return;
@@ -375,9 +392,21 @@ function rideTo(world: World, k: ElevatorCase, y: number | null, manual: boolean
   if (held) k.held = world.tick;
 }
 
+/** Case.c4d NoEnergy: with the Power usage rule the elevator needs 12.5 points to move; without, the case stays put. */
+function noEnergy(world: World, k: ElevatorCase): boolean {
+  const s = world.structures.find((o) => o.liftCase === k);
+  if (!s || energyCheck(world, s, ELEVATOR_POWER.need)) return false;
+  haltCase(k);
+  return true;
+}
+
+/** What riding and drilling cost the elevator (Case.c4d: 12500 every 25 ticks riding, 10000 every 10 drilling). */
+export const ELEVATOR_POWER = { need: 12500, ride: { every: 25, use: 12500 }, drill: { every: 10, use: 10000 } };
+
 function drill(world: World, k: ElevatorCase, on: boolean): void {
   world.events.push({ type: 'click', x: k.x, y: k.y, tick: world.tick });
   if (!on) return haltCase(k);
+  if (noEnergy(world, k)) return;
   k.mode = 'drill';
   k.manual = false;
   k.dir = 1;
@@ -479,6 +508,12 @@ export function stepElevator(world: World, s: Structure): void {
   // A jump'n'run ride stops as soon as the key is let go.
   if (k.manual && (k.held !== world.tick || !pusher(world, s))) return haltCase(k);
   if (k.mode === 'drill' && !pusher(world, s)) return haltCase(k);
+  // Energieverbrauch: with the Power usage rule, riding and drilling use up the elevator's power.
+  const cost = k.mode === 'drill' ? ELEVATOR_POWER.drill : ELEVATOR_POWER.ride;
+  if (powerRule(world) && world.tick % cost.every === 0) {
+    if (!energyCheck(world, s, cost.use)) return haltCase(k);
+    s.energy = Math.max(0, s.energy - cost.use);
+  }
   const limit = k.mode === 'drill' ? c.drillSpeed : c.speed;
   k.ydir = Math.max(-limit, Math.min(limit, k.ydir + k.dir * c.accel));
   k.fy += k.ydir;
@@ -537,8 +572,8 @@ export function stepBuildings(world: World): void {
     if (s.gone) continue;
     const def = s.def;
     if (def.wing && s.complete) {
-      const wind = world.weather ? world.weather.windAt(world, s.x + def.wing.at.x, s.y + def.wing.at.y) : 0;
-      s.wingR = (s.wingR + wind / 40 + 360) % 360;
+      // Its speed is set with the wind every 15 ticks (power.ts stepWindmill).
+      s.wingR = (s.wingR + s.wingRDir / 10 + 360) % 360;
     }
     if (def.melts && temp > IGLOO.warmerThan && world.tick % IGLOO.interval === 0 && s.con > 0) {
       // A melting igloo is no home: whoever's inside comes out.

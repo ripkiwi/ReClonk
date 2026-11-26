@@ -18,7 +18,8 @@ export type RuleId =
   | 'constructionSnowIn'
   | 'releaseClonk'
   | 'snowballs'
-  | 'noMetalTrick';
+  | 'noMetalTrick'
+  | 'energy';
 
 export interface RuleDef {
   id: RuleId;
@@ -66,6 +67,12 @@ export const RULES: Record<RuleId, RuleDef> = {
     description: "Snow balls can be dug out of snow by pressing 'dig' again while digging.",
     icon: 'rules/SnowBalls.png',
   },
+  energy: {
+    id: 'energy',
+    name: 'Power usage',
+    description: 'Power consumers such as the elevator need to be connected to a power source such as the windmill using line construction kits.',
+    icon: 'rules/Energy.png',
+  },
   noMetalTrick: {
     id: 'noMetalTrick',
     name: 'No metal in front of buildings',
@@ -102,7 +109,6 @@ export const RULE_IDS = Object.keys(RULES) as RuleId[];
 
 /** The original's other rules, shown greyed in the scenario settings with what they wait for. */
 export const LATER_RULES: readonly { name: string; icon: string; needs: string }[] = [
-  { name: 'Power usage', icon: 'rules/Energy.png', needs: 'windmills and power lines' },
   { name: 'Team account', icon: 'rules/TeamAccount.png', needs: 'allied players' },
   { name: 'Team home base material', icon: 'rules/TeamHomebase.png', needs: 'allied players' },
   { name: 'Team knowledge', icon: 'rules/TeamKnowledge.png', needs: 'allied players' },

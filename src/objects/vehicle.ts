@@ -15,7 +15,8 @@ import type { Structure } from './structure';
 
 export type VehicleId =
   | 'boat' | 'balloon' | 'blimp' | 'lorry'
-  | 'catapult' | 'cannon' | 'crossbow' | 'wagon' | 'engine' | 'sub' | 'chest' | 'bridge' | 'towerCannon' | 'artillery' | 'antiAir';
+  | 'catapult' | 'cannon' | 'crossbow' | 'wagon' | 'engine' | 'sub' | 'chest' | 'bridge' | 'towerCannon' | 'artillery' | 'antiAir'
+  | 'flameThrower' | 'lightningCannon' | 'liquidCannon';
 
 /**
  * A cannon tower's gun (CannonTower.c4d Cannon1-3 and their Attached
@@ -27,8 +28,15 @@ export interface MountDef {
   size: number;
   /** Degrees it turns a tick (RotationSpeed, SetRDir in tenths). */
   speed: number;
-  /** Combat and artillery cannons shoot what's in the tower with gunpowder; the anti-air cannon shoots arrows. */
-  kind: 'cannon' | 'arrows';
+  /**
+   * Combat and artillery cannons shoot what's in the tower with gunpowder; the
+   * anti-air cannon shoots arrows; the flame thrower burns oil, the lightning
+   * cannon crystals (charged from the tower's power), the liquid cannon what's
+   * in the tower's barrels.
+   */
+  kind: 'cannon' | 'arrows' | 'flame' | 'lightning' | 'liquid';
+  /** The mounted gun hangs from this point of its graphic, below its centre (the liquid cannon's vertex at 0,10). */
+  hang?: number;
   /** Shooting speed (CannonPower; the anti-air cannon's arrows fly at 15). */
   power: number;
   /** Gunpowder for each shot (CannonPowderNeeded). */
@@ -475,6 +483,72 @@ export const VEHICLES: Record<VehicleId, VehicleDef> = {
     mount: { file: 'vehicles/AntiAirCannonAttached.png', size: 20, speed: 0.6, kind: 'arrows', power: 15, powder: 0 },
     burned: { file: 'vehicles/AntiAirCannon.png', mass: 80, float: 0, blastIncinerate: 0, contactIncinerate: 0 },
   },
+  // Cannon4.c4d (ACT1): burns oil from the tower's oil barrels, 50 pixels a shot.
+  flameThrower: {
+    id: 'flameThrower',
+    name: 'Flame thrower',
+    value: 55,
+    rebuy: true,
+    mass: 90,
+    width: 30,
+    height: 16,
+    offset: { x: -15, y: -8 },
+    vertices: vtx([-14, 9, -14, 9, 14, 14], [-8, -8, 7, 7, -6, 5], [...CORNERS, CNAT.Right, CNAT.Right], 40),
+    float: 0,
+    floatSpeed: 0,
+    noPushEnter: false,
+    grabbed: 1,
+    contactIncinerate: 0,
+    blastIncinerate: 0,
+    graphic: { file: 'vehicles/FlameThrower.png', facet: { x: 0, y: 0, w: 30, h: 16 }, sheet: [94, 64] },
+    picture: { x: 30, y: 0, w: 64, h: 64 },
+    mount: { file: 'vehicles/FlameThrowerAttached.png', size: 52, speed: 0.2, kind: 'flame', power: 5, powder: 0 },
+    burned: { file: 'vehicles/FlameThrower.png', mass: 90, float: 0, blastIncinerate: 0, contactIncinerate: 0 },
+  },
+  // Cannon5.c4d (ACT3): shoots lightning, one crystal a shot; mounted, it charges crystals from the tower's power.
+  lightningCannon: {
+    id: 'lightningCannon',
+    name: 'Lightning cannon',
+    value: 65,
+    rebuy: true,
+    mass: 150,
+    width: 30,
+    height: 16,
+    offset: { x: -15, y: -8 },
+    vertices: vtx([-14, 9, -14, 9, 14, 14], [-8, -8, 7, 7, -6, 5], [...CORNERS, CNAT.Right, CNAT.Right], 40),
+    float: 0,
+    floatSpeed: 0,
+    noPushEnter: false,
+    grabbed: 1,
+    contactIncinerate: 0,
+    blastIncinerate: 0,
+    graphic: { file: 'vehicles/LightningCannon.png', facet: { x: 0, y: 0, w: 30, h: 16 }, sheet: [94, 64] },
+    picture: { x: 30, y: 0, w: 64, h: 64 },
+    mount: { file: 'vehicles/LightningCannonAttached.png', size: 52, speed: 0.2, kind: 'lightning', power: 18, powder: 0 },
+    burned: { file: 'vehicles/LightningCannon.png', mass: 150, float: 0, blastIncinerate: 0, contactIncinerate: 0 },
+  },
+  // CannonLiquid.c4d (LICN): sprays out what's in the tower's barrels; pipes can fill them.
+  liquidCannon: {
+    id: 'liquidCannon',
+    name: 'Liquid cannon',
+    value: 40,
+    rebuy: true,
+    mass: 100,
+    width: 40,
+    height: 18,
+    offset: { x: -20, y: -9 },
+    vertices: vtx([-17, -19, 3, 3, 20], [-6, 7, -4, 7, 2], [CNAT.Top | CNAT.Left, CNAT.Bottom | CNAT.Left, CNAT.Top, CNAT.Bottom, CNAT.Right], 40),
+    float: 0,
+    floatSpeed: 0,
+    noPushEnter: false,
+    grabbed: 1,
+    contactIncinerate: 0,
+    blastIncinerate: 0,
+    graphic: { file: 'vehicles/LiquidCannon.png', facet: { x: 0, y: 0, w: 40, h: 18 }, sheet: [101, 64] },
+    picture: { x: 40, y: 0, w: 61, h: 64 },
+    mount: { file: 'vehicles/LiquidCannonAttached.png', size: 40, speed: 0.2, kind: 'liquid', power: 20, powder: 0, hang: 10 },
+    burned: { file: 'vehicles/LiquidCannon.png', mass: 100, float: 0, blastIncinerate: 0, contactIncinerate: 0 },
+  },
 };
 
 export const VEHICLE_IDS = Object.keys(VEHICLES) as VehicleId[];
@@ -584,6 +658,8 @@ export class Vehicle extends GameObject {
   firedBy = -1;
   /** The steam engine's coupled vehicle (its Push action's target). */
   pulling: Vehicle | null = null;
+  /** The steam engine's wait at a railway signal, counted down every 15 ticks (iWait). */
+  signalWait = 0;
   /** The steam engine's wait at a signal (iWait), counted down every 15 ticks. */
   wait = 0;
   /** The last ticks a clonk pressed left or right on it, for the steam engine's double press. */
@@ -600,6 +676,12 @@ export class Vehicle extends GameObject {
   r = 0;
   /** Degrees a tick it's turning (-1 left, 1 right, 0 still, times its speed). */
   turning: -1 | 0 | 1 = 0;
+  /** A flame thrower's oil (FillLevel: 50 a shot). */
+  oil = 0;
+  /** A lightning cannon's power drained from its tower, towards the next crystal (350 each). */
+  charge = 0;
+  /** Charged crystals in a lightning cannon: one a shot. */
+  crystals = 0;
 
   constructor(
     readonly def: VehicleDef,

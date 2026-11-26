@@ -4,9 +4,12 @@
 // mounted on the roof. From inside, left and right turn it, dig shoots, up
 // twice takes it off again. See licenses/clonk_engine_license.txt.
 
-import type { ItemId } from '../landscape/materials';
+import { LIQUID, type ItemId } from '../landscape/materials';
 import type { Clonk, ControlState } from '../objects/clonk';
-import { CLONK_KINDS, type ClonkKind } from '../objects/defs';
+import { CLONK_KINDS, ITEMS, type ClonkKind } from '../objects/defs';
+import { GRAVITY } from '../objects/physics';
+import { spitFlame } from './liquids';
+import { doEnergy, energyPoints, POWER, productionSound, type ProductionSound } from './power';
 import type { Item } from '../objects/item';
 import type { Structure } from '../objects/structure';
 import type { Vehicle } from '../objects/vehicle';
@@ -78,6 +81,7 @@ export function stepGun(world: World, v: Vehicle): void {
   const s = v.mountedOn!;
   if (s.burned || s.gone || !world.structures.includes(s)) return releaseGun(world, s);
   v.setPosition(s.x + TOWER.mount.x, s.y + TOWER.mount.y);
+  stepNewGun(world, v);
   if (!v.turning) return;
   const r = Math.max(-TOWER.maxR, Math.min(TOWER.maxR, v.r + v.turning * v.def.mount!.speed));
   if (r === v.r) {
@@ -126,7 +130,9 @@ export function towerControl(world: World, c: Clonk, s: Structure, ctl: ControlS
   if (ctl.pressedDig) {
     turn(world, v, 0);
     if (mount.kind === 'arrows') fireArrows(world, c, s, v);
-    else {
+    else if (fireNewGun(world, c, s, v)) {
+      // The flame thrower, the lightning cannon, or the liquid cannon's menu.
+    } else {
       c.menuKind = 'fire';
       c.menu = 0;
     }
@@ -140,6 +146,7 @@ export function towerAmmo(world: World, c: Clonk): MenuEntry[] {
   const s = c.contained as Structure;
   const v = towerGun(world, s);
   if (!v) return [];
+  if (v.def.mount!.kind === 'liquid') return liquidAmmo(s);
   const out: MenuEntry[] = [];
   for (const it of s.contents) {
     if (it.def.id === 'gunpowder') continue;
@@ -169,6 +176,7 @@ export function shootFromTower(world: World, c: Clonk, id: ItemId | ClonkKind): 
   const v = towerGun(world, s);
   if (!v) return;
   const m = v.def.mount!;
+  if (m.kind === 'liquid') return shootLiquid(world, s, v, id as ItemId);
   const crew = id in CLONK_KINDS;
   const powderNeeded = crew ? m.clonks!.powder : m.powder;
   const powder = s.contents.filter((o) => o.def.id === 'gunpowder');
@@ -222,7 +230,7 @@ function takeOut(s: Structure, it: Item): void {
 function nextArrow(world: World, s: Structure): Item | null {
   for (let i = s.contents.length - 1; i >= 0; i--) {
     const it = s.contents[i];
-    if (it.def.arrow) {
+    if (it.def.arrow || it.def.id === 'bullet') {
       takeOut(s, it);
       return it;
     }
@@ -253,12 +261,261 @@ function fireArrows(world: World, c: Clonk, s: Structure, v: Vehicle): void {
     if (!i) sound(world, 'Arrow', v.x, v.y);
     const off = v.r - 45 + 90 * i;
     a.setPosition(v.x + Math.trunc(sin(off) * TOWER.arrowMuzzle), v.y - Math.trunc(cos(off) * TOWER.arrowMuzzle));
-    a.xdir = Math.trunc(sin(v.r) * m.power);
-    a.ydir = -Math.trunc(cos(v.r) * m.power);
+    // Bullets fly faster than arrows.
+    const speed = a.def.id === 'bullet' ? GUNS.bulletSpeed : m.power;
+    a.xdir = Math.trunc(sin(v.r) * speed);
+    a.ydir = -Math.trunc(cos(v.r) * speed);
     a.r = v.r;
     a.rdir = Math.abs(v.r) <= 10 ? 0 : v.r < 0 ? -4 / 10 / 5 : 4 / 10 / 5;
     a.noCollect = 20;
     a.thrownBy = c.id;
-    shootArrow(world, a, c);
+    if (a.def.arrow) shootArrow(world, a, c);
   }
+}
+
+// ------------------------------------------------------------------ flame thrower, lightning and liquid cannons
+
+export const GUNS = {
+  /** The flame thrower: 50 oil a shot, out 18 pixels along the barrel at 5 pixels a tick (FlameThrowerAttached ComFire). */
+  flame: { oil: 50, muzzle: 18, speed: 5, hitBox: 5, trail: 1, burst: 10, burstLevel: 7 },
+  /** The lightning cannon drains 10 points from the tower every 15 ticks while it has more than 9; 350 make a crystal (EnergyTransfer). */
+  lightning: { every: 15, drain: 10, keep: 9, perShot: 350, battery: 5, advance: 18, spread: 4, side: 5, blastFrom: 5, blast: 3, corners: 30 },
+  /** The liquid cannon: each pixel out 20 (and one more every 50) along the barrel at 20 pixels a tick (Shoot: InsertMaterial). */
+  liquid: { dist: 20, per: 50, speed: 200 },
+  /** A munition pack holds 10 bullets; the anti-air cannon shoots them at 22 (Munitions.c4d Unpack). */
+  bullets: 10,
+  bulletSpeed: 22,
+};
+
+/** A flame thrower's shot (FlameShot.c4d): it flies, leaving flames, and bursts into ten on whatever it hits. */
+export interface FlameShot {
+  x: number;
+  y: number;
+  xdir: number;
+  ydir: number;
+  r: number;
+  by: Clonk | null;
+  removed: boolean;
+}
+
+/** A lightning cannon's bolt (Lightning.c4d, ADM4): a zigzag that grows a corner a tick. `fade` counts down once it's done, for drawing. */
+export interface TowerBolt {
+  points: { x: number; y: number }[];
+  advX: number;
+  varX: number;
+  advY: number;
+  varY: number;
+  by: Clonk | null;
+  fade: number;
+}
+
+function gunSound(world: World, s: ProductionSound, x: number, y: number): void {
+  productionSound(world, s, x, y);
+}
+
+/**
+ * ComEnter: what's put into the tower goes to the gun if it takes it. The
+ * flame thrower empties oil barrels into its tank; the lightning cannon
+ * takes crystals, and a battery gives it five; the anti-air cannon unpacks
+ * munition packs into bullets.
+ */
+function feedGun(world: World, s: Structure, v: Vehicle): void {
+  const kind = v.def.mount!.kind;
+  for (const it of [...s.contents]) {
+    if (kind === 'flame' && it.def.id === 'oilBarrel' && it.fill > 0) {
+      v.oil += it.fill;
+      it.fill = 0;
+      it.def = ITEMS.barrel;
+      gunSound(world, 'Click', s.x, s.y);
+    } else if (kind === 'lightning' && (it.def.id === 'crystal' || it.def.id === 'battery')) {
+      takeOut(s, it);
+      it.removed = true;
+      if (it.def.id === 'battery') {
+        v.crystals += GUNS.lightning.battery;
+        gunSound(world, 'LightningLoad', s.x, s.y);
+      } else {
+        v.crystals++;
+        gunSound(world, 'Electric', s.x, s.y);
+      }
+    } else if (kind === 'arrows' && it.def.id === 'munitionPack') {
+      takeOut(s, it);
+      it.removed = true;
+      for (let i = 0; i < GUNS.bullets; i++) world.store(s, world.spawnItem('bullet', s.x, s.y));
+      gunSound(world, 'Click', s.x, s.y);
+    }
+  }
+}
+
+/** Each tick, for the new guns: take what's put in, and the lightning cannon charges from the tower's power. */
+export function stepNewGun(world: World, v: Vehicle): void {
+  const s = v.mountedOn;
+  if (!s) return;
+  feedGun(world, s, v);
+  const k = GUNS.lightning;
+  if (v.def.mount!.kind !== 'lightning' || (world.tick + v.id) % k.every !== 0) return;
+  if (energyPoints(s) <= k.keep) return;
+  doEnergy(s, -k.drain);
+  v.charge += k.drain * POWER.unit;
+  if (v.charge <= k.perShot * POWER.unit) return;
+  v.charge -= k.perShot * POWER.unit;
+  v.crystals++;
+  gunSound(world, 'LightningLoad', v.x, v.y);
+}
+
+/** Dig with a flame thrower, lightning cannon or liquid cannon on the tower. Returns false for the other guns. */
+function fireNewGun(world: World, c: Clonk, s: Structure, v: Vehicle): boolean {
+  switch (v.def.mount!.kind) {
+    case 'flame':
+      fireFlame(world, c, s, v);
+      return true;
+    case 'lightning':
+      fireLightning(world, c, v);
+      return true;
+    case 'liquid':
+      c.menuKind = 'fire';
+      c.menu = 0;
+      return true;
+  }
+  return false;
+}
+
+/** FlameThrowerAttached ComFire: 50 of its oil make a shot, out along the barrel. */
+function fireFlame(world: World, c: Clonk, s: Structure, v: Vehicle): void {
+  const k = GUNS.flame;
+  gunSound(world, 'Click', v.x, v.y);
+  feedGun(world, s, v);
+  if (v.oil < k.oil) {
+    gunSound(world, 'Error', s.x, s.y);
+    world.say(c.owner, 'The flame thrower needs oil: put an oil barrel in the tower');
+    return;
+  }
+  v.oil -= k.oil;
+  world.flameShots.push({
+    x: v.x + Math.trunc(sin(v.r) * k.muzzle),
+    y: v.y - Math.trunc(cos(v.r) * k.muzzle),
+    xdir: Math.trunc(sin(v.r) * k.speed),
+    ydir: -Math.trunc(cos(v.r) * k.speed),
+    r: v.r,
+    by: c,
+    removed: false,
+  });
+  gunSound(world, 'FlameThrower', v.x, v.y);
+}
+
+/** LightningCannonAttached ComFire: a crystal makes two bolts side by side along the barrel. */
+function fireLightning(world: World, c: Clonk, v: Vehicle): void {
+  const k = GUNS.lightning;
+  if (v.crystals < 1) {
+    gunSound(world, 'Error', v.x, v.y);
+    world.say(c.owner, 'The lightning cannon has no charge: connect power or put in crystals');
+    return;
+  }
+  v.crystals--;
+  gunSound(world, 'LightningCannon', v.x, v.y);
+  const advX = Math.trunc(sin(v.r) * k.advance);
+  const advY = -Math.trunc(cos(v.r) * k.advance);
+  const starts = [
+    { x: v.x, y: v.y },
+    { x: v.x + Math.trunc(sin(v.r + 90) * k.side), y: v.y + Math.trunc(cos(v.r + 90) * k.side) },
+  ];
+  for (const p of starts) world.towerBolts.push({ points: [p], advX, varX: k.spread, advY, varY: k.spread, by: c, fade: -1 });
+  world.events.push({ type: 'sparks', x: v.x + advX, y: v.y + advY, tick: world.tick });
+}
+
+/** The liquid cannon's menu (DoMenu): each kind of filled barrel in the tower, and all of them if there's more than one kind. */
+export function liquidAmmo(s: Structure): MenuEntry[] {
+  const out: MenuEntry[] = [];
+  let all = 0;
+  for (const it of s.contents) {
+    if (!it.def.barrel?.mat || it.fill <= 0) continue;
+    all++;
+    const e = out.find((o) => o.id === it.def.id);
+    if (e) e.count++;
+    else out.push({ id: it.def.id, count: 1, value: 0 });
+  }
+  if (out.length > 1) out.push({ id: 'barrel', count: all, value: 0 });
+  return out;
+}
+
+/** CannonLiquidAttached Shoot: empty these barrels (all with 'barrel') out of the barrel, pixel by pixel, spreading as it goes. */
+export function shootLiquid(world: World, s: Structure, v: Vehicle, id: ItemId): void {
+  const k = GUNS.liquid;
+  let n = 0;
+  for (const it of [...s.contents]) {
+    const mat = it.def.barrel?.mat;
+    if (!mat || it.fill <= 0 || (id !== 'barrel' && it.def.id !== id)) continue;
+    const amount = it.fill;
+    it.fill = 0;
+    it.def = ITEMS.barrel;
+    for (let j = 0; j < amount; j++) {
+      n++;
+      const f = Math.trunc(n / k.per);
+      const dist = k.dist + f;
+      const spread = Math.trunc(f / 3);
+      const angle = v.r + (spread ? world.rng.int(2 * spread + 1) - spread : 0);
+      world.land.insertMaterial(mat, v.x + Math.trunc(sin(angle) * dist), v.y - Math.trunc(cos(angle) * dist), Math.trunc(sin(v.r) * k.speed), -Math.trunc(cos(v.r) * k.speed));
+    }
+  }
+  if (n) gunSound(world, 'Splash', v.x, v.y);
+  else gunSound(world, 'Error', s.x, s.y);
+}
+
+/** Each tick: flame shots fly and lightning bolts grow. */
+export function stepTowerShots(world: World): void {
+  const kf = GUNS.flame;
+  for (const f of world.flameShots) {
+    if (f.removed) continue;
+    // Travel: a hit on something alive, otherwise a flame left behind.
+    const prey = world.clonks.some((c) => c.alive && !c.contained && Math.abs(c.x - f.x) <= kf.hitBox && Math.abs(c.y - f.y) <= kf.hitBox) ||
+      world.animals.some((a) => a.alive && !a.removed && a.def.prey && Math.abs(a.x - f.x) <= kf.hitBox && Math.abs(a.y - f.y) <= kf.hitBox);
+    if (!prey) {
+      spitFlame(world, f.x, f.y, (world.rng.int(kf.trail * 2 + 1) - kf.trail) / 10, (world.rng.int(kf.trail + 1) - kf.trail) / 10);
+      f.ydir += GRAVITY;
+      const nx = f.x + f.xdir;
+      const ny = f.y + f.ydir;
+      const n = Math.max(1, Math.ceil(Math.max(Math.abs(f.xdir), Math.abs(f.ydir))));
+      let hit = false;
+      for (let i = 1; i <= n && !hit; i++) {
+        const x = Math.round(f.x + (f.xdir * i) / n);
+        const y = Math.round(f.y + (f.ydir * i) / n);
+        if (world.land.isSolid(x, y) || y >= world.land.height) hit = true;
+        else {
+          f.x = x;
+          f.y = y;
+        }
+      }
+      if (!hit) {
+        f.x = nx;
+        f.y = ny;
+        f.r = (Math.atan2(f.xdir, -f.ydir) * 180) / Math.PI;
+        if (f.x < 0 || f.x >= world.land.width || f.y < -200) f.removed = true;
+        continue;
+      }
+    }
+    // Hit: ten flames, cast about.
+    f.removed = true;
+    for (let i = 0; i < kf.burst; i++) {
+      const lv = kf.burstLevel;
+      spitFlame(world, f.x, f.y - 2, (world.rng.int(lv + 1) - Math.trunc(lv / 2)) / 10, (world.rng.int(lv + 1) - lv) / 10);
+    }
+    world.events.push({ type: 'inflame', x: f.x, y: f.y, loud: true, tick: world.tick });
+  }
+  if (world.flameShots.some((f) => f.removed)) world.flameShots = world.flameShots.filter((f) => !f.removed);
+
+  const kl = GUNS.lightning;
+  for (const b of world.towerBolts) {
+    if (b.fade >= 0) {
+      b.fade--;
+      continue;
+    }
+    const tip = b.points[b.points.length - 1];
+    // Into the ground (or a liquid): done.
+    if (world.land.density(tip.x, tip.y) >= LIQUID || b.points.length >= kl.corners) {
+      b.fade = 4;
+      continue;
+    }
+    if (b.points.length - 1 > kl.blastFrom) world.blastObjects(tip.x, tip.y, kl.blast, b.by);
+    b.points.push({ x: tip.x + b.advX + world.rng.int(b.varX), y: tip.y + b.advY + world.rng.int(b.varY) });
+  }
+  if (world.towerBolts.some((b) => b.fade === 0)) world.towerBolts = world.towerBolts.filter((b) => b.fade !== 0);
 }

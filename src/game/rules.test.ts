@@ -49,9 +49,10 @@ function eliminatedIn(world: World, ticks: number): number[] {
 
 describe('Rules', () => {
   it('the rules we have and the original’s others, each with its picture', () => {
-    expect(RULE_IDS).toEqual(['constructionMaterial', 'flagRemoveable', 'captureTheFlag', 'lossOfBase', 'collectibleAnimals', 'snowballs', 'noMetalTrick', 'killTheCaptain', 'rivalry', 'constructionSnowIn', 'releaseClonk']);
+    expect(RULE_IDS).toEqual(['constructionMaterial', 'flagRemoveable', 'captureTheFlag', 'lossOfBase', 'collectibleAnimals', 'snowballs', 'energy', 'noMetalTrick', 'killTheCaptain', 'rivalry', 'constructionSnowIn', 'releaseClonk']);
     for (const id of RULE_IDS) expect(RULES[id].icon).toMatch(/^rules\/\w+\.png$/);
-    expect(LATER_RULES.map((r) => r.name)).toContain('Power usage');
+    expect(LATER_RULES.map((r) => r.name)).not.toContain('Power usage');
+    expect(RULES.energy.name).toBe('Power usage');
     expect(LATER_RULES.every((r) => r.needs && r.icon.startsWith('rules/'))).toBe(true);
   });
 

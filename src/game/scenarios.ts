@@ -365,13 +365,14 @@ export const ITEM_IDS: ItemId[] = [
   'flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'gunpowder', 'rock', 'gold', 'wood', 'crystal',
   'loam', 'metal', 'coal', 'ore', 'sulphur', 'concrete', 'liquidGranite', 'shell', 'bone', 'skull',
   'arrows', 'fireArrows', 'explosiveArrows', 'firebomb', 'torpedo', 'barrel', 'waterBarrel', 'oilBarrel', 'acidBarrel', 'lavaBarrel',
+  'linekit', 'battery', 'munitionPack',
 ];
 /** What a home base can sell, in the settings' and the shop's order. */
 export const SHOP_IDS: ShopId[] = [
   'flint', 'tflint', 'superflint', 'supertflint', 'teraflint', 'gunpowder', 'rock', 'wood', 'loam', 'metal', 'coal', 'ore', 'sulphur', 'concrete', 'liquidGranite',
   'arrows', 'fireArrows', 'explosiveArrows', 'firebomb', 'torpedo', 'barrel', 'waterBarrel', 'oilBarrel', 'acidBarrel', 'lavaBarrel',
-  'conkit', 'lorry', 'boat', 'balloon', 'blimp', 'catapult', 'cannon', 'crossbow', 'engine', 'wagon', 'sub', 'chest', 'bridge',
-  'towerCannon', 'artillery', 'antiAir', 'flag', 'crystal', 'clonk', 'sorcerer',
+  'linekit', 'battery', 'munitionPack', 'conkit', 'lorry', 'boat', 'balloon', 'blimp', 'catapult', 'cannon', 'crossbow', 'engine', 'wagon', 'sub', 'chest', 'bridge',
+  'towerCannon', 'artillery', 'antiAir', 'flameThrower', 'lightningCannon', 'liquidCannon', 'flag', 'crystal', 'clonk', 'sorcerer',
 ];
 
 function clamp(v: unknown, lim: { min: number; max: number }, fallback: number): number {

@@ -44,6 +44,8 @@ export interface MenuGraphics {
   arrow: Texture;
   exit: Texture;
   hand: Texture;
+  /** The construction kit, for "make something" in a workshop. */
+  conkit: Texture;
 }
 
 /** Files of the menu graphics in the content pack; load them with the other pictures. */
@@ -56,6 +58,7 @@ export const MENU_GRAPHICS: Record<keyof MenuGraphics, string> = {
   arrow: 'gui/Arrow.png',
   exit: 'gui/Exit.png',
   hand: 'gui/Hand.png',
+  conkit: 'items/Conkit.png',
 };
 
 /** The menu graphics out of the loaded pictures. */
@@ -66,7 +69,7 @@ export function menuGraphics(pictures: Record<string, Texture>): MenuGraphics {
 /** The control symbols in Control.png (fctCommand, by the original's CON_ numbers). */
 export const COMMAND = { throw: 3, up: 4, dig: 5, left: 6, down: 7, right: 8 } as const;
 export type Command = keyof typeof COMMAND;
-export type MenuAction = 'ok' | 'cancel' | 'exit' | 'buy' | 'sell' | 'get' | 'put';
+export type MenuAction = 'ok' | 'cancel' | 'exit' | 'buy' | 'sell' | 'get' | 'put' | 'produce';
 
 /** One key in the bottom bar: the key cap with its command arrow and name, then what it does. */
 export interface MenuKey {
@@ -333,6 +336,8 @@ export class ClassicMenu {
         return sheetPicture(this.gfx.hand, { x: 0, y: 0, w: 64, h: 64 }, BAR_H);
       case 'put':
         return sheetPicture(this.gfx.hand, { x: 64 * 5, y: 0, w: 64, h: 64 }, BAR_H);
+      case 'produce':
+        return sheetPicture(this.gfx.conkit, { x: 8, y: 0, w: 80, h: 60 }, BAR_H);
     }
   }
 

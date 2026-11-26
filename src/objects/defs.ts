@@ -388,6 +388,26 @@ export const ITEMS: Record<ItemId, ItemDef> = {
     id: 'lavaBarrel', name: 'Lava barrel', value: 10, rebuy: true, mass: 30, vertices: itemVertex, barrel: { mat: Mat.Lava },
     graphic: { file: 'items/LavaBarrel.png', facet: barrelFacet }, picture: barrelPicture,
   },
+  // Linekit.c4d (LNKT): use it at a building to lay a power line or a pipe from it, and at the next one to connect it.
+  linekit: {
+    id: 'linekit', name: 'Line kit', value: 10, rebuy: true, mass: 15, vertices: itemVertex, usable: true,
+    graphic: { file: 'items/Linekit.png', facet: { x: 0, y: 0, w: 8, h: 6 } }, picture: { x: 8, y: 0, w: 80, h: 60 },
+  },
+  // CannonTower.c4d/Cannon5.c4d/Battery.c4d (ADM3): five crystals' worth of charge for the lightning cannon.
+  battery: {
+    id: 'battery', name: 'Battery', value: 30, rebuy: true, mass: 30, vertices: itemVertex,
+    graphic: { file: 'items/Battery.png', facet: itemFacet }, picture: { x: 6, y: 0, w: 64, h: 64 },
+  },
+  // CannonTower.c4d/Munitions.c4d (ADM1): ten bullets for the anti-air cannon.
+  munitionPack: {
+    id: 'munitionPack', name: 'Munition pack', value: 40, rebuy: true, mass: 30, vertices: itemVertex,
+    graphic: { file: 'items/MunitionPack.png', facet: { x: 0, y: 0, w: 8, h: 6 } }, picture: { x: 8, y: 0, w: 35, h: 35 },
+  },
+  // Munitions.c4d/Bullet.c4d (ADB1): blows up where it hits (Hit: Explode(8)).
+  bullet: {
+    id: 'bullet', name: 'Bullet', value: 4, mass: 15, vertices: itemVertex, explodeOnHit: 8,
+    graphic: { file: 'items/Bullet.png', facet: { x: 0, y: 0, w: 3, h: 3 } }, picture: { x: 3, y: 0, w: 35, h: 35 },
+  },
 };
 
 export type Procedure = 'walk' | 'flight' | 'scale' | 'hangle' | 'dig' | 'swim' | 'throw' | 'kneel' | 'fight' | 'push' | 'build' | 'chop' | 'bridge' | 'dead';
@@ -659,7 +679,8 @@ export const STRUCTURES: Record<string, StructureDef> = {
     mass: 900,
     value: 50,
     canBeBase: false,
-    energy: 0,
+    // Physical Energy=100000: it stores power for its case (LineConnect power in and out, consumer).
+    energy: 100000,
     flagVertex: { x: -11, y: -28 },
     graphic: { file: 'structures/Elevator.png', facet: { x: 0, y: 0, w: 28, h: 56 }, picture: { x: 0, y: 0, w: 28, h: 56 } },
     elevator: true,

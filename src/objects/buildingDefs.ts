@@ -2,8 +2,8 @@
 // castles, statues and the production buildings. Sizes, prices, weights,
 // materials, doors, entrances and fire values are the original DefCore.txt and
 // ActMap.txt values; solid masks are traced from the SolidMask rectangles of
-// each Graphics.png. What production buildings make, and the power they need,
-// comes later: for now they can be built, entered and used as storage.
+// each Graphics.png. What production buildings make and the power they need are
+// in game/production.ts and game/power.ts.
 
 import type { Facet, StructureDef } from './defs';
 
@@ -36,6 +36,9 @@ interface Spec {
   canBeBase?: boolean;
 }
 
+/** Buildings that hold power without being enterable homes (their DefCore Energy=100000 with a LineConnect). */
+const POWERED = new Set(['cannonTower', 'chemicalPlant', 'derrick', 'powerPlant', 'pump', 'researchLab', 'sawmill', 'windmill', 'workshop']);
+
 function building(id: string, s: Spec, extra: Partial<StructureDef> = {}): StructureDef {
   const [width, height, ox, oy] = s.size;
   return {
@@ -48,8 +51,8 @@ function building(id: string, s: Spec, extra: Partial<StructureDef> = {}): Struc
     value: s.value,
     entrance: s.entrance && { x: s.entrance[0], y: s.entrance[1], w: s.entrance[2], h: s.entrance[3] },
     canBeBase: !!s.canBeBase,
-    // Every enterable building has the original's Physical Energy=100000.
-    energy: s.canBeBase ? 100000 : 0,
+    // Every enterable building, and everything with power lines, has the original's Physical Energy=100000.
+    energy: s.canBeBase || POWERED.has(id) ? 100000 : 0,
     flagVertex: { x: s.vertex[0], y: s.vertex[1] },
     graphic: {
       file: `structures/${s.file}.png`,
@@ -274,7 +277,7 @@ export const MORE_STRUCTURES: Record<string, StructureDef> = {
     { breaksAt: { damage: 90, into: { gold: 4 } } },
   ),
 
-  // ------------------------------------------------------------- production (functions later)
+  // ------------------------------------------------------------- production (see game/production.ts and game/power.ts)
   sawmill: building('sawmill', {
     name: 'Sawmill',
     size: [72, 55, -36, -27],
@@ -406,7 +409,7 @@ export const MORE_STRUCTURES: Record<string, StructureDef> = {
     blastIncinerate: 50,
     burned: { blastIncinerate: 50 },
   }),
-  // Anvil.c4d: doesn't burn (BurnTo=NONE). Forging comes later.
+  // Anvil.c4d: doesn't burn (BurnTo=NONE).
   anvil: building('anvil', {
     name: 'Anvil',
     size: [24, 22, -12, -11],
@@ -433,7 +436,7 @@ export const MORE_STRUCTURES: Record<string, StructureDef> = {
     blastIncinerate: 100,
     burned: { blastIncinerate: 10, contactIncinerate: 3 },
   }),
-  // Signal.c4d: a railway signal (for trains, later).
+  // Signal.c4d: a railway signal for trains (see game/signals.ts).
   signal: building('signal', {
     name: 'Signal',
     size: [24, 50, -12, -25],
@@ -461,18 +464,18 @@ export const BUILDING_DESCRIPTIONS: Record<string, string> = {
   magicTower: 'Converts crystal and lightning strikes to magical energy. Magic clonks can recharge magical energy in the tower. (comes later)',
   statue: 'Remnant of past civilizations.',
   goldStatue: 'Status symbol.',
-  sawmill: 'Cuts trees to wood. (comes later)',
-  foundry: 'Turns ore and firing fuel into metal. (comes later)',
-  workshop: 'Factory for vehicles and heavy weapons. (comes later)',
-  chemicalPlant: 'Explosives production facility. (comes later)',
+  sawmill: 'Cuts trees to wood. Drag a felled tree to its door and push it in.',
+  foundry: 'Turns ore and firing fuel into metal.',
+  workshop: 'Factory for vehicles and heavy weapons.',
+  chemicalPlant: 'Explosives production facility.',
   researchLab: 'Players can research new construction plans here. (comes later)',
-  powerPlant: 'Turns coal, oil, or wood into energy. (comes later)',
-  windmill: 'Supplies your settlement with energy. (comes later)',
-  pump: 'Transports liquids through pipes. (comes later)',
-  derrick: 'Pumps liquids from underground reservoirs. (comes later)',
-  anvil: 'The anvil produces weapons, construction kits, and numerous other items. (comes later)',
-  signal: 'Controls trains. (comes later)',
-  cannonTower: 'Fortified tower with a mounted cannon. Push a combat, artillery or anti-air cannon in to mount it.',
+  powerPlant: 'Turns coal, oil, or wood into energy.',
+  windmill: 'Supplies your settlement with energy.',
+  pump: 'Transports liquids through pipes.',
+  derrick: 'Pumps liquids from underground reservoirs.',
+  anvil: 'The anvil produces weapons, construction kits, and numerous other items.',
+  signal: 'Controls trains.',
+  cannonTower: 'Fortified tower with a mounted cannon. Push a cannon, flame thrower, lightning cannon or liquid cannon in to mount it.',
 };
 
 /** Sizes of the building sprite sheets, for pictures cut out of them in the scenario settings. */

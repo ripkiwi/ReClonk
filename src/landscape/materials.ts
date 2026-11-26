@@ -63,7 +63,9 @@ export type ItemId = 'rock' | 'gold' | 'flint' | 'tflint' | 'superflint' | 'supe
   // Ammunition (Items.c4d/Weapons.c4d): arrows and their packs, torpedoes, firebombs.
   | 'arrow' | 'fireArrow' | 'explosiveArrow' | 'arrows' | 'fireArrows' | 'explosiveArrows' | 'torpedo' | 'firebomb'
   // Barrels (Items.c4d/Containers.c4d), empty and full.
-  | 'barrel' | 'waterBarrel' | 'oilBarrel' | 'acidBarrel' | 'lavaBarrel';
+  | 'barrel' | 'waterBarrel' | 'oilBarrel' | 'acidBarrel' | 'lavaBarrel'
+  // Power and production: the line kit, the lightning cannon's battery, the anti-air cannon's munition pack and its bullets.
+  | 'linekit' | 'battery' | 'munitionPack' | 'bullet';
 
 export interface Material {
   name: string;

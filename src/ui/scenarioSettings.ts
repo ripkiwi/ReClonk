@@ -105,6 +105,10 @@ const ITEM_SHEETS: Record<ItemId, [number, number]> = {
   fireMonsterEgg: [92, 40],
   birdEgg: [92, 40],
   zapNest: [70, 64],
+  linekit: [88, 60],
+  battery: [70, 64],
+  munitionPack: [43, 35],
+  bullet: [38, 35],
 };
 const itemPicture = (id: ItemId): Picture => ({ file: ITEMS[id].graphic.file, sheet: ITEM_SHEETS[id], ...ITEMS[id].picture });
 const vehiclePicture = (id: VehicleId): Picture => ({

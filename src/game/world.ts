@@ -28,6 +28,10 @@ import type { Weather } from './weather';
 import { Animal, ANIMALS, type AnimalId } from '../objects/animal';
 import { animalHurt, breakEgg, collectAnimal, collected, dropNest, itemLanded, stepAnimals, type AnimalSound } from './animals';
 import type { TreeNest } from '../objects/nest';
+import type { Line } from '../objects/line';
+import { stepTowerShots, type FlameShot, type TowerBolt } from './cannonTower';
+import { stepPower, useLinekit, type ProductionSound } from './power';
+import { cancelForge, dragTree, grabTree, isFactory, productsOf, startProduction, stepProduction } from './production';
 
 export type WorldEvent =
   | { type: 'explosion'; x: number; y: number; radius: number; tick: number }
@@ -100,7 +104,16 @@ export type WorldEvent =
   /** An environment object made a sound: birds, cicadas or the owl (anywhere, x -1), a big rock where it is. */
   | { type: 'environment'; sound: EnvSound; x: number; y: number; tick: number }
   /** A siege weapon or one of the later vehicles made a sound, maybe with a puff of smoke (smoke > 0). */
-  | { type: 'siege'; sound: SiegeSound; x: number; y: number; smoke: number; tick: number };
+  | { type: 'siege'; sound: SiegeSound; x: number; y: number; smoke: number; tick: number }
+  /** A sound of power and production: a line connected or broke, a power plant fired up, a sawmill saws. */
+  | { type: 'production'; sound: ProductionSound; x: number; y: number; tick: number }
+  /** A puff of smoke from a chimney (Smoke). */
+  | { type: 'smoke'; x: number; y: number; size: number; tick: number }
+  /** Sparks fly (CastParticles PxSpark, Spark): the anvil, the lightning cannon. */
+  | { type: 'sparks'; x: number; y: number; tick: number }
+  /** A pipe bubbles where it draws liquid (Bubble). */
+  | { type: 'bubble'; x: number; y: number; tick: number }
+  | { type: 'dust'; x: number; y: number; tick: number };
 
 /** Extra experience on top of the original's "1 per 5 commands", so promotions come at a fun pace. */
 export const EXPERIENCE = {
@@ -211,6 +224,11 @@ export class World {
   animals: Animal[] = [];
   /** Birds' nests in the trees. */
   treeNests: TreeNest[] = [];
+  /** Power lines and pipes. */
+  lines: Line[] = [];
+  /** Flame throwers' shots and lightning cannons' bolts in flight. */
+  flameShots: FlameShot[] = [];
+  towerBolts: TowerBolt[] = [];
   readonly players = new Map<number, PlayerState>();
   private readonly cursors = new Map<number, CrewCursor>();
   readonly messages: PlayerMessage[] = [];
@@ -509,12 +527,13 @@ export class World {
           throwItem: (item, xdir, ydir) => throwItem(item, xdir, ydir, c),
           tryEnter: () => this.tryEnter(c),
           useItem: () => this.useItem(c),
-          grabOrBuild: () => grabVehicle(this, c) || grabOrBuild(this, c),
+          grabOrBuild: () => grabVehicle(this, c) || grabOrBuild(this, c) || grabTree(this, c),
         });
       }
       if (c.contained || this.fellOut(c)) continue;
       if (carried && !c.carrying) this.events.push({ type: 'throw', clonk: c, tick: this.tick });
       c.tick(this.land);
+      dragTree(c);
       if (c.action.procedure === 'dig' && c.digRequest !== request && c.owner >= 0 && !brain) this.say(c.owner, c.digRequest ? 'Digging out chunks' : 'No more chunks');
       if (this.tick % DIG_OUT_INTERVAL === 0) digOut(this, c);
       if (c.action.procedure === 'bridge' && c.actionStarted) this.events.push({ type: 'bridge', clonk: c, tick: this.tick });
@@ -568,6 +587,8 @@ export class World {
       for (const g of s.gates) stepGate(this, g);
     }
     stepBuildings(this);
+    stepPower(this);
+    stepProduction(this);
     // The guard tower's door has shut behind them: out onto the roof (DoorClosed).
     for (const c of this.clonks) {
       const s = c.contained instanceof Structure ? c.contained : null;
@@ -603,6 +624,7 @@ export class World {
       }
     }
     stepArrows(this);
+    stepTowerShots(this);
     stepBarrels(this);
     stepMaterialItems(this);
     if (this.items.some((i) => i.removed)) this.items = this.items.filter((i) => !i.removed);
@@ -1195,7 +1217,7 @@ export class World {
   }
 
   /** Go into a building. Returns false if the door stays shut. */
-  private enter(c: Clonk, s: Structure): boolean {
+  enter(c: Clonk, s: Structure): boolean {
     // Enemies can't get into your base (BASEFUNC_RejectEntrance).
     if (s.base >= 0 && this.hostile(s.base, c.owner)) {
       this.say(c.owner, 'Enemy base: the door stays shut');
@@ -1220,6 +1242,7 @@ export class World {
   exit(c: Clonk): void {
     const s = c.contained;
     if (!s) return;
+    c.producing = null;
     const v = c.vehicle?.contained === s ? c.vehicle : null;
     const p = s.exitPoint();
     this.exitTo(c, p.x, p.y);
@@ -1262,6 +1285,11 @@ export class World {
     if (openBridgeMenu(this, c)) return true;
     if (useBarrel(this, c)) {
       if (c.action.procedure === 'dig') c.setAction('Walk', 0, 0);
+      return true;
+    }
+    if (item?.def.id === 'linekit') {
+      if (c.action.procedure === 'dig') c.setAction('Walk', 0, 0);
+      useLinekit(this, c);
       return true;
     }
     if (item?.def.id === 'conkit') {
@@ -1525,6 +1553,13 @@ export class World {
     if (towerControl(this, c, s, ctl)) return;
     const own = this.inOwnBase(c);
     const pf = s.def.platforms;
+    // Forging at the anvil: down stops (ProductionCancel).
+    if (s.def.id === 'anvil') {
+      if (ctl.pressedDown) cancelForge(this, s);
+      return;
+    }
+    // A workshop or chemical plant: left or right opens what it can make.
+    if (isFactory(s) && s.complete && (ctl.pressedLeft || ctl.pressedRight)) return this.openMenu(c, 'produce');
     if (ctl.pressedDown) this.exit(c);
     else if (pf && s.complete && (ctl.pressedLeft || ctl.pressedRight)) {
       // Up onto a platform (Castle3 ContainedLeft / ContainedRight), not in an enemy's castle.
@@ -1569,6 +1604,7 @@ export class World {
     const s = c.contained;
     if (!s || c.menu === null) return [];
     if (c.menuKind === 'fire') return towerAmmo(this, c);
+    if (c.menuKind === 'produce' && s instanceof Structure) return productsOf(this, s.def.id).map((p) => ({ id: p.id, count: 0, value: 0 }));
     if (c.menuKind === 'buy' && s instanceof Structure) {
       const p = this.players.get(s.base);
       return this.shopList(s.base).map((id) => ({ id, count: p?.stock[id] ?? 0, value: shopEntry(id).value }));
@@ -1582,7 +1618,7 @@ export class World {
    * it. It closes by itself if the base isn't yours any more.
    */
   private buildingMenuControl(c: Clonk, ctl: ControlState): void {
-    if (c.menuKind !== 'get' && c.menuKind !== 'fire' && !this.inOwnBase(c)) {
+    if (c.menuKind !== 'get' && c.menuKind !== 'fire' && c.menuKind !== 'produce' && !this.inOwnBase(c)) {
       c.menu = null;
       return;
     }
@@ -1594,6 +1630,12 @@ export class World {
     c.menu = menuMove(c.menu ?? 0, list.length, ctl);
     if (!ctl.pressedThrow || !list.length) return;
     const e = list[c.menu];
+    if (c.menuKind === 'produce') {
+      // Pick what to make; the menu closes and the clonk sets to work.
+      startProduction(this, c, c.contained as Structure, e.id);
+      c.menu = null;
+      return;
+    }
     if (c.menuKind === 'fire') shootFromTower(this, c, e.id as ItemId);
     else if (c.menuKind === 'buy') this.buy(c, e.id);
     else if (c.menuKind === 'sell') this.sellFromBase(c, e.id as ItemId);

@@ -138,8 +138,33 @@ export class Structure {
   contents: Item[] = [];
   /** A windmill's wing: its angle in degrees, turned by the wind. */
   wingR = 0;
+  /** How fast it turns, in tenths of a degree a tick: wind/4, set every 15 ticks (Wing.c4d Wind2Turn). */
+  wingRDir = 0;
   /** The building that put this one up with itself (the castle of its small tower). */
   annexOf: Structure | null = null;
+  /**
+   * Out of power (NeedEnergy): it wanted energy for its work and had too
+   * little. A power plant connected to it starts burning fuel, and the
+   * lightning symbol blinks over it.
+   */
+  needEnergy = false;
+  /** What it's doing (its action): burning fuel, sawing, building, pumping, forging. Null: idle. */
+  activity: string | null = null;
+  /** Ticks since the activity started (GetActTime), and the frame of its animation. */
+  actTime = 0;
+  phase = 0;
+  /** A pump's or derrick's barrel inside, where pumped liquid waits (the internal BARL). */
+  tank: Item | null = null;
+  /** Felled trees pushed into a sawmill: the wood in each. */
+  logs: number[] = [];
+  /** Things being made in a workshop or chemical plant, unfinished ones kept for later (FindIncompleteContents). */
+  products: { id: string; con: number; got: Partial<Record<ItemId, number>> }[] = [];
+  /** What an anvil forges now (its `product`). */
+  forging: string | null = null;
+  /** A derrick's drill head: how deep it is and what it's doing. */
+  drill: { y: number; mode: 'stop' | 'move' | 'drill'; speed: number } | null = null;
+  /** A railway signal: its phase (0 through, 1 halt and turn right, 2 halt and turn left, 3 halt and go) and loading (0 none, 1 unload, 2 load). */
+  signal = { phase: 0, load: 0 };
 
   constructor(
     readonly def: StructureDef,
